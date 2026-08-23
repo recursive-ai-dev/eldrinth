@@ -1,0 +1,112 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: #04050a;
+  color: #e7e3d8;
+  font-family: "EB Garamond", Georgia, "Times New Roman", serif;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.font-title {
+  font-family: "Cinzel", Georgia, serif;
+  letter-spacing: 0.04em;
+}
+
+canvas {
+  display: block;
+}
+
+.no-select {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+/* Atmospheric UI animations */
+@keyframes msgFade {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  12% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  80% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+.msg-fade {
+  animation: msgFade 4.5s ease forwards;
+}
+
+@keyframes floaty {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+@keyframes glowPulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.glow-pulse {
+  animation: glowPulse 2.6s ease-in-out infinite;
+}
+
+@keyframes flick {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  25%,
+  75% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.flick {
+  animation: flick 3.2s ease-in-out infinite;
+}
+
+.vignette {
+  box-shadow: inset 0 0 220px 50px rgba(0, 0, 0, 0.85);
+}
