@@ -40,6 +40,18 @@ export default function HUD({ hud }: { hud: HudData }) {
             <span className="text-teal-300/50"> / {hud.totalShards}</span>
           </span>
         </div>
+        <div className="w-44 rounded-lg border border-cyan-300/20 bg-black/45 px-3 py-2 backdrop-blur-sm">
+          <div className="mb-1 flex items-center justify-between font-title text-[10px] uppercase tracking-[0.2em] text-cyan-100/75">
+            <span>Stamina</span>
+            <span>{Math.ceil(hud.stamina)}</span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-cyan-950/80">
+            <div
+              className="h-full bg-cyan-300 transition-[width] duration-100 ease-out"
+              style={{ width: `${Math.round((hud.stamina / hud.maxStamina) * 100)}%` }}
+            />
+          </div>
+        </div>
       </div>
 
       {/* Top-center: objective */}
