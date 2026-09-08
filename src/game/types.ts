@@ -37,6 +37,8 @@ export interface MapData {
 export interface HudData {
   hp: number;
   maxHp: number;
+  stamina: number;
+  maxStamina: number;
   shards: number;
   totalShards: number;
   objective: string;

@@ -261,7 +261,10 @@ export function buildStaticCanvas(g: Game) {
   const c = document.createElement("canvas");
   c.width = W * TILE;
   c.height = H * TILE;
-  const ctx = c.getContext("2d")!;
+  const ctx = c.getContext("2d");
+  if (!ctx) {
+    throw new Error("Failed to create 2D rendering context for static canvas");
+  }
   for (let y = 0; y < H; y++)
     for (let x = 0; x < W; x++) drawTile(ctx, g.map.tiles[y * W + x], x * TILE, y * TILE);
   g.staticCanvas = c;
@@ -287,7 +290,7 @@ export function renderGame(g: Game) {
 
   ctx.save();
   ctx.translate(-Math.round(g.cam.x) + sx, -Math.round(g.cam.y) + sy);
-  ctx.drawImage(g.staticCanvas, 0, 0);
+  if (g.staticCanvas) ctx.drawImage(g.staticCanvas, 0, 0);
   drawWardBarrier(g, ctx);
   drawItems(g, ctx);
   drawEnemies(g, ctx);
@@ -390,6 +393,7 @@ function drawEnemies(g: Game, ctx: CanvasRenderingContext2D) {
 }
 
 function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy) {
+  if (e.telegraph) drawTelegraph(ctx, e);
   if (e.type === "boss") return drawBoss(ctx, e);
   const a = e.dying > 0 ? Math.max(0, e.dying / 0.45) : 1;
   ctx.save();
@@ -402,6 +406,21 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy) {
   if (e.type === "wraith") drawWraith(ctx, e);
   else if (e.type === "sentinel") drawSentinel(ctx, e);
   else if (e.type === "adept") drawAdept(ctx, e);
+  ctx.restore();
+}
+
+function drawTelegraph(ctx: CanvasRenderingContext2D, e: Enemy) {
+  const pulse = 0.55 + Math.sin(e.t * 18) * 0.25;
+  const color = e.telegraph === "spell" ? "190,110,255" : e.telegraph === "lunge" ? "255,90,90" : "70,210,255";
+  const radius = e.telegraph === "spell" ? 24 : e.telegraph === "lunge" ? 42 : 58;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.strokeStyle = `rgba(${color},${pulse})`;
+  ctx.lineWidth = e.telegraph === "burst" ? 3 : 2;
+  ctx.setLineDash(e.telegraph === "spell" ? [4, 4] : [8, 5]);
+  ctx.beginPath();
+  ctx.arc(e.x, e.y, radius + Math.sin(e.t * 9) * 3, 0, Math.PI * 2);
+  ctx.stroke();
   ctx.restore();
 }
 

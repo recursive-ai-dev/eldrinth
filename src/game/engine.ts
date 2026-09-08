@@ -12,6 +12,66 @@ import type {
 import { generateMap } from "./map";
 import { clamp, DIRV } from "./math";
 import { renderGame, buildStaticCanvas } from "./render/renderer";
+import { AISystem } from "./systems/AISystem";
+import { CombatSystem } from "./systems/CombatSystem";
+import { GameFlowSystem } from "./systems/GameFlowSystem";
+import { InputSystem } from "./systems/InputSystem";
+import { MovementSystem } from "./systems/MovementSystem";
+
+/* ----------------------------- constants ----------------------------- */
+// Player constants
+const PLAYER_RADIUS = 11;
+const PLAYER_START_HP = 6;
+const PLAYER_MAX_STAMINA = 100;
+const PLAYER_DASH_STAMINA_COST = 35;
+const PLAYER_STAMINA_REGEN = 28;
+const PLAYER_STAMINA_REGEN_DELAY = 0.45;
+const PLAYER_SPEED = 152;
+const PLAYER_ATTACK_DURATION = 0.2;
+const PLAYER_ATTACK_COOLDOWN = 0.16;
+const PLAYER_ATTACK_DAMAGE = 1;
+const PLAYER_DASH_DURATION = 0.16;
+const PLAYER_DASH_COOLDOWN = 0.62;
+const PLAYER_DASH_SPEED = 520;
+const PLAYER_INVULN_DASH = 0.2;
+const PLAYER_INVULN_HIT = 0.9;
+const PLAYER_HURT_FLASH = 0.4;
+
+// Enemy constants
+const ENEMY_DEFAULT_RADIUS = 12;
+const ENEMY_DEFAULT_HP = 3;
+const ENEMY_DEFAULT_SPEED = 60;
+const ENEMY_DEFAULT_DAMAGE = 1;
+
+// Wraith specific
+const WRATH_RADIUS = 13;
+const WRATH_HP = 3;
+const WRATH_SPEED = 62;
+const WRATH_DAMAGE = 1;
+
+// Sentinel specific
+const SENTINEL_RADIUS = 14;
+const SENTINEL_HP = 5;
+const SENTINEL_SPEED = 90;
+const SENTINEL_DAMAGE = 1;
+
+// Adept specific
+const ADEPT_RADIUS = 13;
+const ADEPT_HP = 4;
+const ADEPT_SPEED = 70;
+const ADEPT_DAMAGE = 1;
+
+// Boss specific (The Unbound)
+const BOSS_HP = 42;
+const BOSS_RADIUS = 26;
+const BOSS_SPEED = 46;
+const BOSS_DAMAGE = 2;
+const BOSS_BURST_COOLDOWN = 2.2;
+const BOSS_LUNGE_COOLDOWN = 3.5;
+
+// Interaction distances
+const INTERACT_NPC_DISTANCE = 48;
+const INTERACT_SIGN_DISTANCE = 44;
 
 /* ----------------------------- entities ----------------------------- */
 export interface Player {
@@ -20,6 +80,9 @@ export interface Player {
   r: number;
   hp: number;
   maxHp: number;
+  stamina: number;
+  maxStamina: number;
+  staminaRegenDelay: number;
   dir: Dir;
   speed: number;
   attackTimer: number;
@@ -60,6 +123,8 @@ export interface Enemy {
   lungeVy: number;
   burstCd: number;
   summonCd: number;
+  telegraph: "spell" | "lunge" | "burst" | null;
+  telegraphTimer: number;
   wanderA: number;
   bob: number;
   alive: boolean;
@@ -130,7 +195,23 @@ export class Game {
   mapPxW = 0;
   mapPxH = 0;
 
-  keys = new Set<string>();
+  input = new InputSystem();
+  combat = new CombatSystem();
+  ai = new AISystem();
+  flow = new GameFlowSystem();
+  movement = new MovementSystem({
+    width: MAP_W,
+    height: MAP_H,
+    solid: new Uint8Array(MAP_W * MAP_H),
+    wardTiles: new Set<number>(),
+    wardUnlocked: false,
+    tileAtPx: (x: number, y: number) => {
+      const tx = Math.floor(x / TILE);
+      const ty = Math.floor(y / TILE);
+      if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return -1;
+      return ty * MAP_W + tx;
+    },
+  });
   player!: Player;
   enemies: Enemy[] = [];
   projectiles: Projectile[] = [];
@@ -146,6 +227,7 @@ export class Game {
   running = false;
   paused = false;
   ended = false;
+  initialized = false;
 
   dialogue: DialogueData | null = null;
   dialogueLines: string[] = [];
@@ -169,68 +251,90 @@ export class Game {
 
   constructor(canvas: HTMLCanvasElement, cb: GameCallbacks) {
     this.canvas = canvas;
-    this.ctx = canvas.getContext("2d")!;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      throw new Error("Failed to create Canvas 2D context - browser may not support Canvas");
+    }
+    this.ctx = ctx;
     this.cb = cb;
   }
 
   init() {
-    this.map = generateMap();
-    this.mapPxW = this.map.width * TILE;
-    this.mapPxH = this.map.height * TILE;
-    this.wardSet = new Set(this.map.wardTiles);
+    if (this.initialized) return;
+    try {
+      this.map = generateMap();
+      this.mapPxW = this.map.width * TILE;
+      this.mapPxH = this.map.height * TILE;
+      this.wardSet = new Set(this.map.wardTiles);
+      this.syncMovementSystem();
 
-    buildStaticCanvas(this);
+      buildStaticCanvas(this);
 
-    const s = this.map.spawn;
-    this.player = {
-      x: s.x,
-      y: s.y,
-      r: 11,
-      hp: 6,
-      maxHp: 6,
-      dir: "down",
-      speed: 152,
-      attackTimer: 0,
-      attackCd: 0,
-      attackDur: 0.2,
-      attacking: false,
-      swingHit: new Set(),
-      swingDmg: 1,
-      invuln: 0,
-      dashTimer: 0,
-      dashCd: 0,
-      dashDir: "down",
-      dashing: false,
-      walkT: 0,
-      hurtFlash: 0,
-      kx: 0,
-      ky: 0,
-      dying: 0,
-    };
+      const s = this.map.spawn;
+      this.player = {
+        x: s.x,
+        y: s.y,
+        r: PLAYER_RADIUS,
+        hp: PLAYER_START_HP,
+        maxHp: PLAYER_START_HP,
+        stamina: PLAYER_MAX_STAMINA,
+        maxStamina: PLAYER_MAX_STAMINA,
+        staminaRegenDelay: 0,
+        dir: "down",
+        speed: PLAYER_SPEED,
+        attackTimer: 0,
+        attackCd: 0,
+        attackDur: PLAYER_ATTACK_DURATION,
+        attacking: false,
+        swingHit: new Set(),
+        swingDmg: PLAYER_ATTACK_DAMAGE,
+        invuln: 0,
+        dashTimer: 0,
+        dashCd: 0,
+        dashDir: "down",
+        dashing: false,
+        walkT: 0,
+        hurtFlash: 0,
+        kx: 0,
+        ky: 0,
+        dying: 0,
+      };
 
-    for (const es of this.map.enemySpawns) {
-      const t = this.findWalkableTile(es.x, es.y);
-      this.enemies.push(this.makeEnemy(es.type, t.x, t.y));
+      for (const es of this.map.enemySpawns) {
+        const t = this.findWalkableTile(es.x, es.y);
+        this.enemies.push(this.makeEnemy(es.type, t.x, t.y));
+      }
+      for (const sh of this.map.shards)
+        this.items.push({ x: sh.x, y: sh.y, type: "shard", t: Math.random() * 6, taken: false });
+
+      this.input.bind({
+        onKeyDown: this.onKeyDown,
+        onKeyUp: this.onKeyUp,
+        onBlur: this.onBlur,
+      });
+      window.addEventListener("resize", this.onResize);
+      this.resize();
+      this.centerCam();
+      this.message = "Seek the Anima Shards — or speak with the Watcher in the ruins.";
+      this.pushHud();
+      this.initialized = true;
+    } catch (e) {
+      this.initialized = false;
+      this.enemies = [];
+      this.projectiles = [];
+      this.particles = [];
+      this.texts = [];
+      this.items = [];
+      this.destroy();
+      throw e;
     }
-    for (const sh of this.map.shards)
-      this.items.push({ x: sh.x, y: sh.y, type: "shard", t: Math.random() * 6, taken: false });
-
-    window.addEventListener("keydown", this.onKeyDown);
-    window.addEventListener("keyup", this.onKeyUp);
-    window.addEventListener("blur", this.onBlur);
-    window.addEventListener("resize", this.onResize);
-    this.resize();
-    this.centerCam();
-    this.message = "Seek the Anima Shards — or speak with the Watcher in the ruins.";
-    this.pushHud();
   }
 
   destroy() {
     this.running = false;
+    this.initialized = false;
     cancelAnimationFrame(this.raf);
-    window.removeEventListener("keydown", this.onKeyDown);
-    window.removeEventListener("keyup", this.onKeyUp);
-    window.removeEventListener("blur", this.onBlur);
+    this.input.destroy();
     window.removeEventListener("resize", this.onResize);
   }
 
@@ -243,10 +347,14 @@ export class Game {
 
   /* ----------------------------- map / collision ----------------------------- */
   findWalkableTile(tx: number, ty: number): Vec {
+    // Search in expanding rings using Chebyshev distance (max of x,y distance)
+    // This ensures we find the closest walkable tile
     for (let r = 0; r < 7; r++) {
-      for (let dy = -r; dy <= r; dy++)
+      for (let dy = -r; dy <= r; dy++) {
         for (let dx = -r; dx <= r; dx++) {
-          if (r > 0 && Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+          // Only check tiles at exactly Chebyshev distance r (the perimeter)
+          // Inner tiles were checked in previous iterations
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
           const x = tx + dx;
           const y = ty + dy;
           if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) continue;
@@ -254,56 +362,45 @@ export class Game {
           if (!this.map.solid[i] && !this.wardSet.has(i))
             return { x: x * TILE + TILE / 2, y: y * TILE + TILE / 2 };
         }
+      }
     }
+    // Fallback to original position if no walkable tile found
     return { x: tx * TILE + TILE / 2, y: ty * TILE + TILE / 2 };
   }
 
+  syncMovementSystem() {
+    this.movement = new MovementSystem({
+      width: this.map.width,
+      height: this.map.height,
+      solid: this.map.solid,
+      wardTiles: this.wardSet,
+      wardUnlocked: this.wardUnlocked,
+      tileAtPx: (x: number, y: number) => {
+        const tx = Math.floor(x / TILE);
+        const ty = Math.floor(y / TILE);
+        if (tx < 0 || ty < 0 || tx >= this.map.width || ty >= this.map.height) return -1;
+        return ty * this.map.width + tx;
+      },
+    });
+  }
+
   tileAtPx(x: number, y: number): number {
-    const tx = Math.floor(x / TILE);
-    const ty = Math.floor(y / TILE);
-    if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return -1;
-    return ty * MAP_W + tx;
+    return this.movement.tileAtPx(x, y);
   }
   solidAtIdx(i: number): boolean {
-    if (i < 0 || i >= this.map.tiles.length) return true;
-    if (this.map.solid[i]) return true;
-    if (!this.wardUnlocked && this.wardSet.has(i)) return true;
-    return false;
+    return this.movement.solidAtIdx(i);
   }
   hitsSolid(x: number, y: number, r: number): boolean {
-    const pts: [number, number][] = [
-      [x - r, y - r],
-      [x + r, y - r],
-      [x - r, y + r],
-      [x + r, y + r],
-      [x, y],
-    ];
-    for (const [px, py] of pts) if (this.solidAtIdx(this.tileAtPx(px, py))) return true;
-    return false;
+    return this.movement.hitsSolid(x, y, r);
   }
   moveX(e: { x: number; y: number; r: number }, dx: number) {
-    const s = Math.sign(dx);
-    let rem = Math.abs(dx);
-    while (rem > 0) {
-      const m = Math.min(2, rem);
-      if (!this.hitsSolid(e.x + s * m, e.y, e.r)) e.x += s * m;
-      else break;
-      rem -= m;
-    }
+    this.movement.moveX(e, dx);
   }
   moveY(e: { x: number; y: number; r: number }, dy: number) {
-    const s = Math.sign(dy);
-    let rem = Math.abs(dy);
-    while (rem > 0) {
-      const m = Math.min(2, rem);
-      if (!this.hitsSolid(e.x, e.y + s * m, e.r)) e.y += s * m;
-      else break;
-      rem -= m;
-    }
+    this.movement.moveY(e, dy);
   }
   moveEntity(e: { x: number; y: number; r: number }, dx: number, dy: number) {
-    this.moveX(e, dx);
-    this.moveY(e, dy);
+    this.movement.moveEntity(e, dx, dy);
   }
 
   /* ----------------------------- entity factory ----------------------------- */
@@ -313,11 +410,11 @@ export class Game {
       type,
       x,
       y,
-      r: 12,
-      hp: 3,
-      maxHp: 3,
-      speed: 60,
-      dmg: 1,
+      r: ENEMY_DEFAULT_RADIUS,
+      hp: ENEMY_DEFAULT_HP,
+      maxHp: ENEMY_DEFAULT_HP,
+      speed: ENEMY_DEFAULT_SPEED,
+      dmg: ENEMY_DEFAULT_DAMAGE,
       vx: 0,
       vy: 0,
       hurt: 0,
@@ -329,29 +426,31 @@ export class Game {
       lungeVy: 0,
       burstCd: 2.4,
       summonCd: 8,
+      telegraph: null,
+      telegraphTimer: 0,
       wanderA: Math.random() * 6,
       bob: 0,
       alive: true,
       dying: 0,
     };
     if (type === "wraith") {
-      e.hp = 3;
-      e.maxHp = 3;
-      e.speed = 62;
-      e.r = 13;
-      e.dmg = 1;
+      e.hp = WRATH_HP;
+      e.maxHp = WRATH_HP;
+      e.speed = WRATH_SPEED;
+      e.r = WRATH_RADIUS;
+      e.dmg = WRATH_DAMAGE;
     } else if (type === "sentinel") {
-      e.hp = 5;
-      e.maxHp = 5;
-      e.speed = 90;
-      e.r = 14;
-      e.dmg = 1;
+      e.hp = SENTINEL_HP;
+      e.maxHp = SENTINEL_HP;
+      e.speed = SENTINEL_SPEED;
+      e.r = SENTINEL_RADIUS;
+      e.dmg = SENTINEL_DAMAGE;
     } else if (type === "adept") {
-      e.hp = 4;
-      e.maxHp = 4;
-      e.speed = 70;
-      e.r = 13;
-      e.dmg = 1;
+      e.hp = ADEPT_HP;
+      e.maxHp = ADEPT_HP;
+      e.speed = ADEPT_SPEED;
+      e.r = ADEPT_RADIUS;
+      e.dmg = ADEPT_DAMAGE;
     }
     return e;
   }
@@ -360,13 +459,13 @@ export class Game {
     this.bossSpawned = true;
     const c = this.map.bossCenter;
     const b = this.makeEnemy("boss", c.x, c.y);
-    b.hp = 42;
-    b.maxHp = 42;
-    b.r = 26;
-    b.speed = 46;
-    b.dmg = 2;
-    b.burstCd = 2.2;
-    b.lungeCd = 3.5;
+    b.hp = BOSS_HP;
+    b.maxHp = BOSS_HP;
+    b.r = BOSS_RADIUS;
+    b.speed = BOSS_SPEED;
+    b.dmg = BOSS_DAMAGE;
+    b.burstCd = BOSS_BURST_COOLDOWN;
+    b.lungeCd = BOSS_LUNGE_COOLDOWN;
     this.enemies.push(b);
     this.boss = b;
     this.msg("THE UNBOUND STIRS.");
@@ -388,22 +487,23 @@ export class Game {
       if (k === "e" || k === "enter" || k === " " || k === "j") this.advanceDialogue();
       return;
     }
-    this.keys.add(k);
+    this.input.keys.add(k);
     if (k === " " || k === "j") this.startAttack();
     else if (k === "shift") this.startDash();
     else if (k === "e" || k === "enter") this.tryInteract();
   };
   onKeyUp = (e: KeyboardEvent) => {
-    this.keys.delete(e.key.toLowerCase());
+    this.input.keys.delete(e.key.toLowerCase());
   };
   onBlur = () => {
-    this.keys.clear();
+    this.input.clear();
   };
   onResize = () => this.resize();
 
   setPaused(b: boolean) {
     this.paused = b;
-    if (b) this.keys.clear();
+    if (b) this.input.clear();
+    this.syncMovementSystem();
     this.cb.onPause(b);
   }
   togglePause() {
@@ -413,22 +513,29 @@ export class Game {
   /* ----------------------------- main loop ----------------------------- */
   loop = (tNow: number) => {
     if (!this.running) return;
-    this.raf = requestAnimationFrame(this.loop);
-    if (!this.lastT) this.lastT = tNow;
-    let dt = (tNow - this.lastT) / 1000;
-    this.lastT = tNow;
-    if (!isFinite(dt) || dt < 0) dt = 0;
-    if (dt > 0.05) dt = 0.05;
-    this.time += dt;
-    if (this.advanceLock > 0) this.advanceLock -= dt;
+    try {
+      this.raf = requestAnimationFrame(this.loop);
+      if (!this.lastT) this.lastT = tNow;
+      let dt = (tNow - this.lastT) / 1000;
+      this.lastT = tNow;
+      if (!isFinite(dt) || dt < 0) dt = 0;
+      if (dt > 0.05) dt = 0.05;
+      this.time += dt;
+      if (this.advanceLock > 0) this.advanceLock -= dt;
 
-    if (!this.paused && !this.dialogue && !this.ended) this.update(dt);
-    renderGame(this);
+      if (!this.paused && !this.dialogue && !this.ended) this.update(dt);
+      renderGame(this);
 
-    this.hudAccum += dt;
-    if (this.hudAccum >= 0.1) {
-      this.hudAccum = 0;
-      this.pushHud();
+      this.hudAccum += dt;
+      if (this.hudAccum >= 0.1) {
+        this.hudAccum = 0;
+        this.pushHud();
+      }
+    } catch (e) {
+      console.error("Game loop error:", e);
+      this.running = false;
+      cancelAnimationFrame(this.raf);
+      this.raf = 0;
     }
   };
 
@@ -472,22 +579,25 @@ export class Game {
   }
 
   updatePrompt() {
-    this.prompt = "";
-    if (this.dialogue || this.ended) return;
-    const p = this.player;
-    const npc = this.map.npc;
-    if (Math.hypot(p.x - npc.x, p.y - npc.y) < 48) {
-      this.prompt = "Press E to speak with Orithel";
+    if (this.dialogue || this.ended) {
+      this.prompt = "";
       return;
     }
-    for (const s of this.map.signs) {
-      const sx = s.x * TILE + TILE / 2;
-      const sy = s.y * TILE + TILE / 2;
-      if (Math.hypot(p.x - sx, p.y - sy) < 44) {
-        this.prompt = "Press E to read";
-        return;
-      }
-    }
+    this.prompt = this.flow.updatePrompt({
+      player: this.player,
+      enemies: this.enemies,
+      boss: this.boss,
+      shards: this.shards,
+      totalShards: this.totalShards,
+      wardUnlocked: this.wardUnlocked,
+      bossSpawned: this.bossSpawned,
+      message: this.message,
+      messageId: this.messageId,
+      prompt: this.prompt,
+      dialogue: this.dialogue,
+      map: this.map,
+      items: this.items,
+    });
   }
 
   /* ----------------------------- player ----------------------------- */
@@ -509,7 +619,7 @@ export class Game {
 
     let mx = 0;
     let my = 0;
-    const k = this.keys;
+    const k = this.input.keys;
     if (k.has("a") || k.has("arrowleft")) mx -= 1;
     if (k.has("d") || k.has("arrowright")) mx += 1;
     if (k.has("w") || k.has("arrowup")) my -= 1;
@@ -522,7 +632,7 @@ export class Game {
     if (p.dashing) {
       p.dashTimer -= dt;
       const [dx, dy] = DIRV[p.dashDir];
-      this.moveEntity(p, dx * 520 * dt, dy * 520 * dt);
+      this.moveEntity(p, dx * PLAYER_DASH_SPEED * dt, dy * PLAYER_DASH_SPEED * dt);
       p.walkT += dt * 22;
       if (p.dashTimer <= 0) p.dashing = false;
     } else if (mx || my) {
@@ -535,6 +645,10 @@ export class Game {
 
     p.attackCd = Math.max(0, p.attackCd - dt);
     p.dashCd = Math.max(0, p.dashCd - dt);
+    p.staminaRegenDelay = Math.max(0, p.staminaRegenDelay - dt);
+    if (p.staminaRegenDelay <= 0 && !p.dashing) {
+      p.stamina = Math.min(p.maxStamina, p.stamina + PLAYER_STAMINA_REGEN * dt);
+    }
     p.invuln = Math.max(0, p.invuln - dt);
     p.hurtFlash = Math.max(0, p.hurtFlash - dt);
 
@@ -560,51 +674,32 @@ export class Game {
     if (this.ended || p.dying > 0 || p.attacking || p.attackCd > 0 || p.dashing) return;
     p.attacking = true;
     p.attackTimer = p.attackDur;
-    p.attackCd = p.attackDur + 0.16;
+    p.attackCd = p.attackDur + PLAYER_ATTACK_COOLDOWN;
     p.swingHit.clear();
-    p.swingDmg = 1;
+    p.swingDmg = PLAYER_ATTACK_DAMAGE;
   }
   startDash() {
     const p = this.player;
-    if (this.ended || p.dying > 0 || p.dashing || p.dashCd > 0) return;
+    if (this.ended || p.dying > 0 || p.dashing || p.dashCd > 0 || p.stamina < PLAYER_DASH_STAMINA_COST) return;
     p.dashing = true;
-    p.dashTimer = 0.16;
-    p.dashCd = 0.62;
+    p.dashTimer = PLAYER_DASH_DURATION;
+    p.dashCd = PLAYER_DASH_COOLDOWN;
+    p.stamina -= PLAYER_DASH_STAMINA_COST;
+    p.staminaRegenDelay = PLAYER_STAMINA_REGEN_DELAY;
     p.dashDir = p.dir;
-    p.invuln = Math.max(p.invuln, 0.2);
+    p.invuln = Math.max(p.invuln, PLAYER_INVULN_DASH);
     this.burst(p.x, p.y, "rgba(180,220,255,0.8)", 6);
   }
 
   attackBox(p: Player) {
-    const L = 42;
-    const Wd = 40;
-    switch (p.dir) {
-      case "right":
-        return { x: p.x, y: p.y - Wd / 2, w: L, h: Wd };
-      case "left":
-        return { x: p.x - L, y: p.y - Wd / 2, w: L, h: Wd };
-      case "down":
-        return { x: p.x - Wd / 2, y: p.y, w: Wd, h: L };
-      case "up":
-        return { x: p.x - Wd / 2, y: p.y - L, w: Wd, h: L };
-    }
+    return this.combat.attackBox(p);
   }
   rectCircle(b: { x: number; y: number; w: number; h: number }, cx: number, cy: number, cr: number) {
-    const nx = Math.max(b.x, Math.min(cx, b.x + b.w));
-    const ny = Math.max(b.y, Math.min(cy, b.y + b.h));
-    return (cx - nx) ** 2 + (cy - ny) ** 2 < cr * cr;
+    return this.combat.rectCircle(b, cx, cy, cr);
   }
   doAttackHit() {
     const p = this.player;
-    const b = this.attackBox(p);
-    for (const e of this.enemies) {
-      if (!e.alive) continue;
-      if (p.swingHit.has(e.id)) continue;
-      if (this.rectCircle(b, e.x, e.y, e.r + 2)) {
-        p.swingHit.add(e.id);
-        this.hitEnemy(e, p.swingDmg, p.dir);
-      }
-    }
+    this.combat.resolvePlayerSwing(p, this.enemies, (enemy, dmg, dir) => this.hitEnemy(enemy as Enemy, dmg, dir));
   }
   hitEnemy(e: Enemy, dmg: number, dir: Dir) {
     e.hp -= dmg;
@@ -633,8 +728,8 @@ export class Game {
     const p = this.player;
     if (p.invuln > 0 || p.dashing || this.ended || p.dying > 0) return;
     p.hp -= dmg;
-    p.invuln = 0.9;
-    p.hurtFlash = 0.4;
+    p.invuln = PLAYER_INVULN_HIT;
+    p.hurtFlash = PLAYER_HURT_FLASH;
     const a = Math.atan2(p.y - fy, p.x - fx);
     p.kx += Math.cos(a) * 300;
     p.ky += Math.sin(a) * 300;
@@ -642,7 +737,7 @@ export class Game {
     this.burst(p.x, p.y, "#ff5a5a", 10);
     if (p.hp <= 0) {
       p.hp = 0;
-      p.dying = 0.9;
+      p.dying = PLAYER_INVULN_HIT;
       this.shake(10);
       this.msg("Your light fades...");
     }
@@ -676,12 +771,15 @@ export class Game {
         }
       }
     }
-    this.items = this.items.filter((i) => !i.taken);
+    for (let i = this.items.length - 1; i >= 0; i--) {
+      if (this.items[i].taken) {
+        this.items.splice(i, 1);
+      }
+    }
   }
 
   /* ----------------------------- enemies ----------------------------- */
   updateEnemy(e: Enemy, dt: number) {
-    e.t += dt;
     if (Math.abs(e.vx) > 1 || Math.abs(e.vy) > 1) this.moveEntity(e, e.vx * dt, e.vy * dt);
     e.vx -= e.vx * Math.min(1, dt * 8);
     e.vy -= e.vy * Math.min(1, dt * 8);
@@ -689,100 +787,21 @@ export class Game {
     if (!e.alive) return;
 
     const p = this.player;
-    const dx = p.x - e.x;
-    const dy = p.y - e.y;
-    const dist = Math.hypot(dx, dy) || 1;
-    const ux = dx / dist;
-    const uy = dy / dist;
+    this.ai.updateEnemy(e, dt, {
+      player: p,
+      onShoot: (x, y, ux, uy, speed, damage, color) => this.shoot(x, y, ux, uy, speed, damage, color),
+      onBossBurst: (enemy) => this.bossBurst(enemy as Enemy),
+      onSummonAdd: (enemy) => {
+        const adds = this.enemies.filter((x) => x.alive && x.type === "wraith").length;
+        if (adds < 3) this.summonAdd(enemy as Enemy);
+        else (enemy as Enemy).summonCd = 2;
+      },
+      onDamagePlayer: (damage, fx, fy) => this.damagePlayer(damage, fx, fy),
+      onText: (x, y, text, color, size) => this.addText(x, y, text, color, size),
+      onShake: (mag) => this.shake(mag),
+    });
 
-    if (e.type === "boss") {
-      this.updateBoss(e, dt, dist, ux, uy);
-      return;
-    }
-
-    let mvx = 0;
-    let mvy = 0;
-    if (e.type === "wraith") {
-      if (dist < 260) {
-        mvx = ux * e.speed;
-        mvy = uy * e.speed;
-      } else {
-        e.wanderA += dt;
-        mvx = Math.cos(e.wanderA * 0.7) * e.speed * 0.3;
-        mvy = Math.sin(e.wanderA * 0.9) * e.speed * 0.3;
-      }
-      e.bob = Math.sin(e.t * 4) * 3;
-    } else if (e.type === "sentinel") {
-      if (dist < 320) {
-        mvx = ux * e.speed;
-        mvy = uy * e.speed;
-      }
-    } else if (e.type === "adept") {
-      e.shootCd -= dt;
-      if (dist < 360) {
-        if (dist < 168) {
-          mvx = -ux * e.speed * 0.95;
-          mvy = -uy * e.speed * 0.95;
-        } else if (dist > 224) {
-          mvx = ux * e.speed * 0.7;
-          mvy = uy * e.speed * 0.7;
-        } else {
-          mvx = -uy * e.speed * 0.55;
-          mvy = ux * e.speed * 0.55;
-        }
-        if (e.shootCd <= 0) {
-          e.shootCd = 1.7;
-          this.shoot(e.x, e.y, ux, uy, 180, 1, "#b06bff");
-        }
-      }
-    }
-    this.moveEntity(e, mvx * dt, mvy * dt);
-
-    if (p.dying <= 0 && p.invuln <= 0 && !p.dashing && dist < e.r + p.r - 2)
-      this.damagePlayer(e.dmg, e.x, e.y);
-  }
-
-  updateBoss(e: Enemy, dt: number, dist: number, ux: number, uy: number) {
-    e.burstCd -= dt;
-    e.lungeCd -= dt;
-    e.summonCd -= dt;
-    let mvx = 0;
-    let mvy = 0;
-    if (e.lungeTimer > 0) {
-      e.lungeTimer -= dt;
-      mvx = e.lungeVx;
-      mvy = e.lungeVy;
-    } else if (dist > 96) {
-      mvx = ux * e.speed;
-      mvy = uy * e.speed;
-    }
-    this.moveEntity(e, mvx * dt, mvy * dt);
-
-    if (e.lungeCd <= 0) {
-      e.lungeCd = 4.0 + Math.random() * 1.2;
-      e.lungeTimer = 0.5;
-      e.lungeVx = ux * 380;
-      e.lungeVy = uy * 380;
-      this.addText(e.x, e.y - 34, "LUNGE", "#ff6a6a", 16);
-      this.shake(6);
-    }
-    if (e.burstCd <= 0) {
-      e.burstCd = 2.4;
-      this.bossBurst(e);
-    }
-    if (e.hp / e.maxHp < 0.45 && e.summonCd <= 0) {
-      const adds = this.enemies.filter((x) => x.alive && x.type === "wraith").length;
-      if (adds < 3) {
-        e.summonCd = 6.5;
-        this.summonAdd(e);
-      } else {
-        e.summonCd = 2;
-      }
-    }
-
-    const p = this.player;
-    if (p.dying <= 0 && p.invuln <= 0 && !p.dashing && dist < e.r + p.r - 4)
-      this.damagePlayer(e.dmg, e.x, e.y);
+    this.moveEntity(e, e.vx * dt, e.vy * dt);
   }
   bossBurst(e: Enemy) {
     const n = 14;
@@ -808,25 +827,25 @@ export class Game {
   }
 
   updateProjectiles(dt: number) {
-    for (const pr of this.projectiles) {
-      pr.life -= dt;
-      pr.x += pr.vx * dt;
-      pr.y += pr.vy * dt;
-      if (this.solidAtIdx(this.tileAtPx(pr.x, pr.y))) {
-        pr.life = 0;
-        this.burst(pr.x, pr.y, pr.color, 6);
-        continue;
-      }
-      const p = this.player;
-      if (p.dying <= 0 && p.invuln <= 0 && !p.dashing) {
-        if (Math.hypot(pr.x - p.x, pr.y - p.y) < pr.r + p.r) {
-          this.damagePlayer(pr.dmg, pr.x, pr.y);
-          pr.life = 0;
-          this.burst(pr.x, pr.y, pr.color, 8);
+    this.combat.processProjectiles(
+      this.projectiles,
+      this.player,
+      dt,
+      (pr) => {
+        if (this.solidAtIdx(this.tileAtPx(pr.x, pr.y))) {
+          this.burst(pr.x, pr.y, pr.color, 6);
+          return true;
         }
-      }
-    }
-    this.projectiles = this.projectiles.filter((p) => p.life > 0);
+        return false;
+      },
+      (pr) => {
+        this.damagePlayer(pr.dmg, pr.x, pr.y);
+        this.burst(pr.x, pr.y, pr.color, 8);
+      },
+      (pr) => {
+        this.burst(pr.x, pr.y, pr.color, 6);
+      },
+    );
   }
 
   updateItems(dt: number) {
@@ -909,7 +928,7 @@ export class Game {
     this.dialogueSpeaker = speaker;
     this.dialogueColor = color;
     this.dialogue = { speaker, text: lines[0], index: 0, total: lines.length, color };
-    this.keys.clear();
+    this.input.clear();
     this.cb.onDialogue(this.dialogue);
     this.pushHud();
   }
@@ -933,14 +952,14 @@ export class Game {
   tryInteract() {
     const p = this.player;
     const npc = this.map.npc;
-    if (Math.hypot(p.x - npc.x, p.y - npc.y) < 48) {
+    if (Math.hypot(p.x - npc.x, p.y - npc.y) < INTERACT_NPC_DISTANCE) {
       this.openDialogue(ORITHEL_LINES.slice(), "Orithel, the Last Watcher", "#9ff7e6");
       return;
     }
     for (const s of this.map.signs) {
       const sx = s.x * TILE + TILE / 2;
       const sy = s.y * TILE + TILE / 2;
-      if (Math.hypot(p.x - sx, p.y - sy) < 44) {
+      if (Math.hypot(p.x - sx, p.y - sy) < INTERACT_SIGN_DISTANCE) {
         this.openDialogue([s.text], "Weathered Carving", "#cdbf9a");
         return;
       }
@@ -961,28 +980,40 @@ export class Game {
   }
 
   currentObjective(): string {
-    if (this.shards < this.totalShards)
-      return `Recover the Anima Shards  (${this.shards}/${this.totalShards})`;
-    if (!this.wardUnlocked) return "The ward weakens...";
-    if (!this.bossSpawned) return "Enter the Glass Spire";
-    if (this.boss && this.boss.alive) return "Slay the Unbound";
-    return "The Spire falls silent...";
-  }
-  pushHud() {
-    const d: HudData = {
-      hp: Math.max(0, Math.ceil(this.player.hp)),
-      maxHp: this.player.maxHp,
+    return this.flow.currentObjective({
+      player: this.player,
+      enemies: this.enemies,
+      boss: this.boss,
       shards: this.shards,
       totalShards: this.totalShards,
-      objective: this.currentObjective(),
+      wardUnlocked: this.wardUnlocked,
+      bossSpawned: this.bossSpawned,
       message: this.message,
       messageId: this.messageId,
       prompt: this.prompt,
-      enemies: this.enemies.filter((e) => e.alive && e.type !== "boss").length,
-      bossActive: !!(this.boss && this.boss.alive),
-      bossHp: this.boss && this.boss.alive ? Math.max(0, this.boss.hp / this.boss.maxHp) : 0,
-    };
-    this.cb.onHud(d);
+      dialogue: this.dialogue,
+      map: this.map,
+      items: this.items,
+    });
+  }
+  pushHud() {
+    this.cb.onHud(
+      this.flow.buildHud({
+        player: this.player,
+        enemies: this.enemies,
+        boss: this.boss,
+        shards: this.shards,
+        totalShards: this.totalShards,
+        wardUnlocked: this.wardUnlocked,
+        bossSpawned: this.bossSpawned,
+        message: this.message,
+        messageId: this.messageId,
+        prompt: this.prompt,
+        dialogue: this.dialogue,
+        map: this.map,
+        items: this.items,
+      }),
+    );
   }
 
   /* ----------------------------- camera / resize ----------------------------- */
