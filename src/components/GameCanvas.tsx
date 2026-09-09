@@ -24,10 +24,20 @@ export default function GameCanvas({
       onLose: () => cbRef.current.onLose(),
     };
     const game = new Game(canvas, proxy);
-    game.init();
-    game.start();
-    onReady?.(game);
-    return () => game.destroy();
+    let disposed = false;
+    void game.init()
+      .then(() => {
+        if (disposed) return;
+        game.start();
+        onReady?.(game);
+      })
+      .catch((error: unknown) => {
+        if (!disposed) console.error("Game initialization error:", error);
+      });
+    return () => {
+      disposed = true;
+      game.destroy();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

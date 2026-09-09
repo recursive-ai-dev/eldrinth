@@ -1,4 +1,4 @@
-import type { Dir, EnemyType } from "../types";
+import type { EnemyType } from "../types";
 
 export interface EnemyLike {
   id: number;
@@ -38,6 +38,7 @@ export interface AIContext {
   onMessage?: (text: string) => void;
   onText?: (x: number, y: number, text: string, color: string, size: number) => void;
   onShake?: (mag: number) => void;
+  random?: () => number;
 }
 
 export class AISystem {
@@ -131,7 +132,7 @@ export class AISystem {
 
     if (enemy.telegraph === "lunge" && enemy.telegraphTimer <= 0) {
       enemy.telegraph = null;
-      enemy.lungeCd = 4 + Math.random() * 1.2;
+      enemy.lungeCd = 4 + (ctx.random?.() ?? 0.5) * 1.2;
       enemy.lungeTimer = 0.5;
       enemy.lungeVx = ux * 380;
       enemy.lungeVy = uy * 380;

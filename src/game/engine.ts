@@ -3,15 +3,22 @@ import type {
   Dir,
   Vec,
   EnemyType,
-  ItemType,
   MapData,
   GameCallbacks,
-  HudData,
   DialogueData,
 } from "./types";
-import { generateMap } from "./map";
 import { clamp, DIRV } from "./math";
 import { renderGame, buildStaticCanvas } from "./render/renderer";
+import { FixedStepLoop } from "./core/FixedStepLoop";
+import {
+  WorldState,
+  type EnemyState,
+  type ItemState,
+  type PlayerState,
+  type ProjectileState,
+  type WorldSnapshot,
+} from "./core/WorldState";
+import { createRegionRepository, type RegionRepository } from "./regions";
 import { AISystem } from "./systems/AISystem";
 import { CombatSystem } from "./systems/CombatSystem";
 import { GameFlowSystem } from "./systems/GameFlowSystem";
@@ -73,73 +80,6 @@ const BOSS_LUNGE_COOLDOWN = 3.5;
 const INTERACT_NPC_DISTANCE = 48;
 const INTERACT_SIGN_DISTANCE = 44;
 
-/* ----------------------------- entities ----------------------------- */
-export interface Player {
-  x: number;
-  y: number;
-  r: number;
-  hp: number;
-  maxHp: number;
-  stamina: number;
-  maxStamina: number;
-  staminaRegenDelay: number;
-  dir: Dir;
-  speed: number;
-  attackTimer: number;
-  attackCd: number;
-  attackDur: number;
-  attacking: boolean;
-  swingHit: Set<number>;
-  swingDmg: number;
-  invuln: number;
-  dashTimer: number;
-  dashCd: number;
-  dashDir: Dir;
-  dashing: boolean;
-  walkT: number;
-  hurtFlash: number;
-  kx: number;
-  ky: number;
-  dying: number;
-}
-export interface Enemy {
-  id: number;
-  type: EnemyType;
-  x: number;
-  y: number;
-  r: number;
-  hp: number;
-  maxHp: number;
-  speed: number;
-  dmg: number;
-  vx: number;
-  vy: number;
-  hurt: number;
-  t: number;
-  shootCd: number;
-  lungeCd: number;
-  lungeTimer: number;
-  lungeVx: number;
-  lungeVy: number;
-  burstCd: number;
-  summonCd: number;
-  telegraph: "spell" | "lunge" | "burst" | null;
-  telegraphTimer: number;
-  wanderA: number;
-  bob: number;
-  alive: boolean;
-  dying: number;
-}
-export interface Projectile {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  r: number;
-  life: number;
-  dmg: number;
-  color: string;
-}
 export interface Particle {
   x: number;
   y: number;
@@ -161,13 +101,10 @@ export interface FloatText {
   color: string;
   size: number;
 }
-export interface Item {
-  x: number;
-  y: number;
-  type: ItemType;
-  t: number;
-  taken: boolean;
-}
+export type Player = PlayerState;
+export type Enemy = EnemyState;
+export type Projectile = ProjectileState;
+export type Item = ItemState;
 
 const ORITHEL_LINES = [
   "You wear the old marks upon your blade... Are you of the Line of Elun? No matter. The living are rare here.",
@@ -183,9 +120,9 @@ export class Game {
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
   cb: GameCallbacks;
-  map!: MapData;
+  /** The sole authority for saveable simulation data. */
+  readonly world = new WorldState();
   staticCanvas!: HTMLCanvasElement;
-  wardSet = new Set<number>();
 
   dpr = 1;
   cssW = 800;
@@ -199,6 +136,15 @@ export class Game {
   combat = new CombatSystem();
   ai = new AISystem();
   flow = new GameFlowSystem();
+  private readonly regions: RegionRepository;
+  private regionAbort = new AbortController();
+  private initPromise: Promise<void> | null = null;
+  private destroyed = false;
+  private readonly gameLoop = new FixedStepLoop({
+    simulate: (stepSeconds) => this.simulateStep(stepSeconds),
+    render: () => renderGame(this),
+    onError: (error) => console.error("Game loop error:", error),
+  });
   movement = new MovementSystem({
     width: MAP_W,
     height: MAP_H,
@@ -212,44 +158,26 @@ export class Game {
       return ty * MAP_W + tx;
     },
   });
-  player!: Player;
-  enemies: Enemy[] = [];
-  projectiles: Projectile[] = [];
   particles: Particle[] = [];
   texts: FloatText[] = [];
-  items: Item[] = [];
-  boss: Enemy | null = null;
 
   cam = { x: 0, y: 0 };
-  time = 0;
-  lastT = 0;
-  raf = 0;
-  running = false;
   paused = false;
   ended = false;
   initialized = false;
 
-  dialogue: DialogueData | null = null;
   dialogueLines: string[] = [];
   dialogueSpeaker = "";
   dialogueColor = "#bff7ff";
 
-  wardUnlocked = false;
-  bossSpawned = false;
-  shards = 0;
-  totalShards = 3;
-
   shakeMag = 0;
   lastShakeX = 0;
   lastShakeY = 0;
-  message = "";
-  messageId = 0;
   prompt = "";
-  nextEnemyId = 1;
   advanceLock = 0;
   hudAccum = 0;
 
-  constructor(canvas: HTMLCanvasElement, cb: GameCallbacks) {
+  constructor(canvas: HTMLCanvasElement, cb: GameCallbacks, regions = createRegionRepository()) {
     this.canvas = canvas;
     const ctx = canvas.getContext("2d");
     if (!ctx) {
@@ -257,18 +185,64 @@ export class Game {
     }
     this.ctx = ctx;
     this.cb = cb;
+    this.regions = regions;
   }
 
-  init() {
-    if (this.initialized) return;
+  // These accessors preserve the existing system APIs while making `world`
+  // the only backing store for gameplay and save data.
+  get map(): MapData { return this.world.map; }
+  set map(value: MapData) { this.world.map = value; }
+  get wardSet() { return this.world.wardSet; }
+  set wardSet(value: Set<number>) { this.world.wardSet = value; }
+  get player(): Player { return this.world.player; }
+  set player(value: Player) { this.world.player = value; }
+  get enemies(): Enemy[] { return this.world.enemies; }
+  set enemies(value: Enemy[]) { this.world.enemies = value; }
+  get projectiles(): Projectile[] { return this.world.projectiles; }
+  set projectiles(value: Projectile[]) { this.world.projectiles = value; }
+  get items(): Item[] { return this.world.items; }
+  set items(value: Item[]) { this.world.items = value; }
+  get boss(): Enemy | null { return this.world.boss; }
+  set boss(value: Enemy | null) { this.world.boss = value; }
+  get time() { return this.world.simulationTime; }
+  get dialogue(): DialogueData | null { return this.world.dialogue; }
+  set dialogue(value: DialogueData | null) { this.world.dialogue = value; }
+  get wardUnlocked() { return this.world.wardUnlocked; }
+  set wardUnlocked(value: boolean) { this.world.wardUnlocked = value; }
+  get bossSpawned() { return this.world.bossSpawned; }
+  set bossSpawned(value: boolean) { this.world.bossSpawned = value; }
+  get shards() { return this.world.shards; }
+  set shards(value: number) { this.world.shards = value; }
+  get totalShards() { return this.world.totalShards; }
+  set totalShards(value: number) { this.world.totalShards = value; }
+  get message() { return this.world.message; }
+  set message(value: string) { this.world.message = value; }
+  get messageId() { return this.world.messageId; }
+  set messageId(value: number) { this.world.messageId = value; }
+  get nextEnemyId() { return this.world.nextEnemyId; }
+  set nextEnemyId(value: number) { this.world.nextEnemyId = value; }
+
+  init(): Promise<void> {
+    if (this.initialized) return Promise.resolve();
+    if (!this.initPromise) this.initPromise = this.initialize();
+    return this.initPromise;
+  }
+
+  private async initialize() {
     try {
-      this.map = generateMap();
+      const region = await this.regions.acquire(this.world.regionId, this.regionAbort.signal);
+      if (this.destroyed) {
+        this.regions.release(region.id);
+        return;
+      }
+      this.map = region.map;
       this.mapPxW = this.map.width * TILE;
       this.mapPxH = this.map.height * TILE;
       this.wardSet = new Set(this.map.wardTiles);
       this.syncMovementSystem();
 
-      buildStaticCanvas(this);
+      await buildStaticCanvas(this, this.regionAbort.signal);
+      if (this.destroyed) return;
 
       const s = this.map.spawn;
       this.player = {
@@ -305,7 +279,7 @@ export class Game {
         this.enemies.push(this.makeEnemy(es.type, t.x, t.y));
       }
       for (const sh of this.map.shards)
-        this.items.push({ x: sh.x, y: sh.y, type: "shard", t: Math.random() * 6, taken: false });
+        this.items.push({ x: sh.x, y: sh.y, type: "shard", t: this.world.nextRandom() * 6, taken: false });
 
       this.input.bind({
         onKeyDown: this.onKeyDown,
@@ -331,18 +305,36 @@ export class Game {
   }
 
   destroy() {
-    this.running = false;
+    if (this.destroyed) return;
+    this.destroyed = true;
     this.initialized = false;
-    cancelAnimationFrame(this.raf);
+    this.regionAbort.abort();
+    this.gameLoop.stop();
     this.input.destroy();
     window.removeEventListener("resize", this.onResize);
+    if (this.world.map) this.regions.release(this.world.regionId);
   }
 
   start() {
-    if (this.running) return;
-    this.running = true;
-    this.lastT = 0;
-    this.raf = requestAnimationFrame(this.loop);
+    if (!this.initialized || this.destroyed) return;
+    this.gameLoop.start();
+  }
+
+  saveWorld(): WorldSnapshot {
+    return this.world.snapshot();
+  }
+
+  /** Restores saveable simulation state into the already acquired region. */
+  loadWorld(snapshot: WorldSnapshot) {
+    if (!this.initialized) throw new Error("Initialize the game before loading a world snapshot.");
+    if (snapshot.regionId !== this.world.regionId) {
+      throw new Error(`Region ${snapshot.regionId} must be acquired before loading its world snapshot.`);
+    }
+    this.world.restore(snapshot);
+    this.wardSet = new Set(this.map.wardTiles);
+    this.syncMovementSystem();
+    this.centerCam();
+    this.pushHud();
   }
 
   /* ----------------------------- map / collision ----------------------------- */
@@ -418,8 +410,8 @@ export class Game {
       vx: 0,
       vy: 0,
       hurt: 0,
-      t: Math.random() * 6,
-      shootCd: 1 + Math.random(),
+      t: this.world.nextRandom() * 6,
+      shootCd: 1 + this.world.nextRandom(),
       lungeCd: 0,
       lungeTimer: 0,
       lungeVx: 0,
@@ -428,7 +420,7 @@ export class Game {
       summonCd: 8,
       telegraph: null,
       telegraphTimer: 0,
-      wanderA: Math.random() * 6,
+      wanderA: this.world.nextRandom() * 6,
       bob: 0,
       alive: true,
       dying: 0,
@@ -477,27 +469,9 @@ export class Game {
   onKeyDown = (e: KeyboardEvent) => {
     const k = e.key.toLowerCase();
     if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(k)) e.preventDefault();
-    if (this.ended) return;
-    if (k === "p" || k === "escape") {
-      if (!this.dialogue) this.togglePause();
-      return;
-    }
-    if (this.paused) return;
-    if (this.dialogue) {
-      if (k === "e" || k === "enter" || k === " " || k === "j") this.advanceDialogue();
-      return;
-    }
-    this.input.keys.add(k);
-    if (k === " " || k === "j") this.startAttack();
-    else if (k === "shift") this.startDash();
-    else if (k === "e" || k === "enter") this.tryInteract();
   };
-  onKeyUp = (e: KeyboardEvent) => {
-    this.input.keys.delete(e.key.toLowerCase());
-  };
-  onBlur = () => {
-    this.input.clear();
-  };
+  onKeyUp = (_e: KeyboardEvent) => undefined;
+  onBlur = () => undefined;
   onResize = () => this.resize();
 
   setPaused(b: boolean) {
@@ -510,36 +484,46 @@ export class Game {
     this.setPaused(!this.paused);
   }
 
-  /* ----------------------------- main loop ----------------------------- */
-  loop = (tNow: number) => {
-    if (!this.running) return;
-    try {
-      this.raf = requestAnimationFrame(this.loop);
-      if (!this.lastT) this.lastT = tNow;
-      let dt = (tNow - this.lastT) / 1000;
-      this.lastT = tNow;
-      if (!isFinite(dt) || dt < 0) dt = 0;
-      if (dt > 0.05) dt = 0.05;
-      this.time += dt;
-      if (this.advanceLock > 0) this.advanceLock -= dt;
-
-      if (!this.paused && !this.dialogue && !this.ended) this.update(dt);
-      renderGame(this);
-
-      this.hudAccum += dt;
-      if (this.hudAccum >= 0.1) {
-        this.hudAccum = 0;
-        this.pushHud();
-      }
-    } catch (e) {
-      console.error("Game loop error:", e);
-      this.running = false;
-      cancelAnimationFrame(this.raf);
-      this.raf = 0;
+  /* ----------------------- fixed simulation pipeline ----------------------- */
+  /**
+   * Ordered once per 1/60 s tick:
+   * input commands → player → AI/enemy motion → entity cleanup → projectiles
+   * → items → presentation effects → camera → UI projection.
+   * Rendering is deliberately outside this method.
+   */
+  simulateStep(dt: number) {
+    this.processInputCommands();
+    if (!this.paused && !this.dialogue && !this.ended) {
+      this.world.simulationTime += dt;
+      this.world.tick++;
+      this.update(dt);
     }
-  };
+    if (this.advanceLock > 0) this.advanceLock = Math.max(0, this.advanceLock - dt);
+    this.hudAccum += dt;
+    if (this.hudAccum >= 0.1) {
+      this.hudAccum = 0;
+      this.pushHud();
+    }
+  }
 
-  update(dt: number) {
+  private processInputCommands() {
+    if (this.input.consumePressed("escape") || this.input.consumePressed("p")) {
+      if (!this.dialogue && !this.ended) this.togglePause();
+      return;
+    }
+    if (this.paused || this.ended) return;
+    if (this.dialogue) {
+      if (this.input.consumePressed("e") || this.input.consumePressed("enter") || this.input.consumePressed(" ") || this.input.consumePressed("j")) {
+        this.advanceDialogue();
+      }
+      return;
+    }
+    if (this.input.consumePressed(" ") || this.input.consumePressed("j")) this.startAttack();
+    else if (this.input.consumePressed("shift")) this.startDash();
+    else if (this.input.consumePressed("e") || this.input.consumePressed("enter")) this.tryInteract();
+  }
+
+  private update(dt: number) {
     this.updatePlayer(dt);
     for (const e of this.enemies) this.updateEnemy(e, dt);
     for (let i = this.enemies.length - 1; i >= 0; i--) {
@@ -720,7 +704,7 @@ export class Game {
     e.dying = e.type === "boss" ? 1.5 : 0.45;
     const col = e.type === "wraith" ? "#8fe6b8" : e.type === "adept" ? "#c08bff" : "#7fd8ff";
     this.shardsBurst(e.x, e.y, col, e.type === "boss" ? 40 : 14);
-    if (e.type !== "boss" && Math.random() < 0.28)
+    if (e.type !== "boss" && this.world.nextRandom() < 0.28)
       this.items.push({ x: e.x, y: e.y, type: "potion", t: 0, taken: false });
   }
 
@@ -799,6 +783,7 @@ export class Game {
       onDamagePlayer: (damage, fx, fy) => this.damagePlayer(damage, fx, fy),
       onText: (x, y, text, color, size) => this.addText(x, y, text, color, size),
       onShake: (mag) => this.shake(mag),
+      random: () => this.world.nextRandom(),
     });
 
     this.moveEntity(e, e.vx * dt, e.vy * dt);
@@ -813,7 +798,7 @@ export class Game {
     this.addText(e.x, e.y - 34, "BURST", "#7fe0ff", 15);
   }
   summonAdd(e: Enemy) {
-    const ang = Math.random() * Math.PI * 2;
+    const ang = this.world.nextRandom() * Math.PI * 2;
     const x = e.x + Math.cos(ang) * 60;
     const y = e.y + Math.sin(ang) * 60;
     const w = this.makeEnemy("wraith", x, y);
@@ -855,16 +840,16 @@ export class Game {
   /* ----------------------------- particles / text ----------------------------- */
   burst(x: number, y: number, color: string, n: number) {
     for (let i = 0; i < n; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const sp = 40 + Math.random() * 140;
+      const a = this.world.nextRandom() * Math.PI * 2;
+      const sp = 40 + this.world.nextRandom() * 140;
       this.particles.push({
         x,
         y,
         vx: Math.cos(a) * sp,
         vy: Math.sin(a) * sp,
-        life: 0.3 + Math.random() * 0.3,
+        life: 0.3 + this.world.nextRandom() * 0.3,
         max: 0.6,
-        size: 1 + Math.random() * 2,
+        size: 1 + this.world.nextRandom() * 2,
         color,
         kind: "spark",
         rot: 0,
@@ -873,19 +858,19 @@ export class Game {
   }
   shardsBurst(x: number, y: number, color: string, n: number) {
     for (let i = 0; i < n; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const sp = 30 + Math.random() * 160;
+      const a = this.world.nextRandom() * Math.PI * 2;
+      const sp = 30 + this.world.nextRandom() * 160;
       this.particles.push({
         x,
         y,
         vx: Math.cos(a) * sp,
         vy: Math.sin(a) * sp - 30,
-        life: 0.5 + Math.random() * 0.6,
+        life: 0.5 + this.world.nextRandom() * 0.6,
         max: 1.1,
-        size: 2 + Math.random() * 3,
+        size: 2 + this.world.nextRandom() * 3,
         color,
         kind: "shard",
-        rot: Math.random() * 6,
+        rot: this.world.nextRandom() * 6,
       });
     }
   }

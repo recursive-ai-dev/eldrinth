@@ -1,20 +1,17 @@
 import { create } from "zustand";
-import { Game } from "@/game/engine";
 import type { HudData, DialogueData } from "@/game/types";
+import { SceneStack, type SceneId } from "@/game/core/SceneStack";
 
-type Screen = "title" | "play" | "win" | "lose";
+type Screen = SceneId;
 
 interface GameState {
-  screen: Screen;
-  paused: boolean;
-  gameInstance: Game | null;
+  scenes: readonly SceneId[];
+  sessionId: number;
   hud: HudData;
   dialogue: DialogueData | null;
 
   // Actions
-  setScreen: (screen: Screen) => void;
   setPaused: (paused: boolean) => void;
-  setGameInstance: (instance: Game | null) => void;
   setHud: (hud: HudData) => void;
   setDialogue: (dialogue: DialogueData | null) => void;
 
@@ -41,10 +38,9 @@ const initialHud: HudData = {
   bossHp: 0,
 };
 
-const initialState: Omit<GameState, "setScreen" | "setPaused" | "setGameInstance" | "setHud" | "setDialogue" | "startGame" | "endGame" | "togglePause" | "reset"> = {
-  screen: "title",
-  paused: false,
-  gameInstance: null,
+const initialState: Omit<GameState, "setPaused" | "setHud" | "setDialogue" | "startGame" | "endGame" | "togglePause" | "reset"> = {
+  scenes: ["title"],
+  sessionId: 0,
   hud: initialHud,
   dialogue: null,
 };
@@ -52,46 +48,50 @@ const initialState: Omit<GameState, "setScreen" | "setPaused" | "setGameInstance
 export const useGameStore = create<GameState>((set) => ({
   ...initialState,
 
-  setScreen: (screen) => set({ screen, paused: false, dialogue: null }),
-
-  setPaused: (paused) => set({ paused }),
-
-  setGameInstance: (gameInstance) => set({ gameInstance }),
+  setPaused: (paused) => set((state) => {
+    const stack = new SceneStack(state.scenes);
+    if (paused && !stack.has("pause")) stack.push("pause");
+    if (!paused && stack.top() === "pause") stack.pop();
+    return { scenes: stack.snapshot(), dialogue: paused ? null : state.dialogue };
+  }),
 
   setHud: (hud) => set({ hud }),
 
   setDialogue: (dialogue) => set({ dialogue }),
 
   startGame: () => {
-    set({
-      screen: "play",
-      paused: false,
+    set((state) => ({
+      scenes: ["overworld"],
+      sessionId: state.sessionId + 1,
       dialogue: null,
       hud: initialHud,
-    });
+    }));
   },
 
   endGame: (result: "win" | "lose") => {
     set({
-      screen: result === "win" ? "win" : "lose",
-      paused: false,
+      scenes: [result === "win" ? "win" : "lose"],
       dialogue: null,
     });
   },
 
-  togglePause: () => set((state) => ({ paused: !state.paused })),
+  togglePause: () => set((state) => {
+    const stack = new SceneStack(state.scenes);
+    if (stack.top() === "pause") stack.pop();
+    else if (stack.top() === "overworld" || stack.top() === "interior") stack.push("pause");
+    return { scenes: stack.snapshot() };
+  }),
 
-  reset: () => set({ ...initialState, screen: "title" }),
+  reset: () => set({ ...initialState }),
 }));
 
 // Selectors for better performance with useStore
 // Usage: const screen = useGameStore((state) => state.screen);
 // Re-export types for convenience
 export type { Screen };
-export { Game };
 
-export const selectScreen = (state: GameState) => state.screen;
-export const selectPaused = (state: GameState) => state.paused;
-export const selectGameInstance = (state: GameState) => state.gameInstance;
+export const selectScreen = (state: GameState) => state.scenes[state.scenes.length - 1];
+export const selectPaused = (state: GameState) => state.scenes.includes("pause");
+export const selectSessionId = (state: GameState) => state.sessionId;
 export const selectHud = (state: GameState) => state.hud;
 export const selectDialogue = (state: GameState) => state.dialogue;
