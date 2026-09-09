@@ -1,4 +1,4 @@
-import { MAP_W, MAP_H, TILE, T, SOLID_TILES } from "./constants";
+import { MAP_W, MAP_H, TILE, T } from "./constants";
 import type { MapData, Vec, EnemySpawn, SignData } from "./types";
 
 function mulberry32(seed: number) {
@@ -192,10 +192,6 @@ export function generateMap(): MapData {
     for (let x = 8; x <= 12; x++)
       if (tiles[idx(x, y)] === T.TREE || tiles[idx(x, y)] === T.ROCK) tiles[idx(x, y)] = T.GRASS;
 
-  // ----- Solidity -----
-  const solid = new Uint8Array(tiles.length);
-  for (let i = 0; i < tiles.length; i++) solid[i] = SOLID_TILES.has(tiles[i]) ? 1 : 0;
-
   // ----- Entities / points of interest -----
   const signs: SignData[] = [
     {
@@ -236,7 +232,6 @@ export function generateMap(): MapData {
     width: MAP_W,
     height: MAP_H,
     tiles,
-    solid,
     wardTiles,
     spawn: { x: px(10), y: px(26) },
     npc: { x: px(32), y: px(39) },
