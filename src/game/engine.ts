@@ -8,7 +8,7 @@ import type {
   DialogueData,
 } from "./types";
 import { clamp, DIRV } from "./math";
-import { renderGame, buildStaticCanvas } from "./render/renderer";
+import { renderGame, TileChunkRenderer } from "./render/renderer";
 import { FixedStepLoop } from "./core/FixedStepLoop";
 import {
   WorldState,
@@ -122,7 +122,7 @@ export class Game {
   cb: GameCallbacks;
   /** The sole authority for saveable simulation data. */
   readonly world = new WorldState();
-  staticCanvas!: HTMLCanvasElement;
+  tileRenderer!: TileChunkRenderer;
 
   dpr = 1;
   cssW = 800;
@@ -148,15 +148,9 @@ export class Game {
   movement = new MovementSystem({
     width: MAP_W,
     height: MAP_H,
-    solid: new Uint8Array(MAP_W * MAP_H),
     wardTiles: new Set<number>(),
     wardUnlocked: false,
-    tileAtPx: (x: number, y: number) => {
-      const tx = Math.floor(x / TILE);
-      const ty = Math.floor(y / TILE);
-      if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return -1;
-      return ty * MAP_W + tx;
-    },
+    tileAt: () => undefined,
   });
   particles: Particle[] = [];
   texts: FloatText[] = [];
@@ -241,8 +235,7 @@ export class Game {
       this.wardSet = new Set(this.map.wardTiles);
       this.syncMovementSystem();
 
-      await buildStaticCanvas(this, this.regionAbort.signal);
-      if (this.destroyed) return;
+      this.tileRenderer = new TileChunkRenderer(this.map);
 
       const s = this.map.spawn;
       this.player = {
@@ -289,6 +282,7 @@ export class Game {
       window.addEventListener("resize", this.onResize);
       this.resize();
       this.centerCam();
+      this.tileRenderer.warm(this.cam, this.viewW, this.viewH);
       this.message = "Seek the Anima Shards — or speak with the Watcher in the ruins.";
       this.pushHud();
       this.initialized = true;
@@ -349,9 +343,9 @@ export class Game {
           if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
           const x = tx + dx;
           const y = ty + dy;
-          if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) continue;
-          const i = y * MAP_W + x;
-          if (!this.map.solid[i] && !this.wardSet.has(i))
+          if (x < 0 || y < 0 || x >= this.map.width || y >= this.map.height) continue;
+          const i = y * this.map.width + x;
+          if (!this.solidAtIdx(i))
             return { x: x * TILE + TILE / 2, y: y * TILE + TILE / 2 };
         }
       }
@@ -364,14 +358,11 @@ export class Game {
     this.movement = new MovementSystem({
       width: this.map.width,
       height: this.map.height,
-      solid: this.map.solid,
       wardTiles: this.wardSet,
       wardUnlocked: this.wardUnlocked,
-      tileAtPx: (x: number, y: number) => {
-        const tx = Math.floor(x / TILE);
-        const ty = Math.floor(y / TILE);
-        if (tx < 0 || ty < 0 || tx >= this.map.width || ty >= this.map.height) return -1;
-        return ty * this.map.width + tx;
+      tileAt: (tx: number, ty: number) => {
+        if (tx < 0 || ty < 0 || tx >= this.map.width || ty >= this.map.height) return undefined;
+        return this.map.tiles[ty * this.map.width + tx];
       },
     });
   }
@@ -553,9 +544,17 @@ export class Game {
     if (this.shakeMag < 0.05) this.shakeMag = 0;
 
     const p = this.player;
-    const tx = clamp(p.x - this.viewW / 2, 0, Math.max(0, this.mapPxW - this.viewW));
-    const ty = clamp(p.y - this.viewH / 2, 0, Math.max(0, this.mapPxH - this.viewH));
-    const f = Math.min(1, dt * 8);
+    const deadzoneX = Math.min(112, this.viewW * 0.2);
+    const deadzoneY = Math.min(80, this.viewH * 0.16);
+    const centerX = this.cam.x + this.viewW / 2;
+    const centerY = this.cam.y + this.viewH / 2;
+    const desiredX = p.x < centerX - deadzoneX ? p.x + deadzoneX - this.viewW / 2
+      : p.x > centerX + deadzoneX ? p.x - deadzoneX - this.viewW / 2 : this.cam.x;
+    const desiredY = p.y < centerY - deadzoneY ? p.y + deadzoneY - this.viewH / 2
+      : p.y > centerY + deadzoneY ? p.y - deadzoneY - this.viewH / 2 : this.cam.y;
+    const tx = clamp(desiredX, 0, Math.max(0, this.mapPxW - this.viewW));
+    const ty = clamp(desiredY, 0, Math.max(0, this.mapPxH - this.viewH));
+    const f = 1 - Math.exp(-8 * dt);
     this.cam.x += (tx - this.cam.x) * f;
     this.cam.y += (ty - this.cam.y) * f;
 
@@ -741,6 +740,7 @@ export class Game {
           this.addText(it.x, it.y, "ANIMA SHARD", "#5ff7df", 16);
           if (this.shards >= this.totalShards) {
             this.wardUnlocked = true;
+            this.syncMovementSystem();
             this.msg("The ward before the Spire falters. The way opens.");
             this.burst(it.x, it.y, "#46f0d8", 30);
             this.ring(this.map.bossCenter.x, this.map.bossCenter.y, "#46f0d8");
@@ -1011,6 +1011,11 @@ export class Game {
     this.canvas.height = Math.floor(this.cssH * this.dpr);
     this.viewW = this.cssW;
     this.viewH = this.cssH;
+    if (this.initialized) {
+      this.cam.x = clamp(this.cam.x, 0, Math.max(0, this.mapPxW - this.viewW));
+      this.cam.y = clamp(this.cam.y, 0, Math.max(0, this.mapPxH - this.viewH));
+      this.tileRenderer.warm(this.cam, this.viewW, this.viewH);
+    }
   }
   centerCam() {
     this.cam.x = clamp(this.player.x - this.viewW / 2, 0, Math.max(0, this.mapPxW - this.viewW));

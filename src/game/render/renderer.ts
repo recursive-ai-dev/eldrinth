@@ -1,4 +1,4 @@
-import { TILE, T } from "../constants";
+import { TILE, T, tileDefinition } from "../constants";
 import { rr, dot, hash2, DIRV, DIRA } from "../math";
 import type { EnemyState, ItemState, PlayerState, ProjectileState } from "../core/WorldState";
 import type { MapData } from "../types";
@@ -30,7 +30,7 @@ export interface FloatTextRenderState {
 export interface RenderState {
   ctx: CanvasRenderingContext2D;
   map: MapData;
-  staticCanvas: HTMLCanvasElement;
+  tileRenderer: TileChunkRenderer;
   dpr: number;
   cssW: number;
   cssH: number;
@@ -51,12 +51,118 @@ export interface RenderState {
   objectiveTarget(): { x: number; y: number; kind: "shard" | "boss" } | null;
 }
 
-type StaticMapRenderState = Pick<RenderState, "map" | "staticCanvas">;
+const CHUNK_TILES = 16;
+const CHUNK_PIXELS = CHUNK_TILES * TILE;
+const CHUNK_GUARD = 1;
+const MAX_CACHED_CHUNKS = 64;
+
+interface RenderChunk {
+  ground: HTMLCanvasElement;
+  overlay: HTMLCanvasElement;
+  lastUsed: number;
+}
+
+/**
+ * Bounded, camera-driven raster cache. Map storage can be disk-backed or
+ * procedural; only chunks around the active camera get a canvas allocation.
+ */
+export class TileChunkRenderer {
+  private readonly chunks = new Map<string, RenderChunk>();
+  private frame = 0;
+
+  constructor(private readonly map: MapData) {}
+
+  warm(cam: { x: number; y: number }, viewW: number, viewH: number) {
+    this.prepare(cam, viewW, viewH, CHUNK_GUARD);
+  }
+
+  drawGround(ctx: CanvasRenderingContext2D, cam: { x: number; y: number }, viewW: number, viewH: number) {
+    this.frame++;
+    for (const [cx, cy] of this.chunkRange(cam, viewW, viewH, 0)) {
+      const chunk = this.get(cx, cy);
+      chunk.lastUsed = this.frame;
+      ctx.drawImage(chunk.ground, cx * CHUNK_PIXELS, cy * CHUNK_PIXELS);
+    }
+    // Build the surrounding ring before crossing its boundary, so new chunks
+    // are already rasterized when they become visible on the next frame.
+    this.prepare(cam, viewW, viewH, CHUNK_GUARD);
+  }
+
+  drawOverlay(ctx: CanvasRenderingContext2D, cam: { x: number; y: number }, viewW: number, viewH: number) {
+    for (const [cx, cy] of this.chunkRange(cam, viewW, viewH, 0)) {
+      const chunk = this.get(cx, cy);
+      chunk.lastUsed = this.frame;
+      ctx.drawImage(chunk.overlay, cx * CHUNK_PIXELS, cy * CHUNK_PIXELS);
+    }
+  }
+
+  private prepare(cam: { x: number; y: number }, viewW: number, viewH: number, guard: number) {
+    for (const [cx, cy] of this.chunkRange(cam, viewW, viewH, guard)) {
+      const chunk = this.get(cx, cy);
+      chunk.lastUsed = this.frame;
+    }
+    this.evict();
+  }
+
+  private chunkRange(cam: { x: number; y: number }, viewW: number, viewH: number, guard: number): [number, number][] {
+    const maxCx = Math.ceil(this.map.width / CHUNK_TILES) - 1;
+    const maxCy = Math.ceil(this.map.height / CHUNK_TILES) - 1;
+    const minX = Math.max(0, Math.floor(cam.x / CHUNK_PIXELS) - guard);
+    const minY = Math.max(0, Math.floor(cam.y / CHUNK_PIXELS) - guard);
+    const endX = Math.min(maxCx, Math.floor((cam.x + viewW - 1) / CHUNK_PIXELS) + guard);
+    const endY = Math.min(maxCy, Math.floor((cam.y + viewH - 1) / CHUNK_PIXELS) + guard);
+    const out: [number, number][] = [];
+    for (let cy = minY; cy <= endY; cy++) for (let cx = minX; cx <= endX; cx++) out.push([cx, cy]);
+    return out;
+  }
+
+  private get(cx: number, cy: number): RenderChunk {
+    const key = `${cx},${cy}`;
+    const cached = this.chunks.get(key);
+    if (cached) return cached;
+    const ground = document.createElement("canvas");
+    const overlay = document.createElement("canvas");
+    ground.width = overlay.width = CHUNK_PIXELS;
+    ground.height = overlay.height = CHUNK_PIXELS;
+    const groundCtx = ground.getContext("2d");
+    const overlayCtx = overlay.getContext("2d");
+    if (!groundCtx || !overlayCtx) throw new Error("Failed to create tile chunk canvas");
+    const startX = cx * CHUNK_TILES;
+    const startY = cy * CHUNK_TILES;
+    for (let y = 0; y < CHUNK_TILES; y++) {
+      for (let x = 0; x < CHUNK_TILES; x++) {
+        const tx = startX + x;
+        const ty = startY + y;
+        if (tx >= this.map.width || ty >= this.map.height) continue;
+        const tile = this.map.tiles[ty * this.map.width + tx];
+        drawTile(groundCtx, tile, x * TILE, y * TILE, tx * TILE, ty * TILE);
+        if (tileDefinition(tile).tall) drawTallOverlay(overlayCtx, tile, x * TILE, y * TILE);
+      }
+    }
+    const made = { ground, overlay, lastUsed: this.frame };
+    this.chunks.set(key, made);
+    return made;
+  }
+
+  private evict() {
+    while (this.chunks.size > MAX_CACHED_CHUNKS) {
+      let oldestKey: string | undefined;
+      let oldest = Infinity;
+      for (const [key, chunk] of this.chunks) {
+        if (chunk.lastUsed < oldest) { oldest = chunk.lastUsed; oldestKey = key; }
+      }
+      if (!oldestKey) return;
+      this.chunks.delete(oldestKey);
+    }
+  }
+}
 
 /* ----------------------------- tile rendering ----------------------------- */
-export function drawTile(ctx: CanvasRenderingContext2D, t: number, x: number, y: number) {
+export function drawTile(ctx: CanvasRenderingContext2D, t: number, x: number, y: number, seedX = x, seedY = y) {
   const s = TILE;
-  const r = hash2(x, y);
+  // Raster coordinates are chunk-local; variation remains globally stable so
+  // a tile keeps the same appearance when its chunk is evicted and rebuilt.
+  const r = hash2(seedX, seedY);
   switch (t) {
     case T.GRASS: {
       ctx.fillStyle = "#1b2a17";
@@ -305,25 +411,31 @@ export function drawTile(ctx: CanvasRenderingContext2D, t: number, x: number, y:
   }
 }
 
-/* ----------------------------- static map canvas ----------------------------- */
-export async function buildStaticCanvas(g: StaticMapRenderState, signal?: AbortSignal) {
-  const W = g.map.width;
-  const H = g.map.height;
-  const c = document.createElement("canvas");
-  c.width = W * TILE;
-  c.height = H * TILE;
-  const ctx = c.getContext("2d");
-  if (!ctx) {
-    throw new Error("Failed to create 2D rendering context for static canvas");
+/** The portion of a tall tile that must occlude actors below it. */
+function drawTallOverlay(ctx: CanvasRenderingContext2D, tile: number, x: number, y: number) {
+  const s = TILE;
+  ctx.save();
+  if (tile === T.TREE) {
+    ctx.fillStyle = "rgba(10, 25, 8, 0.58)";
+    dot(ctx, x + s * 0.5, y + s * 0.34, 12);
+    ctx.fill();
+    ctx.fillStyle = "rgba(31, 58, 22, 0.72)";
+    dot(ctx, x + s * 0.4, y + s * 0.25, 8);
+    ctx.fill();
+  } else if (tile === T.ROCK || tile === T.RWALL || tile === T.GRAVE) {
+    ctx.fillStyle = "rgba(24, 23, 31, 0.48)";
+    ctx.fillRect(x + 2, y + s * 0.45, s - 4, s * 0.3);
+  } else if (tile === T.CRYSTAL) {
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = "rgba(110, 255, 245, 0.35)";
+    ctx.beginPath();
+    ctx.moveTo(x + s / 2, y + 4);
+    ctx.lineTo(x + s * 0.72, y + s * 0.62);
+    ctx.lineTo(x + s * 0.28, y + s * 0.62);
+    ctx.closePath();
+    ctx.fill();
   }
-  for (let y = 0; y < H; y++) {
-    if (signal?.aborted) throw new DOMException("Static map build aborted", "AbortError");
-    for (let x = 0; x < W; x++) drawTile(ctx, g.map.tiles[y * W + x], x * TILE, y * TILE);
-    // Spread canvas work over several browser frames so a region handoff
-    // cannot monopolize the main thread.
-    if (y > 0 && y % 8 === 0) await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-  }
-  g.staticCanvas = c;
+  ctx.restore();
 }
 
 /* ----------------------------- render pipeline ----------------------------- */
@@ -346,14 +458,13 @@ export function renderGame(g: RenderState) {
 
   ctx.save();
   ctx.translate(-Math.round(g.cam.x) + sx, -Math.round(g.cam.y) + sy);
-  if (g.staticCanvas) ctx.drawImage(g.staticCanvas, 0, 0);
+  g.tileRenderer.drawGround(ctx, g.cam, g.viewW, g.viewH);
   drawWardBarrier(g, ctx);
-  drawItems(g, ctx);
-  drawEnemies(g, ctx);
-  drawPlayer(g, ctx);
+  drawSortedWorldObjects(g, ctx);
   drawProjectiles(g, ctx);
   drawParticles(g, ctx);
   drawTexts(g, ctx);
+  g.tileRenderer.drawOverlay(ctx, g.cam, g.viewW, g.viewH);
   ctx.restore();
 
   drawLighting(g);
@@ -388,13 +499,18 @@ function drawWardBarrier(g: RenderState, ctx: CanvasRenderingContext2D) {
 }
 
 function drawItems(g: RenderState, ctx: CanvasRenderingContext2D) {
-  ctx.save();
   for (const it of g.items) {
     if (it.taken) continue;
-    const yo = Math.sin(it.t * 2) * 3;
-    const x = it.x;
-    const y = it.y + yo;
-    if (it.type === "shard") {
+    drawItem(g, ctx, it);
+  }
+}
+
+function drawItem(_g: RenderState, ctx: CanvasRenderingContext2D, it: ItemState) {
+  ctx.save();
+  const yo = Math.sin(it.t * 2) * 3;
+  const x = it.x;
+  const y = it.y + yo;
+  if (it.type === "shard") {
       ctx.globalCompositeOperation = "lighter";
       const g1 = ctx.createRadialGradient(x, y, 0, x, y, 18);
       g1.addColorStop(0, "rgba(80,240,220,0.6)");
@@ -418,7 +534,7 @@ function drawItems(g: RenderState, ctx: CanvasRenderingContext2D) {
       ctx.lineTo(x - 3, y - 2);
       ctx.closePath();
       ctx.fill();
-    } else {
+  } else {
       ctx.globalCompositeOperation = "lighter";
       const g2 = ctx.createRadialGradient(x, y, 0, x, y, 14);
       g2.addColorStop(0, "rgba(255,90,90,0.5)");
@@ -438,10 +554,20 @@ function drawItems(g: RenderState, ctx: CanvasRenderingContext2D) {
       ctx.fill();
       ctx.fillStyle = "#e24747";
       ctx.fillRect(x - 3, y - 2, 6, 7);
-    }
   }
   ctx.restore();
 }
+
+/** A shared sort pass keeps items, actors, and tall map overlays coherent. */
+function drawSortedWorldObjects(g: RenderState, ctx: CanvasRenderingContext2D) {
+  const objects: { y: number; draw: () => void }[] = [];
+  for (const item of g.items) if (!item.taken) objects.push({ y: item.y, draw: () => drawItem(g, ctx, item) });
+  for (const enemy of g.enemies) objects.push({ y: enemy.y, draw: () => drawEnemy(ctx, enemy) });
+  objects.push({ y: g.player.y, draw: () => drawPlayer(g, ctx) });
+  objects.sort((a, b) => a.y - b.y);
+  for (const object of objects) object.draw();
+}
+
 
 function drawEnemies(g: RenderState, ctx: CanvasRenderingContext2D) {
   const list = g.enemies.slice().sort((a, b) => a.y - b.y);

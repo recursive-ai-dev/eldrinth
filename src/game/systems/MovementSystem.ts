@@ -1,4 +1,5 @@
 import { TILE } from "../constants";
+import { tileDefinition, type TileShape } from "../constants";
 import { clamp } from "../math";
 
 export interface SolidBody {
@@ -10,10 +11,9 @@ export interface SolidBody {
 export interface MapCollisionState {
   width: number;
   height: number;
-  solid: Uint8Array;
   wardTiles: Set<number>;
   wardUnlocked: boolean;
-  tileAtPx: (x: number, y: number) => number;
+  tileAt: (tx: number, ty: number) => number | undefined;
 }
 
 export class MovementSystem {
@@ -27,44 +27,79 @@ export class MovementSystem {
   }
 
   solidAtIdx(i: number): boolean {
-    if (i < 0 || i >= this.map.solid.length) return true;
-    if (this.map.solid[i]) return true;
+    if (i < 0 || i >= this.map.width * this.map.height) return true;
+    const tx = i % this.map.width;
+    const ty = Math.floor(i / this.map.width);
+    const tile = this.map.tileAt(tx, ty);
+    if (tile === undefined || tileDefinition(tile).shape === "solid") return true;
     if (!this.map.wardUnlocked && this.map.wardTiles.has(i)) return true;
     return false;
   }
 
-  hitsSolid(x: number, y: number, r: number): boolean {
-    const pts: [number, number][] = [
-      [x - r, y - r],
-      [x + r, y - r],
-      [x - r, y + r],
-      [x + r, y + r],
-      [x, y],
-    ];
-    for (const [px, py] of pts) if (this.solidAtIdx(this.tileAtPx(px, py))) return true;
+  triggerAtPx(x: number, y: number): string | undefined {
+    const index = this.tileAtPx(x, y);
+    if (index < 0) return undefined;
+    const tile = this.map.tileAt(index % this.map.width, Math.floor(index / this.map.width));
+    return tile === undefined ? undefined : tileDefinition(tile).trigger;
+  }
+
+  hitsSolid(x: number, y: number, r: number, previousY = y): boolean {
+    const minX = Math.floor((x - r) / TILE);
+    const maxX = Math.floor((x + r) / TILE);
+    const minY = Math.floor((y - r) / TILE);
+    const maxY = Math.floor((y + r) / TILE);
+    for (let ty = minY; ty <= maxY; ty++) {
+      for (let tx = minX; tx <= maxX; tx++) {
+        const index = ty * this.map.width + tx;
+        const tile = this.map.tileAt(tx, ty);
+        const shape: TileShape = !this.map.wardUnlocked && this.map.wardTiles.has(index)
+          ? "solid"
+          : tile === undefined ? "solid" : tileDefinition(tile).shape;
+        if (this.shapeHitsCircle(shape, tx, ty, x, y, r, previousY)) return true;
+      }
+    }
     return false;
   }
 
-  moveX(e: SolidBody, dx: number) {
-    const s = Math.sign(dx);
-    let rem = Math.abs(dx);
-    while (rem > 0) {
-      const m = Math.min(2, rem);
-      if (!this.hitsSolid(e.x + s * m, e.y, e.r)) e.x += s * m;
-      else break;
-      rem -= m;
+  private shapeHitsCircle(shape: TileShape, tx: number, ty: number, x: number, y: number, r: number, previousY: number): boolean {
+    if (shape === "none" || shape === "trigger") return false;
+    const left = tx * TILE;
+    const top = ty * TILE;
+    if (shape === "oneWayUp") {
+      return y >= previousY && previousY + r <= top && y + r > top && x + r > left && x - r < left + TILE;
     }
+    if (shape === "slopeUpLeft" || shape === "slopeUpRight") {
+      const localX = clamp(x, left, left + TILE) - left;
+      const surface = top + (shape === "slopeUpLeft" ? localX : TILE - localX);
+      return x + r > left && x - r < left + TILE && y + r > surface && y - r < top + TILE;
+    }
+    const nearX = clamp(x, left, left + TILE);
+    const nearY = clamp(y, top, top + TILE);
+    return (x - nearX) ** 2 + (y - nearY) ** 2 < r ** 2;
+  }
+
+  moveX(e: SolidBody, dx: number) {
+    if (!dx || !this.hitsSolid(e.x + dx, e.y, e.r)) { e.x += dx; return; }
+    let lo = 0;
+    let hi = 1;
+    for (let i = 0; i < 9; i++) {
+      const mid = (lo + hi) / 2;
+      if (this.hitsSolid(e.x + dx * mid, e.y, e.r)) hi = mid;
+      else lo = mid;
+    }
+    e.x += dx * lo;
   }
 
   moveY(e: SolidBody, dy: number) {
-    const s = Math.sign(dy);
-    let rem = Math.abs(dy);
-    while (rem > 0) {
-      const m = Math.min(2, rem);
-      if (!this.hitsSolid(e.x, e.y + s * m, e.r)) e.y += s * m;
-      else break;
-      rem -= m;
+    if (!dy || !this.hitsSolid(e.x, e.y + dy, e.r, e.y)) { e.y += dy; return; }
+    let lo = 0;
+    let hi = 1;
+    for (let i = 0; i < 9; i++) {
+      const mid = (lo + hi) / 2;
+      if (this.hitsSolid(e.x, e.y + dy * mid, e.r, e.y)) hi = mid;
+      else lo = mid;
     }
+    e.y += dy * lo;
   }
 
   moveEntity(e: SolidBody, dx: number, dy: number) {

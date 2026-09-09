@@ -24,7 +24,6 @@ export interface MapData {
   width: number;
   height: number;
   tiles: Uint8Array;
-  solid: Uint8Array;
   wardTiles: number[];
   spawn: Vec;
   npc: Vec;
