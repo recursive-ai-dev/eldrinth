@@ -1,6 +1,57 @@
 import { TILE, T } from "../constants";
 import { rr, dot, hash2, DIRV, DIRA } from "../math";
-import type { Game, Player, Enemy } from "../engine";
+import type { EnemyState, ItemState, PlayerState, ProjectileState } from "../core/WorldState";
+import type { MapData } from "../types";
+
+export interface ParticleRenderState {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  max: number;
+  size: number;
+  color: string;
+  kind: "spark" | "shard" | "smoke" | "ring";
+  rot: number;
+}
+
+export interface FloatTextRenderState {
+  x: number;
+  y: number;
+  vy: number;
+  life: number;
+  text: string;
+  color: string;
+  size: number;
+}
+
+/** The complete rendering contract. Rendering has no dependency on the runtime coordinator. */
+export interface RenderState {
+  ctx: CanvasRenderingContext2D;
+  map: MapData;
+  staticCanvas: HTMLCanvasElement;
+  dpr: number;
+  cssW: number;
+  cssH: number;
+  viewW: number;
+  viewH: number;
+  cam: { x: number; y: number };
+  time: number;
+  wardUnlocked: boolean;
+  player: PlayerState;
+  enemies: EnemyState[];
+  projectiles: ProjectileState[];
+  particles: ParticleRenderState[];
+  texts: FloatTextRenderState[];
+  items: ItemState[];
+  shakeMag: number;
+  lastShakeX: number;
+  lastShakeY: number;
+  objectiveTarget(): { x: number; y: number; kind: "shard" | "boss" } | null;
+}
+
+type StaticMapRenderState = Pick<RenderState, "map" | "staticCanvas">;
 
 /* ----------------------------- tile rendering ----------------------------- */
 export function drawTile(ctx: CanvasRenderingContext2D, t: number, x: number, y: number) {
@@ -255,7 +306,7 @@ export function drawTile(ctx: CanvasRenderingContext2D, t: number, x: number, y:
 }
 
 /* ----------------------------- static map canvas ----------------------------- */
-export function buildStaticCanvas(g: Game) {
+export async function buildStaticCanvas(g: StaticMapRenderState, signal?: AbortSignal) {
   const W = g.map.width;
   const H = g.map.height;
   const c = document.createElement("canvas");
@@ -265,13 +316,18 @@ export function buildStaticCanvas(g: Game) {
   if (!ctx) {
     throw new Error("Failed to create 2D rendering context for static canvas");
   }
-  for (let y = 0; y < H; y++)
+  for (let y = 0; y < H; y++) {
+    if (signal?.aborted) throw new DOMException("Static map build aborted", "AbortError");
     for (let x = 0; x < W; x++) drawTile(ctx, g.map.tiles[y * W + x], x * TILE, y * TILE);
+    // Spread canvas work over several browser frames so a region handoff
+    // cannot monopolize the main thread.
+    if (y > 0 && y % 8 === 0) await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  }
   g.staticCanvas = c;
 }
 
 /* ----------------------------- render pipeline ----------------------------- */
-export function renderGame(g: Game) {
+export function renderGame(g: RenderState) {
   const ctx = g.ctx;
   ctx.setTransform(g.dpr, 0, 0, g.dpr, 0, 0);
   ctx.clearRect(0, 0, g.cssW, g.cssH);
@@ -304,7 +360,7 @@ export function renderGame(g: Game) {
   drawCompass(g);
 }
 
-function drawWardBarrier(g: Game, ctx: CanvasRenderingContext2D) {
+function drawWardBarrier(g: RenderState, ctx: CanvasRenderingContext2D) {
   if (g.wardUnlocked) return;
   const W = g.map.width;
   ctx.save();
@@ -331,7 +387,7 @@ function drawWardBarrier(g: Game, ctx: CanvasRenderingContext2D) {
   ctx.restore();
 }
 
-function drawItems(g: Game, ctx: CanvasRenderingContext2D) {
+function drawItems(g: RenderState, ctx: CanvasRenderingContext2D) {
   ctx.save();
   for (const it of g.items) {
     if (it.taken) continue;
@@ -387,12 +443,12 @@ function drawItems(g: Game, ctx: CanvasRenderingContext2D) {
   ctx.restore();
 }
 
-function drawEnemies(g: Game, ctx: CanvasRenderingContext2D) {
+function drawEnemies(g: RenderState, ctx: CanvasRenderingContext2D) {
   const list = g.enemies.slice().sort((a, b) => a.y - b.y);
   for (const e of list) drawEnemy(ctx, e);
 }
 
-function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy) {
+function drawEnemy(ctx: CanvasRenderingContext2D, e: EnemyState) {
   if (e.telegraph) drawTelegraph(ctx, e);
   if (e.type === "boss") return drawBoss(ctx, e);
   const a = e.dying > 0 ? Math.max(0, e.dying / 0.45) : 1;
@@ -409,7 +465,7 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy) {
   ctx.restore();
 }
 
-function drawTelegraph(ctx: CanvasRenderingContext2D, e: Enemy) {
+function drawTelegraph(ctx: CanvasRenderingContext2D, e: EnemyState) {
   const pulse = 0.55 + Math.sin(e.t * 18) * 0.25;
   const color = e.telegraph === "spell" ? "190,110,255" : e.telegraph === "lunge" ? "255,90,90" : "70,210,255";
   const radius = e.telegraph === "spell" ? 24 : e.telegraph === "lunge" ? 42 : 58;
@@ -424,7 +480,7 @@ function drawTelegraph(ctx: CanvasRenderingContext2D, e: Enemy) {
   ctx.restore();
 }
 
-function drawWraith(ctx: CanvasRenderingContext2D, e: Enemy) {
+function drawWraith(ctx: CanvasRenderingContext2D, e: EnemyState) {
   ctx.translate(0, e.bob);
   ctx.globalCompositeOperation = "lighter";
   const g = ctx.createRadialGradient(0, 0, 0, 0, 0, e.r * 1.6);
@@ -452,7 +508,7 @@ function drawWraith(ctx: CanvasRenderingContext2D, e: Enemy) {
   ctx.fill();
 }
 
-function drawSentinel(ctx: CanvasRenderingContext2D, e: Enemy) {
+function drawSentinel(ctx: CanvasRenderingContext2D, e: EnemyState) {
   const bob = Math.sin(e.t * 6) * 1.5;
   ctx.fillStyle = "#20242c";
   ctx.fillRect(-6, 4 + bob, 4, 7);
@@ -495,7 +551,7 @@ function drawSentinel(ctx: CanvasRenderingContext2D, e: Enemy) {
   void e;
 }
 
-function drawAdept(ctx: CanvasRenderingContext2D, e: Enemy) {
+function drawAdept(ctx: CanvasRenderingContext2D, e: EnemyState) {
   ctx.translate(0, Math.sin(e.t * 3) * 2);
   ctx.fillStyle = e.hurt > 0 ? "#fff" : "#3a2150";
   ctx.beginPath();
@@ -528,7 +584,7 @@ function drawAdept(ctx: CanvasRenderingContext2D, e: Enemy) {
   ctx.fill();
 }
 
-function drawBoss(ctx: CanvasRenderingContext2D, e: Enemy) {
+function drawBoss(ctx: CanvasRenderingContext2D, e: EnemyState) {
   const a = e.dying > 0 ? Math.max(0, e.dying / 1.5) : 1;
   const danger = e.hp / e.maxHp < 0.5;
   ctx.save();
@@ -608,7 +664,7 @@ function drawCrystalShape(ctx: CanvasRenderingContext2D, r: number, col: string)
   ctx.fill();
 }
 
-function drawPlayer(g: Game, ctx: CanvasRenderingContext2D) {
+function drawPlayer(g: RenderState, ctx: CanvasRenderingContext2D) {
   const p = g.player;
   const a = p.dying > 0 ? Math.max(0, p.dying / 0.9) : 1;
   ctx.save();
@@ -636,7 +692,7 @@ function drawPlayer(g: Game, ctx: CanvasRenderingContext2D) {
   ctx.restore();
 }
 
-function drawKnightBody(ctx: CanvasRenderingContext2D, p: Player) {
+function drawKnightBody(ctx: CanvasRenderingContext2D, p: PlayerState) {
   const hurt = p.hurtFlash > 0;
   ctx.fillStyle = hurt ? "#ffd0d0" : "#16323e";
   ctx.beginPath();
@@ -690,7 +746,7 @@ function drawKnightBody(ctx: CanvasRenderingContext2D, p: Player) {
   ctx.fill();
 }
 
-function drawSword(ctx: CanvasRenderingContext2D, p: Player) {
+function drawSword(ctx: CanvasRenderingContext2D, p: PlayerState) {
   const prog = 1 - p.attackTimer / p.attackDur;
   const ang = DIRA[p.dir] + (-1.0 + prog * 2.0);
   ctx.save();
@@ -719,7 +775,7 @@ function drawSword(ctx: CanvasRenderingContext2D, p: Player) {
   ctx.restore();
 }
 
-function drawProjectiles(g: Game, ctx: CanvasRenderingContext2D) {
+function drawProjectiles(g: RenderState, ctx: CanvasRenderingContext2D) {
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
   for (const p of g.projectiles) {
@@ -740,7 +796,7 @@ function drawProjectiles(g: Game, ctx: CanvasRenderingContext2D) {
   ctx.restore();
 }
 
-function drawParticles(g: Game, ctx: CanvasRenderingContext2D) {
+function drawParticles(g: RenderState, ctx: CanvasRenderingContext2D) {
   ctx.save();
   for (const pr of g.particles) {
     const lf = pr.life / pr.max;
@@ -780,7 +836,7 @@ function drawParticles(g: Game, ctx: CanvasRenderingContext2D) {
   ctx.restore();
 }
 
-function drawTexts(g: Game, ctx: CanvasRenderingContext2D) {
+function drawTexts(g: RenderState, ctx: CanvasRenderingContext2D) {
   ctx.save();
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -797,7 +853,7 @@ function drawTexts(g: Game, ctx: CanvasRenderingContext2D) {
   ctx.restore();
 }
 
-function drawLighting(g: Game) {
+function drawLighting(g: RenderState) {
   const ctx = g.ctx;
   const p = g.player;
   const px = p.x - g.cam.x + g.lastShakeX;
@@ -819,7 +875,7 @@ function drawLighting(g: Game) {
   ctx.globalCompositeOperation = "source-over";
 }
 
-function drawCompass(g: Game) {
+function drawCompass(g: RenderState) {
   const tgt = g.objectiveTarget();
   if (!tgt) return;
   const ctx = g.ctx;
