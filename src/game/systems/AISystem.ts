@@ -1,4 +1,6 @@
 import type { EnemyType } from "../types";
+import { contactDamageFor } from "./contactDamage";
+import { steerXY } from "./steering";
 
 export interface EnemyLike {
   id: number;
@@ -97,12 +99,11 @@ export class AISystem {
       }
     }
 
-    const steering = Math.min(1, dt * 12);
-    enemy.vx += (mvx - enemy.vx) * steering;
-    enemy.vy += (mvy - enemy.vy) * steering;
+    steerXY(enemy, { x: mvx, y: mvy }, dt);
 
-    if (ctx.player.dying <= 0 && ctx.player.invuln <= 0 && !ctx.player.dashing && dist < enemy.r + ctx.player.r - 2) {
-      ctx.onDamagePlayer(enemy.dmg, enemy.x, enemy.y);
+    const contactDamage = contactDamageFor(ctx.player, enemy);
+    if (contactDamage !== null) {
+      ctx.onDamagePlayer(contactDamage, enemy.x, enemy.y);
     }
   }
 
@@ -126,9 +127,7 @@ export class AISystem {
       mvy = uy * enemy.speed;
     }
 
-    const steering = Math.min(1, dt * 12);
-    enemy.vx += (mvx - enemy.vx) * steering;
-    enemy.vy += (mvy - enemy.vy) * steering;
+    steerXY(enemy, { x: mvx, y: mvy }, dt);
 
     if (enemy.telegraph === "lunge" && enemy.telegraphTimer <= 0) {
       enemy.telegraph = null;
@@ -155,8 +154,9 @@ export class AISystem {
       ctx.onSummonAdd(enemy);
     }
 
-    if (ctx.player.dying <= 0 && ctx.player.invuln <= 0 && !ctx.player.dashing && dist < enemy.r + ctx.player.r - 4) {
-      ctx.onDamagePlayer(enemy.dmg, enemy.x, enemy.y);
+    const bossContactDamage = contactDamageFor(ctx.player, enemy, 4);
+    if (bossContactDamage !== null) {
+      ctx.onDamagePlayer(bossContactDamage, enemy.x, enemy.y);
     }
   }
 }

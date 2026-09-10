@@ -498,13 +498,6 @@ function drawWardBarrier(g: RenderState, ctx: CanvasRenderingContext2D) {
   ctx.restore();
 }
 
-function drawItems(g: RenderState, ctx: CanvasRenderingContext2D) {
-  for (const it of g.items) {
-    if (it.taken) continue;
-    drawItem(g, ctx, it);
-  }
-}
-
 function drawItem(_g: RenderState, ctx: CanvasRenderingContext2D, it: ItemState) {
   ctx.save();
   const yo = Math.sin(it.t * 2) * 3;
@@ -568,11 +561,6 @@ function drawSortedWorldObjects(g: RenderState, ctx: CanvasRenderingContext2D) {
   for (const object of objects) object.draw();
 }
 
-
-function drawEnemies(g: RenderState, ctx: CanvasRenderingContext2D) {
-  const list = g.enemies.slice().sort((a, b) => a.y - b.y);
-  for (const e of list) drawEnemy(ctx, e);
-}
 
 function drawEnemy(ctx: CanvasRenderingContext2D, e: EnemyState) {
   if (e.telegraph) drawTelegraph(ctx, e);
