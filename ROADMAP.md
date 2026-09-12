@@ -26,4 +26,4 @@ Add New Pilgrimage mode with a seed shown in the journal, optional challenge vow
 
 ## Production bar
 
-Keep the browser-only, single-file build. Every saveable gameplay change needs a deterministic state test, and every new landmark needs a visible in-world silhouette, a journal record, and directions expressed through geography rather than coordinates or markers. Performance work focuses on stable frame times during boss patterns and clean recovery from tab suspension or a failed region load.
+Browser-only build (dropped the single-file constraint to ship real sprite/tile image assets — see docs/superpowers/specs/2026-09-12-procedural-sprite-pipeline-design.md). Every saveable gameplay change needs a deterministic state test, and every new landmark needs a visible in-world silhouette, a journal record, and directions expressed through geography rather than coordinates or markers. Performance work focuses on stable frame times during boss patterns and clean recovery from tab suspension or a failed region load.
