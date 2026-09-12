@@ -1,7 +1,31 @@
 import { TILE, T, tileDefinition } from "../constants";
-import { rr, dot, hash2, DIRV, DIRA } from "../math";
+import { rr, dot, DIRV, DIRA } from "../math";
 import type { EnemyState, ItemState, PlayerState, ProjectileState } from "../core/WorldState";
 import type { MapData } from "../types";
+import { loadAtlas, type SpriteAtlas } from "./spriteAtlas";
+
+export const TILE_SPRITE_KEY: Record<number, string> = {
+  [T.GRASS]: "tile.grass", [T.DGRASS]: "tile.dgrass", [T.PATH]: "tile.path",
+  [T.WATER]: "tile.water", [T.TREE]: "tile.tree", [T.ROCK]: "tile.rock",
+  [T.RFLOOR]: "tile.rfloor", [T.RWALL]: "tile.rwall", [T.CRYSTAL]: "tile.crystal",
+  [T.FLOWER]: "tile.flower", [T.BRIDGE]: "tile.bridge", [T.GRAVE]: "tile.grave",
+  [T.BONES]: "tile.bones", [T.TALLGRASS]: "tile.tallgrass",
+  [T.SPIREFLOOR]: "tile.spirefloor", [T.SAND]: "tile.sand", [T.LEDGE]: "tile.ledge",
+  [T.SLOPE_UP_LEFT]: "tile.slope_up_left", [T.SLOPE_UP_RIGHT]: "tile.slope_up_right",
+  [T.TRIGGER]: "tile.trigger",
+};
+
+const tileAtlases = new Map<number, SpriteAtlas>();
+function tileAtlasFor(tile: number): SpriteAtlas | null {
+  const key = TILE_SPRITE_KEY[tile];
+  if (!key) return null;
+  let atlas = tileAtlases.get(tile);
+  if (!atlas) {
+    atlas = loadAtlas(key);
+    tileAtlases.set(tile, atlas);
+  }
+  return atlas;
+}
 
 export interface ParticleRenderState {
   x: number;
@@ -159,255 +183,23 @@ export class TileChunkRenderer {
 /* ----------------------------- tile rendering ----------------------------- */
 export function drawTile(ctx: CanvasRenderingContext2D, t: number, x: number, y: number, seedX = x, seedY = y) {
   const s = TILE;
-  // Raster coordinates are chunk-local; variation remains globally stable so
-  // a tile keeps the same appearance when its chunk is evicted and rebuilt.
-  const r = hash2(seedX, seedY);
-  switch (t) {
-    case T.GRASS: {
-      ctx.fillStyle = "#1b2a17";
-      ctx.fillRect(x, y, s, s);
-      ctx.fillStyle = "#243619";
-      if (r > 0.3) ctx.fillRect(x + ((r * 40) | 0) % s, y + ((r * 90) | 0) % s, 2, 2);
-      if (r > 0.7) ctx.fillRect(x + ((r * 160) | 0) % s, y + ((r * 250) | 0) % s, 2, 2);
-      break;
-    }
-    case T.DGRASS: {
-      ctx.fillStyle = "#14200f";
-      ctx.fillRect(x, y, s, s);
-      ctx.fillStyle = "#1c2c15";
-      if (r > 0.4) ctx.fillRect(x + ((r * 40) | 0) % s, y + ((r * 90) | 0) % s, 2, 2);
-      break;
-    }
-    case T.TALLGRASS: {
-      ctx.fillStyle = "#1b2a17";
-      ctx.fillRect(x, y, s, s);
-      ctx.strokeStyle = "#344f24";
-      ctx.lineWidth = 1.5;
-      for (let i = 0; i < 5; i++) {
-        const bx = x + 4 + ((r * (i + 1) * 37) | 0) % (s - 8);
-        const by = y + s - 2 - ((r * (i + 1) * 13) | 0) % 6;
-        ctx.beginPath();
-        ctx.moveTo(bx, by);
-        ctx.lineTo(bx - 1, by - 6 - ((r * i * 7) | 0) % 5);
-        ctx.stroke();
-      }
-      break;
-    }
-    case T.PATH: {
-      ctx.fillStyle = "#3a2c1f";
-      ctx.fillRect(x, y, s, s);
-      ctx.fillStyle = "#4a3a27";
-      ctx.fillRect(x + ((r * 30) | 0) % s, y + ((r * 50) | 0) % s, 2, 2);
-      ctx.fillStyle = "#2c2117";
-      ctx.fillRect(x + ((r * 120) | 0) % s, y + ((r * 200) | 0) % s, 3, 2);
-      break;
-    }
-    case T.SAND: {
-      ctx.fillStyle = "#5a4a2f";
-      ctx.fillRect(x, y, s, s);
-      ctx.fillStyle = "#6b5a3c";
-      if (r > 0.4) ctx.fillRect(x + ((r * 40) | 0) % s, y + ((r * 70) | 0) % s, 2, 2);
-      break;
-    }
-    case T.WATER: {
-      ctx.fillStyle = "#102338";
-      ctx.fillRect(x, y, s, s);
-      ctx.fillStyle = "#163049";
-      ctx.fillRect(x, y + 6, s, 4);
-      ctx.strokeStyle = "rgba(70,130,160,0.35)";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(x, y + ((r * 20) | 0) % s);
-      ctx.quadraticCurveTo(x + s / 4, y + 3, x + s / 2, y + ((r * 20) | 0) % s);
-      ctx.moveTo(x + s / 2, y + 10 + ((r * 10) | 0) % s);
-      ctx.quadraticCurveTo(x + (3 * s) / 4, y + 13, x + s, y + 10 + ((r * 10) | 0) % s);
-      ctx.stroke();
-      break;
-    }
-    case T.BRIDGE: {
-      ctx.fillStyle = "#102338";
-      ctx.fillRect(x, y, s, s);
-      ctx.fillStyle = "#3a2a1a";
-      ctx.fillRect(x, y, s, s);
-      ctx.fillStyle = "#24180d";
-      for (let i = 0; i < 4; i++) ctx.fillRect(x, y + i * 8, s, 2);
-      ctx.fillStyle = "#4a3422";
-      ctx.fillRect(x, y, s, 2);
-      ctx.fillRect(x, y + s - 2, s, 2);
-      break;
-    }
-    case T.TREE: {
-      ctx.fillStyle = "#1b2a17";
-      ctx.fillRect(x, y, s, s);
-      ctx.fillStyle = "#241712";
-      ctx.fillRect(x + s * 0.43, y + s * 0.6, s * 0.14, s * 0.4);
-      const cx = x + s * 0.5;
-      const cy = y + s * 0.36;
-      ctx.fillStyle = "#0f1d0b";
-      dot(ctx, cx + 1, cy + 1, 12);
-      ctx.fill();
-      ctx.fillStyle = "#16280f";
-      dot(ctx, cx, cy, 12);
-      ctx.fill();
-      ctx.fillStyle = "#1f3a16";
-      dot(ctx, cx - 3, cy - 3, 8);
-      ctx.fill();
-      ctx.fillStyle = "#2a4d1d";
-      dot(ctx, cx - 4, cy - 5, 4);
-      ctx.fill();
-      break;
-    }
-    case T.ROCK: {
-      ctx.fillStyle = "#1b2a17";
-      ctx.fillRect(x, y, s, s);
-      ctx.fillStyle = "#33353f";
-      rr(ctx, x + 5, y + 10, s - 10, s - 12, 6);
-      ctx.fill();
-      ctx.fillStyle = "#454754";
-      rr(ctx, x + 7, y + 10, s - 16, 6, 4);
-      ctx.fill();
-      ctx.fillStyle = "#23242c";
-      ctx.fillRect(x + 7, y + s - 8, s - 16, 4);
-      ctx.fillStyle = "#3a5a2c";
-      ctx.fillRect(x + 6, y + s - 12, 4, 3);
-      break;
-    }
-    case T.RFLOOR: {
-      ctx.fillStyle = "#2a2730";
-      ctx.fillRect(x, y, s, s);
-      ctx.strokeStyle = "#1c1a22";
-      ctx.lineWidth = 1;
-      ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
-      ctx.beginPath();
-      ctx.moveTo(x + s / 2, y);
-      ctx.lineTo(x + s / 2, y + s);
-      ctx.moveTo(x, y + s / 2);
-      ctx.lineTo(x + s, y + s / 2);
-      ctx.stroke();
-      if (r > 0.7) {
-        ctx.fillStyle = "#332f3a";
-        ctx.fillRect(x + 8, y + 8, 4, 4);
-      }
-      break;
-    }
-    case T.RWALL: {
-      ctx.fillStyle = "#231f2a";
-      ctx.fillRect(x, y, s, s);
-      ctx.fillStyle = "#34303d";
-      rr(ctx, x + 1, y + 1, s - 2, s - 3, 3);
-      ctx.fill();
-      ctx.strokeStyle = "#15121b";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(x, y + s / 2);
-      ctx.lineTo(x + s, y + s / 2);
-      ctx.moveTo(x + s / 2, y);
-      ctx.lineTo(x + s / 2, y + s / 2);
-      ctx.stroke();
-      ctx.fillStyle = "#3f3b4a";
-      ctx.fillRect(x + 2, y + 2, s - 4, 3);
-      break;
-    }
-    case T.SPIREFLOOR: {
-      ctx.fillStyle = "#10141d";
-      ctx.fillRect(x, y, s, s);
-      ctx.strokeStyle = "rgba(40,90,110,0.5)";
-      ctx.lineWidth = 1;
-      ctx.strokeRect(x + 1.5, y + 1.5, s - 3, s - 3);
-      ctx.strokeStyle = "rgba(60,150,170,0.25)";
-      ctx.beginPath();
-      ctx.moveTo(x + s / 2, y + 4);
-      ctx.lineTo(x + s - 4, y + s / 2);
-      ctx.lineTo(x + s / 2, y + s - 4);
-      ctx.lineTo(x + 4, y + s / 2);
-      ctx.closePath();
-      ctx.stroke();
-      if (r > 0.8) {
-        ctx.fillStyle = "rgba(80,220,230,0.5)";
-        ctx.fillRect(x + s / 2 - 1, y + s / 2 - 1, 2, 2);
-      }
-      break;
-    }
-    case T.CRYSTAL: {
-      ctx.fillStyle = "#1b2a17";
-      ctx.fillRect(x, y, s, s);
-      ctx.save();
-      ctx.globalCompositeOperation = "lighter";
-      const cx0 = x + s / 2;
-      const cy0 = y + s / 2;
-      const g = ctx.createRadialGradient(cx0, cy0, 0, cx0, cy0, 16);
-      g.addColorStop(0, "rgba(60,230,220,0.5)");
-      g.addColorStop(1, "rgba(60,230,220,0)");
-      ctx.fillStyle = g;
-      ctx.fillRect(x, y, s, s);
-      ctx.restore();
-      const cx = x + s / 2;
-      const cy = y + s / 2 + 2;
-      ctx.fillStyle = "#0c4a52";
-      ctx.beginPath();
-      ctx.moveTo(cx, cy - 12);
-      ctx.lineTo(cx + 7, cy);
-      ctx.lineTo(cx, cy + 8);
-      ctx.lineTo(cx - 7, cy);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = "#2bd6cf";
-      ctx.beginPath();
-      ctx.moveTo(cx, cy - 12);
-      ctx.lineTo(cx + 4, cy - 1);
-      ctx.lineTo(cx, cy + 2);
-      ctx.lineTo(cx - 4, cy - 1);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = "#b6fff7";
-      ctx.beginPath();
-      ctx.moveTo(cx, cy - 12);
-      ctx.lineTo(cx + 2, cy - 5);
-      ctx.lineTo(cx, cy - 2);
-      ctx.lineTo(cx - 2, cy - 5);
-      ctx.closePath();
-      ctx.fill();
-      break;
-    }
-    case T.FLOWER: {
-      ctx.fillStyle = "#1b2a17";
-      ctx.fillRect(x, y, s, s);
-      const fx = x + 6 + ((r * 20) | 0) % (s - 12);
-      const fy = y + 6 + ((r * 40) | 0) % (s - 12);
-      const cols = ["#d7b4ff", "#ffd7e6", "#fff3b0", "#bfe9ff"];
-      ctx.fillStyle = cols[Math.floor(r * 4) % 4];
-      dot(ctx, fx, fy, 2);
-      ctx.fill();
-      ctx.fillStyle = "#2a4a1f";
-      ctx.fillRect(fx - 0.5, fy, 1, 4);
-      break;
-    }
-    case T.GRAVE: {
-      ctx.fillStyle = "#1b2a17";
-      ctx.fillRect(x, y, s, s);
-      ctx.fillStyle = "#393a40";
-      rr(ctx, x + s * 0.3, y + s * 0.35, s * 0.4, s * 0.5, 4);
-      ctx.fill();
-      ctx.fillStyle = "#2c2d33";
-      ctx.fillRect(x + s * 0.45, y + s * 0.45, s * 0.1, s * 0.2);
-      ctx.fillRect(x + s * 0.4, y + s * 0.5, s * 0.2, s * 0.07);
-      break;
-    }
-    case T.BONES: {
-      ctx.fillStyle = "#1b2a17";
-      ctx.fillRect(x, y, s, s);
-      ctx.fillStyle = "#c8c4b0";
-      dot(ctx, x + s * 0.4, y + s * 0.55, 3);
-      ctx.fill();
-      ctx.fillRect(x + s * 0.4, y + s * 0.55, 8, 1.5);
-      ctx.fillRect(x + s * 0.5, y + s * 0.4, 5, 1.5);
-      break;
-    }
-    default: {
-      ctx.fillStyle = "#1b2a17";
-      ctx.fillRect(x, y, s, s);
+  const atlas = tileAtlasFor(t);
+  if (atlas?.ready && atlas.image) {
+    const frame = atlas.getStaticFrame(0);
+    if (frame) {
+      const prevSmoothing = ctx.imageSmoothingEnabled;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(atlas.image, frame.sx, frame.sy, frame.sw, frame.sh, x, y, s, s);
+      ctx.imageSmoothingEnabled = prevSmoothing;
+      return;
     }
   }
+  // Fallback while an atlas is still loading (or, in dev, missing): the
+  // original flat fill keeps the game playable instead of showing a hole.
+  void seedX;
+  void seedY;
+  ctx.fillStyle = "#1b2a17";
+  ctx.fillRect(x, y, s, s);
 }
 
 /** The portion of a tall tile that must occlude actors below it. */

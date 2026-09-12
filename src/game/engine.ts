@@ -10,7 +10,8 @@ import type {
   RegionExit,
 } from "./types";
 import { clamp, DIRV } from "./math";
-import { renderGame, TileChunkRenderer } from "./render/renderer";
+import { renderGame, TileChunkRenderer, TILE_SPRITE_KEY } from "./render/renderer";
+import { preloadAtlases } from "./render/spriteAtlas";
 import { FixedStepLoop } from "./core/FixedStepLoop";
 import {
   WorldState,
@@ -254,6 +255,7 @@ export class Game {
       this.syncMovementSystem();
 
       this.tileRenderer = new TileChunkRenderer(this.map);
+      void preloadAtlases(Object.values(TILE_SPRITE_KEY));
 
       const s = this.map.spawn;
       const startingHealth = PLAYER_START_HP + DIFFICULTY_TUNING[this.world.difficulty].playerHealth;
@@ -373,6 +375,7 @@ export class Game {
       this.player.x = exit.destination.x;
       this.player.y = exit.destination.y;
       this.tileRenderer = new TileChunkRenderer(this.map);
+      void preloadAtlases(Object.values(TILE_SPRITE_KEY));
       this.centerCam();
       this.tileRenderer.warm(this.cam, this.viewW, this.viewH);
       this.regionGateCooldown = 1.25;
