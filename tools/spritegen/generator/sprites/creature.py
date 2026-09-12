@@ -98,7 +98,11 @@ class CreatureSpriteGenerator(SpriteGenerator):
         frame = opt["frame"] % max(1, opt["frames"])
         rng = self.rng(seed)
 
-        archetype = rng.choice(_ARCHETYPES)
+        requested = options.get("archetype")
+        if requested is not None and requested in _ARCHETYPES:
+            archetype = requested
+        else:
+            archetype = rng.choice(_ARCHETYPES)
         geom = _ARCHETYPE[archetype]
         pal_name = _PALETTE_FOR[archetype]
         t_base = rng.random()
