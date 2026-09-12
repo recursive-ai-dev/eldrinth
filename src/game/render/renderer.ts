@@ -1,7 +1,7 @@
 import { TILE, T, tileDefinition } from "../constants";
 import { rr, dot, DIRV, DIRA } from "../math";
 import type { EnemyState, ItemState, PlayerState, ProjectileState } from "../core/WorldState";
-import type { MapData } from "../types";
+import type { Dir, MapData } from "../types";
 import { loadAtlas, type SpriteAtlas } from "./spriteAtlas";
 
 export const TILE_SPRITE_KEY: Record<number, string> = {
@@ -25,6 +25,58 @@ function tileAtlasFor(tile: number): SpriteAtlas | null {
     tileAtlases.set(tile, atlas);
   }
   return atlas;
+}
+
+const ENTITY_SPRITE_KEY: Record<string, string> = {
+  player: "player",
+  wraith: "enemy.wraith",
+  sentinel: "enemy.sentinel",
+  adept: "enemy.adept",
+  boss: "enemy.boss",
+};
+
+// Generated entity atlases use "front"/"right"/"back"/"left" facing rows;
+// PlayerState tracks movement as "up"/"down"/"left"/"right".
+const PLAYER_DIR_TO_SPRITE_DIRECTION: Record<Dir, string> = {
+  up: "back",
+  down: "front",
+  left: "left",
+  right: "right",
+};
+
+const entityAtlases = new Map<string, SpriteAtlas>();
+function entityAtlasFor(entityKey: string): SpriteAtlas {
+  let atlas = entityAtlases.get(entityKey);
+  if (!atlas) {
+    atlas = loadAtlas(entityKey);
+    entityAtlases.set(entityKey, atlas);
+  }
+  return atlas;
+}
+
+/** Draws one animated entity frame centered at the current transform origin. */
+function drawEntitySprite(
+  ctx: CanvasRenderingContext2D,
+  entityKey: string,
+  direction: string,
+  action: string,
+  animT: number,
+  fps: number,
+  drawSize: number,
+): boolean {
+  const atlas = entityAtlasFor(ENTITY_SPRITE_KEY[entityKey] ?? entityKey);
+  if (!atlas.ready || !atlas.image) return false;
+  const frameIndex = Math.floor(animT * fps);
+  const frame = atlas.getFrame(direction, action, frameIndex);
+  if (!frame) return false;
+  const prevSmoothing = ctx.imageSmoothingEnabled;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(
+    atlas.image, frame.sx, frame.sy, frame.sw, frame.sh,
+    -drawSize / 2, -drawSize / 2, drawSize, drawSize,
+  );
+  ctx.imageSmoothingEnabled = prevSmoothing;
+  return true;
 }
 
 export interface ParticleRenderState {
@@ -444,106 +496,34 @@ function drawTelegraph(ctx: CanvasRenderingContext2D, e: EnemyState) {
 }
 
 function drawWraith(ctx: CanvasRenderingContext2D, e: EnemyState) {
-  ctx.translate(0, e.bob);
-  ctx.globalCompositeOperation = "lighter";
-  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, e.r * 1.6);
-  g.addColorStop(0, "rgba(90,210,150,0.4)");
-  g.addColorStop(1, "rgba(90,210,150,0)");
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.arc(0, 0, e.r * 1.6, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.globalCompositeOperation = "source-over";
+  const action = e.telegraph ? "attack" : "walk";
+  const animT = e.t;
+  const drawn = drawEntitySprite(ctx, "wraith", "front", action, animT, 8, e.r * 2.2);
+  if (drawn) return;
   ctx.fillStyle = e.hurt > 0 ? "#ffffff" : "rgba(150,225,180,0.6)";
   ctx.beginPath();
-  ctx.moveTo(0, -e.r);
-  ctx.quadraticCurveTo(e.r, -e.r * 0.4, e.r * 0.7, e.r * 0.6);
-  ctx.lineTo(e.r * 0.4, e.r + Math.sin(e.t * 8) * 3);
-  ctx.lineTo(0, e.r * 0.7);
-  ctx.lineTo(-e.r * 0.4, e.r + Math.sin(e.t * 8 + 1) * 3);
-  ctx.lineTo(-e.r * 0.7, e.r * 0.6);
-  ctx.quadraticCurveTo(-e.r, -e.r * 0.4, 0, -e.r);
-  ctx.fill();
-  ctx.fillStyle = "#c8ffe6";
-  ctx.beginPath();
-  ctx.arc(-3, -3, 1.8, 0, Math.PI * 2);
-  ctx.arc(3, -3, 1.8, 0, Math.PI * 2);
+  ctx.arc(0, 0, e.r, 0, Math.PI * 2);
   ctx.fill();
 }
 
 function drawSentinel(ctx: CanvasRenderingContext2D, e: EnemyState) {
-  const bob = Math.sin(e.t * 6) * 1.5;
-  ctx.fillStyle = "#20242c";
-  ctx.fillRect(-6, 4 + bob, 4, 7);
-  ctx.fillRect(2, 4 - bob, 4, 7);
-  ctx.translate(0, -2);
+  const action = e.telegraph ? "attack" : "walk";
+  const animT = e.t;
+  const drawn = drawEntitySprite(ctx, "sentinel", "front", action, animT, 8, e.r * 2.2);
+  if (drawn) return;
   ctx.fillStyle = e.hurt > 0 ? "#fff" : "#2b313e";
   rr(ctx, -9, -10, 18, 16, 4);
   ctx.fill();
-  ctx.strokeStyle = "#11141b";
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  ctx.fillStyle = "#363d4d";
-  rr(ctx, -12, -10, 6, 5, 2);
-  ctx.fill();
-  rr(ctx, 6, -10, 6, 5, 2);
-  ctx.fill();
-  ctx.globalCompositeOperation = "lighter";
-  const cg = ctx.createRadialGradient(0, -2, 0, 0, -2, 8);
-  cg.addColorStop(0, "rgba(90,235,220,0.9)");
-  cg.addColorStop(1, "rgba(90,235,220,0)");
-  ctx.fillStyle = cg;
-  ctx.beginPath();
-  ctx.arc(0, -2, 8, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.globalCompositeOperation = "source-over";
-  ctx.fillStyle = "#5ff0da";
-  ctx.beginPath();
-  ctx.moveTo(0, -6);
-  ctx.lineTo(3, -2);
-  ctx.lineTo(0, 2);
-  ctx.lineTo(-3, -2);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = "#3a4150";
-  ctx.beginPath();
-  ctx.arc(0, -12, 5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "#ff5a5a";
-  ctx.fillRect(-3, -13, 6, 1.6);
-  void e;
 }
 
 function drawAdept(ctx: CanvasRenderingContext2D, e: EnemyState) {
-  ctx.translate(0, Math.sin(e.t * 3) * 2);
+  const action = e.telegraph ? "attack" : "walk";
+  const animT = e.t;
+  const drawn = drawEntitySprite(ctx, "adept", "front", action, animT, 8, e.r * 2.2);
+  if (drawn) return;
   ctx.fillStyle = e.hurt > 0 ? "#fff" : "#3a2150";
   ctx.beginPath();
-  ctx.moveTo(0, -e.r);
-  ctx.quadraticCurveTo(e.r, 0, e.r * 0.5, e.r);
-  ctx.quadraticCurveTo(0, e.r * 0.7, -e.r * 0.5, e.r);
-  ctx.quadraticCurveTo(-e.r, 0, 0, -e.r);
-  ctx.fill();
-  ctx.fillStyle = "#241436";
-  ctx.beginPath();
-  ctx.arc(0, -e.r * 0.5, e.r * 0.7, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "#000";
-  ctx.beginPath();
-  ctx.arc(0, -e.r * 0.45, e.r * 0.35, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.globalCompositeOperation = "lighter";
-  const inten = e.shootCd < 0.4 ? 1 : 0.6;
-  const og = ctx.createRadialGradient(0, e.r * 0.2, 0, 0, e.r * 0.2, 9);
-  og.addColorStop(0, `rgba(200,120,255,${inten})`);
-  og.addColorStop(1, "rgba(200,120,255,0)");
-  ctx.fillStyle = og;
-  ctx.beginPath();
-  ctx.arc(0, e.r * 0.2, 9, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.globalCompositeOperation = "source-over";
-  ctx.fillStyle = "#d9a6ff";
-  ctx.beginPath();
-  ctx.arc(0, e.r * 0.2, 3, 0, Math.PI * 2);
+  ctx.arc(0, 0, e.r, 0, Math.PI * 2);
   ctx.fill();
 }
 
@@ -557,74 +537,16 @@ function drawBoss(ctx: CanvasRenderingContext2D, e: EnemyState) {
   ctx.ellipse(e.x, e.y + e.r * 0.7, e.r, e.r * 0.45, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.translate(e.x, e.y);
-  ctx.globalCompositeOperation = "lighter";
-  const og = ctx.createRadialGradient(0, 0, 0, 0, 0, e.r * 1.8);
-  og.addColorStop(0, danger ? "rgba(255,60,60,0.35)" : "rgba(60,210,255,0.35)");
-  og.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.fillStyle = og;
-  ctx.beginPath();
-  ctx.arc(0, 0, e.r * 1.8, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.globalCompositeOperation = "source-over";
-  ctx.save();
-  ctx.rotate(e.t * 0.6);
-  ctx.strokeStyle = danger ? "rgba(255,120,120,0.6)" : "rgba(120,220,255,0.6)";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  for (let i = 0; i < 6; i++) {
-    const a6 = (i / 6) * Math.PI * 2;
-    ctx.moveTo(Math.cos(a6) * e.r * 0.9, Math.sin(a6) * e.r * 0.9);
-    ctx.lineTo(Math.cos(a6) * e.r * 1.05, Math.sin(a6) * e.r * 1.05);
+  const action = e.telegraph ? "attack" : "walk";
+  const animT = e.t;
+  const drawn = drawEntitySprite(ctx, "boss", "front", action, animT, 8, e.r * 2.2);
+  if (!drawn) {
+    ctx.fillStyle = e.hurt > 0 ? "#fff" : danger ? "#3a2030" : "#16283a";
+    ctx.beginPath();
+    ctx.arc(0, 0, e.r, 0, Math.PI * 2);
+    ctx.fill();
   }
-  ctx.stroke();
   ctx.restore();
-  ctx.save();
-  ctx.rotate(e.t * 0.3);
-  drawCrystalShape(ctx, e.r, e.hurt > 0 ? "#fff" : danger ? "#3a2030" : "#16283a");
-  ctx.restore();
-  ctx.globalCompositeOperation = "lighter";
-  const eg = ctx.createRadialGradient(0, 0, 0, 0, 0, e.r * 0.5);
-  eg.addColorStop(0, danger ? "rgba(255,80,80,0.95)" : "rgba(120,230,255,0.95)");
-  eg.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.fillStyle = eg;
-  ctx.beginPath();
-  ctx.arc(0, 0, e.r * 0.5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.globalCompositeOperation = "source-over";
-  ctx.fillStyle = "#fff";
-  ctx.beginPath();
-  ctx.arc(0, 0, e.r * 0.16, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-}
-
-function drawCrystalShape(ctx: CanvasRenderingContext2D, r: number, col: string) {
-  ctx.fillStyle = col;
-  ctx.beginPath();
-  ctx.moveTo(0, -r);
-  ctx.lineTo(r * 0.8, -r * 0.2);
-  ctx.lineTo(r * 0.6, r * 0.8);
-  ctx.lineTo(-r * 0.6, r * 0.8);
-  ctx.lineTo(-r * 0.8, -r * 0.2);
-  ctx.closePath();
-  ctx.fill();
-  ctx.strokeStyle = "rgba(0,0,0,0.4)";
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  ctx.fillStyle = "rgba(255,255,255,0.12)";
-  ctx.beginPath();
-  ctx.moveTo(0, -r);
-  ctx.lineTo(r * 0.8, -r * 0.2);
-  ctx.lineTo(0, 0);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = "rgba(0,0,0,0.18)";
-  ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.lineTo(r * 0.6, r * 0.8);
-  ctx.lineTo(-r * 0.6, r * 0.8);
-  ctx.closePath();
-  ctx.fill();
 }
 
 function drawPlayer(g: RenderState, ctx: CanvasRenderingContext2D) {
@@ -656,6 +578,13 @@ function drawPlayer(g: RenderState, ctx: CanvasRenderingContext2D) {
 }
 
 function drawKnightBody(ctx: CanvasRenderingContext2D, p: PlayerState) {
+  const action = p.attacking ? "attack" : "walk";
+  const animT = p.attacking ? p.attackDur - p.attackTimer : p.walkT / (Math.PI * 2);
+  const direction = PLAYER_DIR_TO_SPRITE_DIRECTION[p.dir];
+  const drawn = drawEntitySprite(ctx, "player", direction, action, animT, 8, TILE * 1.5);
+  if (drawn) return;
+  // Fallback: keep the original vector knight so a missing/loading atlas
+  // never renders a blank player.
   const hurt = p.hurtFlash > 0;
   ctx.fillStyle = hurt ? "#ffd0d0" : "#16323e";
   ctx.beginPath();
@@ -663,49 +592,6 @@ function drawKnightBody(ctx: CanvasRenderingContext2D, p: PlayerState) {
   ctx.quadraticCurveTo(-11, 8, -7, 12);
   ctx.lineTo(7, 12);
   ctx.quadraticCurveTo(11, 8, 0, -2);
-  ctx.fill();
-  ctx.fillStyle = hurt ? "#fff" : "#1c2230";
-  const lp = Math.sin(p.walkT) * 2;
-  ctx.fillRect(-5, 8, 4, 5 + lp);
-  ctx.fillRect(1, 8, 4, 5 - lp);
-  ctx.fillStyle = hurt ? "#fff" : "#2b3344";
-  rr(ctx, -7, -6, 14, 14, 4);
-  ctx.fill();
-  ctx.strokeStyle = "#0e1118";
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-  ctx.fillStyle = "#5a4a2a";
-  ctx.fillRect(-7, 4, 14, 2);
-  ctx.save();
-  ctx.globalCompositeOperation = "lighter";
-  const cg = ctx.createRadialGradient(0, 0, 0, 0, 0, 7);
-  cg.addColorStop(0, "rgba(70,240,220,0.9)");
-  cg.addColorStop(1, "rgba(70,240,220,0)");
-  ctx.fillStyle = cg;
-  ctx.beginPath();
-  ctx.arc(0, 0, 7, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-  ctx.fillStyle = "#5ff0da";
-  ctx.beginPath();
-  ctx.moveTo(0, -3);
-  ctx.lineTo(2.5, 0);
-  ctx.lineTo(0, 3);
-  ctx.lineTo(-2.5, 0);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = hurt ? "#fff" : "#3a4252";
-  ctx.beginPath();
-  ctx.arc(0, -9, 5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "#16323e";
-  ctx.beginPath();
-  ctx.arc(0, -11, 5, Math.PI, 0);
-  ctx.fill();
-  ctx.fillStyle = "#bff7ff";
-  const [fx, fy] = DIRV[p.dir];
-  ctx.beginPath();
-  ctx.arc(fx * 2, -9 + fy, 1.2, 0, Math.PI * 2);
   ctx.fill();
 }
 
