@@ -1,6 +1,9 @@
 export const TILE = 32;
-export const MAP_W = 70;
-export const MAP_H = 50;
+// The original prototype's 70 x 50 map was crossed in a few minutes.  The
+// wider frontier gives each landmark room to breathe and makes a full shard
+// run feel like a proper expedition.
+export const MAP_W = 100;
+export const MAP_H = 72;
 
 // Tile type ids
 export const T = {

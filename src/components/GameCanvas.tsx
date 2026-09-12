@@ -1,13 +1,20 @@
 import { useEffect, useRef } from "react";
 import { Game } from "@/game/engine";
 import type { GameCallbacks } from "@/game/types";
+import type { WorldSnapshot } from "@/game/core/WorldState";
+import type { Difficulty } from "@/game/types";
 
 export default function GameCanvas({
   callbacks,
   onReady,
+  initialSnapshot,
+  onCheckpoint,
 }: {
   callbacks: GameCallbacks;
   onReady?: (g: Game) => void;
+  initialSnapshot?: WorldSnapshot | null;
+  onCheckpoint?: (snapshot: WorldSnapshot) => void;
+  difficulty?: Difficulty;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const cbRef = useRef(callbacks);
@@ -23,11 +30,20 @@ export default function GameCanvas({
       onWin: () => cbRef.current.onWin(),
       onLose: () => cbRef.current.onLose(),
     };
-    const game = new Game(canvas, proxy);
+    const game = new Game(canvas, proxy, undefined, { difficulty });
     let disposed = false;
+    const checkpoint = () => {
+      if (!disposed && game.initialized && !game.ended) onCheckpoint?.(game.saveWorld());
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") checkpoint();
+    };
+    const interval = window.setInterval(checkpoint, 10_000);
+    window.addEventListener("visibilitychange", onVisibilityChange);
     void game.init()
       .then(() => {
         if (disposed) return;
+        if (initialSnapshot) game.loadWorld(initialSnapshot);
         game.start();
         onReady?.(game);
       })
@@ -35,7 +51,10 @@ export default function GameCanvas({
         if (!disposed) console.error("Game initialization error:", error);
       });
     return () => {
+      checkpoint();
       disposed = true;
+      window.clearInterval(interval);
+      window.removeEventListener("visibilitychange", onVisibilityChange);
       game.destroy();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

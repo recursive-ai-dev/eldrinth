@@ -109,7 +109,7 @@ export function generateMap(): MapData {
   tiles[idx(33, 36)] = T.RFLOOR; // north entrance
   tiles[idx(32, 39)] = T.RFLOOR;
 
-  // ----- The Glass Spire arena (boss) -----
+  // ----- The old Glass Spire, now a silent waypoint -----
   const cx = 60;
   const cy = 13;
   for (let y = 6; y <= 20; y++) {
@@ -123,9 +123,37 @@ export function generateMap(): MapData {
   tiles[idx(54, 12)] = T.SPIREFLOOR;
   tiles[idx(54, 13)] = T.SPIREFLOOR;
   tiles[idx(54, 14)] = T.SPIREFLOOR;
-  const wardTiles = [idx(53, 12), idx(53, 13), idx(53, 14)];
+  // ----- The Moonfall Reach and the true Spire -----
+  // The old arena remains as a visual landmark. The Unbound has retreated to
+  // the far eastern reach, turning the final act into a real journey.
+  const trueSpireX = 88;
+  const trueSpireY = 14;
+  for (let y = 5; y <= 23; y++) {
+    for (let x = 78; x <= 98; x++) {
+      const d = Math.hypot(x - trueSpireX, y - trueSpireY);
+      if (d <= 7) tiles[idx(x, y)] = T.SPIREFLOOR;
+      else if (d <= 9.3) tiles[idx(x, y)] = T.ROCK;
+    }
+  }
+  // A one-tile gate preserves the ward as an actual gate rather than a
+  // decoration that can be walked around.
+  for (let x = 77; x <= 80; x++) tiles[idx(x, 14)] = T.SPIREFLOOR;
+  const wardTiles = [idx(79, 13), idx(79, 14), idx(79, 15)];
   for (const wi of wardTiles) tiles[wi] = T.SPIREFLOOR;
   const wardSet = new Set(wardTiles);
+
+  // ----- Ashen Expanse (south) -----
+  for (let y = 50; y < MAP_H; y++) {
+    for (let x = 18; x < 82; x++) {
+      const i = idx(x, y);
+      if (patches[i] < 0.5) tiles[i] = T.DGRASS;
+      if (fine[i] > 0.72 && rng() < 0.55) tiles[i] = T.ROCK;
+    }
+  }
+  // A broken moon-water inlet makes the southern route feel distinct.
+  for (let y = 57; y <= 65; y++) for (let x = 82; x <= 98; x++) {
+    if (Math.hypot((x - 91) / 10, (y - 62) / 5) < 1) tiles[idx(x, y)] = T.WATER;
+  }
 
   // ----- Roads / paths -----
   const setPath = (x: number, y: number) => {
@@ -157,6 +185,15 @@ export function generateMap(): MapData {
   carve(18, 12, 18, 26); // shard 1 -> main road
   carve(50, 9, 50, 14); // shard 2 -> main road
   carve(33, 34, 40, 34); // shard 3 -> main road
+  carve(53, 14, 79, 14); // old Spire -> Moonfall Reach
+  carve(33, 43, 33, 54); // ruins -> Ashen Expanse
+  carve(33, 54, 62, 54);
+  carve(62, 54, 78, 55);
+  carve(78, 55, 88, 49);
+  carve(78, 55, 88, 30);
+  carve(62, 54, 62, 61);
+  carve(62, 54, 70, 42);
+  carve(70, 42, 73, 22);
 
   // ----- Decoration -----
   const isGrass = (t: number) => t === T.GRASS || t === T.DGRASS;
@@ -205,12 +242,22 @@ export function generateMap(): MapData {
       text: "Here stood Ilyarael, jewel of the Elder Elves. The Mnemonic tend it still... or what remains of them.",
     },
     { x: 44, y: 13, text: "BEYOND: the Glass Spire. The Unbound dreams within. Turn back, wayfarer." },
-    { x: 52, y: 16, text: "Three Anima Shards shall still this ward. Gather them, or the gate holds forever." },
+    { x: 52, y: 16, text: "The first Spire is empty. Follow the moon-road east: the Unbound has fled beyond the old ward." },
+    { x: 64, y: 54, text: "ASHEN EXPANSE — Here the sky fell in burning fragments. Walk lightly; the Sundered hunt in packs." },
+    { x: 78, y: 55, text: "MOONFALL CROSSING — Nine shards answer the true ward. Every recovered fragment strengthens the bearer." },
+    { x: 76, y: 22, text: "Pilgrims left offerings here before entering Moonfall Reach. None returned after the last eclipse." },
+    { x: 79, y: 14, text: "THE LAST WARD — Nine Anima Shards shall quiet the dreamer. No fewer." },
   ];
   const shards: Vec[] = [
     { x: px(18), y: px(12) },
     { x: px(50), y: px(9) },
     { x: px(40), y: px(34) },
+    { x: px(70), y: px(42) },
+    { x: px(78), y: px(55) },
+    { x: px(88), y: px(49) },
+    { x: px(88), y: px(30) },
+    { x: px(73), y: px(22) },
+    { x: px(62), y: px(61) },
   ];
   const enemySpawns: EnemySpawn[] = [
     { x: 16, y: 18, type: "wraith" },
@@ -226,6 +273,26 @@ export function generateMap(): MapData {
     { x: 44, y: 18, type: "adept" },
     { x: 34, y: 30, type: "adept" },
     { x: 56, y: 22, type: "adept" },
+    // Ashen Expanse patrols
+    { x: 38, y: 51, type: "wraith" },
+    { x: 46, y: 56, type: "wraith" },
+    { x: 53, y: 52, type: "sentinel" },
+    { x: 60, y: 58, type: "adept" },
+    { x: 68, y: 45, type: "sentinel" },
+    { x: 70, y: 39, type: "adept" },
+    { x: 73, y: 52, type: "wraith" },
+    { x: 79, y: 53, type: "sentinel" },
+    { x: 83, y: 48, type: "adept" },
+    { x: 88, y: 43, type: "sentinel" },
+    { x: 90, y: 34, type: "adept" },
+    { x: 84, y: 28, type: "sentinel" },
+    // Moonfall Reach guards its final road with a dense mixed patrol.
+    { x: 76, y: 19, type: "wraith" },
+    { x: 82, y: 24, type: "wraith" },
+    { x: 74, y: 25, type: "adept" },
+    { x: 91, y: 25, type: "sentinel" },
+    { x: 93, y: 18, type: "adept" },
+    { x: 82, y: 9, type: "sentinel" },
   ];
 
   return {
@@ -238,6 +305,6 @@ export function generateMap(): MapData {
     signs,
     shards,
     enemySpawns,
-    bossCenter: { x: px(60), y: px(13) },
+    bossCenter: { x: px(trueSpireX), y: px(trueSpireY) },
   };
 }

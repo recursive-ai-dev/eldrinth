@@ -1,4 +1,4 @@
-import type { DialogueData, Dir, EnemyType, ItemType, MapData } from "../types";
+import type { DialogueData, Difficulty, Dir, EnemyType, ItemType, MapData } from "../types";
 
 export interface PlayerState {
   x: number;
@@ -95,6 +95,8 @@ export interface WorldSnapshot {
   messageId: number;
   nextEnemyId: number;
   randomState: number;
+  /** Optional so pre-slot checkpoints remain loadable. */
+  difficulty?: Difficulty;
 }
 
 /**
@@ -115,12 +117,13 @@ export class WorldState {
   wardUnlocked = false;
   bossSpawned = false;
   shards = 0;
-  totalShards = 3;
+  totalShards = 9;
   message = "";
   messageId = 0;
   nextEnemyId = 1;
   private randomState = 0x6d2b79f5;
   dialogue: DialogueData | null = null;
+  difficulty: Difficulty = "standard";
 
   /** Deterministic PRNG for every simulation-affecting random decision. */
   nextRandom(): number {
@@ -153,6 +156,7 @@ export class WorldState {
       messageId: this.messageId,
       nextEnemyId: this.nextEnemyId,
       randomState: this.randomState,
+      difficulty: this.difficulty,
     };
   }
 
@@ -174,6 +178,7 @@ export class WorldState {
     this.messageId = snapshot.messageId;
     this.nextEnemyId = snapshot.nextEnemyId;
     this.randomState = snapshot.randomState;
+    this.difficulty = snapshot.difficulty ?? "standard";
     this.dialogue = null;
   }
 }
