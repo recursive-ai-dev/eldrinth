@@ -112,10 +112,16 @@ def gen_autotile_static(key: str, entry: dict):
 def main():
     print(f"Generating {len(CATALOG)} catalog entries into {OUT_ROOT}")
     for key, entry in CATALOG.items():
-        if entry["kind"] in ("human", "creature"):
+        kind = entry["kind"]
+        if kind in ("human", "creature"):
             gen_animated(key, entry)
-        else:
+        elif kind in ("item", "tile"):
             gen_static(key, entry)
+        else:
+            raise ValueError(
+                f"catalog entry {key!r} has unrecognized kind {kind!r}; "
+                "expected one of: human, creature, item, tile"
+            )
     print("Done.")
 
 
