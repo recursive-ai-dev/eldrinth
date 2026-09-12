@@ -28,19 +28,19 @@ export interface SpriteAtlas {
   getStaticFrame(maskOrIndex?: number): FrameRect | null;
 }
 
-const sheetUrls = import.meta.glob("@/assets/sprites/*/sheet.png", {
+const sheetUrls = import.meta.glob("../../assets/sprites/*/sheet.png", {
   eager: true,
   query: "?url",
   import: "default",
 }) as Record<string, string>;
 
-const manifests = import.meta.glob("@/assets/sprites/*/manifest.json", {
+const manifests = import.meta.glob("../../assets/sprites/*/manifest.json", {
   eager: true,
   import: "default",
 }) as Record<string, Manifest>;
 
 function keyFromPath(path: string): string {
-  // "@/assets/sprites/enemy.wraith/sheet.png" -> "enemy.wraith"
+  // "../../assets/sprites/enemy.wraith/sheet.png" -> "enemy.wraith"
   const parts = path.split("/");
   return parts[parts.length - 2];
 }
