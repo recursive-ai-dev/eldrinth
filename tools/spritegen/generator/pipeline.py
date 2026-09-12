@@ -71,4 +71,5 @@ def options_from(options: Dict[str, Any]) -> Dict[str, Any]:
         "frame": int(options.get("frame") or 0),
         "frames": int(options.get("frames") or 4),
         "ffd": float(options.get("ffd") or 0.0),
+        "action": options.get("action", "walk"),
     }

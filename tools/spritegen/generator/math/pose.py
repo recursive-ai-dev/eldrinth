@@ -179,6 +179,58 @@ def walk_pose(rig: Rig, frame: int, nframes: int = 4, facing: str = "front") -> 
     return out
 
 
+def attack_pose(rig: Rig, frame: int, nframes: int = 4, facing: str = "front") -> Rig:
+    """A single forward weapon-thrust cycle: wind-up -> lunge -> recover.
+
+    Unlike walk_pose's cyclic stride, this is a one-shot arc across
+    ``nframes``: frame 0 is the wind-up (arm drawn back), the middle frame(s)
+    are full extension (arm/leg driven forward), and the last frame recovers
+    toward neutral. Only the primary (right) arm/leg swing; the off-hand and
+    torso get a much smaller counter-motion so the pose still reads as one
+    body committing to a strike, not both sides mirroring the swing.
+    """
+    out = rig.copy()
+    n = max(1, nframes - 1)
+    u = frame / float(n)  # 0 at wind-up, 1 at recover
+    # wind-up (u=0) -> extend (u=0.5) -> recover (u=1): a single hump peaking mid-swing
+    extend = math.sin(u * math.pi)  # 0 at both ends, 1 at u=0.5
+    windup = max(0.0, 1.0 - u * 2.0)  # 1 at u=0, 0 by u=0.5
+
+    lunge_forward = 1.6 * extend
+    lunge_back = 1.1 * windup
+    lift = 0.4 * extend
+
+    side = facing in ("left", "right")
+
+    def _limb(name: str, forward: float, up: float, zsign: float = 1.0):
+        if name not in out.joints:
+            return
+        j = out.joints[name]
+        if side:
+            j.z += forward * zsign
+            j.y -= up
+        else:
+            j.x += forward * 0.6
+            j.y -= up * 0.4
+
+    # primary (right) arm drives the strike: pulled back during wind-up,
+    # thrust forward through extension.
+    _limb("hand_r", lunge_forward - lunge_back, lift, 1.0)
+    _limb("elbow_r", (lunge_forward - lunge_back) * 0.6, lift * 0.5, 1.0)
+    _limb("shoulder_r", (lunge_forward - lunge_back) * 0.15, 0.0, 0.6)
+
+    # off-hand/torso counter-motion, kept small
+    _limb("hand_l", -lunge_forward * 0.25, 0.0, -1.0)
+    _limb("shoulder_l", -lunge_forward * 0.1, 0.0, -0.5)
+
+    # weight shifts onto the front (right) leg through the strike
+    _limb("hip_r", lunge_forward * 0.25, 0.0, 1.0)
+    _limb("knee_r", lunge_forward * 0.35, 0.0, 1.0)
+    _limb("foot_r", lunge_forward * 0.4, 0.0, 1.0)
+
+    return out
+
+
 class PoseImputer:
     """Synthesise a missing view from a front buffer + per-row depth.
 

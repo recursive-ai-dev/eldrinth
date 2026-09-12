@@ -25,7 +25,7 @@ from ..math.canvas import (
 )
 from ..math.sdf import sd_capsule, sd_ellipse, sd_round_box, sd_circle, rasterize_sdf, op_union
 from ..math.palette import named_palette, shade_triplet, cosine_palette, PALETTES
-from ..math.pose import Rig, walk_pose, project_point, DIRECTIONS
+from ..math.pose import Rig, walk_pose, attack_pose, project_point, DIRECTIONS
 from ..pipeline import finalize, options_from
 from .base import SpriteGenerator
 
@@ -83,6 +83,7 @@ class HumanSpriteGenerator(SpriteGenerator):
         opt = options_from(options)
         direction = opt["direction"] if opt["direction"] in DIRECTIONS else "front"
         frame = opt["frame"] % max(1, opt["frames"])
+        action = opt["action"]
 
         rng = self.rng(seed)
         gender = rng.choice(["male", "female"])
@@ -157,6 +158,7 @@ class HumanSpriteGenerator(SpriteGenerator):
             "facial_hair": facial_hair,
             "direction": direction,
             "frame": frame,
+            "action": action,
             "pipeline": {
                 "pose": "3d-rig-projection",
                 "fill": "sdf-capsule",
@@ -177,7 +179,7 @@ class HumanSpriteGenerator(SpriteGenerator):
             seed, layout, skin, hair, eye, top, bottom,
             top_style, bottom_style, hair_style, facial_hair,
             has_glasses, has_jewelry, has_hat, gender, direction, frame,
-            opt["frames"],
+            opt["frames"], action,
         )
         outline = color.darken(skin, 0.55)
         canvas = finalize(
@@ -351,11 +353,16 @@ class HumanSpriteGenerator(SpriteGenerator):
         self, seed, layout, skin, hair, eye, top, bottom,
         top_style, bottom_style, hair_style, facial_hair,
         has_glasses, has_jewelry, has_hat, gender, direction, frame, nframes,
+        action="walk",
     ) -> Canvas:
         w, h = self.size
         canvas = Canvas(w, h)
         cx = layout["center"]
-        rig = walk_pose(self._make_rig(layout), frame, nframes, facing=direction)
+        base_rig = self._make_rig(layout)
+        if action == "attack":
+            rig = attack_pose(base_rig, frame, nframes, facing=direction)
+        else:
+            rig = walk_pose(base_rig, frame, nframes, facing=direction)
 
         skin_hi, skin_b, skin_sh = shade_triplet(skin, 0.26, 0.30)
         top_hi, top_b, top_sh = shade_triplet(top, 0.24, 0.32)

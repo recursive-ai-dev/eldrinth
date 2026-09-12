@@ -141,7 +141,10 @@ class SpriteGenerator:
         return [self.generate(seed, direction=d, **options) for d in DIRECTIONS]
 
     def generate_walk(self, seed=0, direction: str = "front", frames: int = WALK_FRAMES, **options) -> List[Sprite]:
-        """Walk-cycle frames for one direction.  Temporally coherent (same spec)."""
+        """Walk-cycle frames for one direction. Temporally coherent (same spec).
+        Pass action="attack" via **options to render an attack cycle instead
+        of the default walk (forwarded straight through to `_build`/`generate`
+        — no extra plumbing needed here)."""
         return [self.generate(seed, direction=direction, frame=i, frames=frames, **options)
                 for i in range(frames)]
 
