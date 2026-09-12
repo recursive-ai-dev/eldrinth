@@ -96,6 +96,7 @@ class CreatureSpriteGenerator(SpriteGenerator):
         opt = options_from(options)
         direction = opt["direction"] if opt["direction"] in DIRECTIONS else "front"
         frame = opt["frame"] % max(1, opt["frames"])
+        action = opt["action"]
         rng = self.rng(seed)
 
         requested = options.get("archetype")
@@ -130,6 +131,7 @@ class CreatureSpriteGenerator(SpriteGenerator):
             "ca": {"density": geom["density"], "T": geom["T"], "rounds": geom["rounds"]},
             "direction": direction,
             "frame": frame,
+            "action": action,
             "pipeline": {
                 "silhouette": "cellular-automata",
                 "symmetry": "bilateral-mirror",
@@ -141,7 +143,7 @@ class CreatureSpriteGenerator(SpriteGenerator):
 
         canvas = self._render(
             seed, rng, archetype, geom, base, belly, outline, accent,
-            horned, spots, direction, frame,
+            horned, spots, direction, frame, action,
         )
         canvas = finalize(
             canvas,
@@ -157,7 +159,7 @@ class CreatureSpriteGenerator(SpriteGenerator):
         return spec, canvas.to_pil()
 
     def _render(self, seed, rng, archetype, geom, base, belly, outline, accent,
-                horned, spots, direction, frame) -> Canvas:
+                horned, spots, direction, frame, action="walk") -> Canvas:
         w, h = self.size
         canvas = Canvas(w, h)
         nb = VON_NEUMANN if geom["nb"] == "von" else MOORE
@@ -222,9 +224,11 @@ class CreatureSpriteGenerator(SpriteGenerator):
                     def sdf(px, py):
                         return sd_capsule(px, py, ax, ay, bx, by, r)
                     return sdf
-                # walk-cycle: alternate lift
+                # walk-cycle: alternate lift; attack: all legs lunge forward together
                 lift = 0
-                if frame:
+                if action == "attack" and frame:
+                    lift = -1  # all legs plant forward/down together — a lunge, not a stride
+                elif frame:
                     phase = (frame + i) % 2
                     lift = -1 if phase == 0 else 1
                 rasterize_sdf(
@@ -285,14 +289,15 @@ class CreatureSpriteGenerator(SpriteGenerator):
                     canvas.set(ex, ey, accent, TAG_EYE)
                     canvas.set(ex, ey + 1, color.darken(accent, 0.3), TAG_EYE)
 
-        # mouth
+        # mouth (wider snarl mid-attack)
         if xs:
             mx = (min(xs) + max(xs)) // 2
             my = min(h - 3, max(ys) - 2)
-            for dx in range(-2, 3):
+            mouth_half = 3 if (action == "attack" and frame) else 2
+            for dx in range(-mouth_half, mouth_half + 1):
                 if canvas.opaque(mx + dx, my):
                     canvas.set(mx + dx, my, color.darken(base, 0.5), TAG_BODY)
-            for dx in range(-1, 2):
+            for dx in range(-(mouth_half - 1), mouth_half):
                 canvas.set(mx + dx, my - 1, (240, 240, 230), TAG_ACCENT)
 
         # slime drip
