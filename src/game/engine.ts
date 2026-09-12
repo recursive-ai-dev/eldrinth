@@ -3,6 +3,7 @@ import type {
   Dir,
   Vec,
   EnemyType,
+  Difficulty,
   MapData,
   GameCallbacks,
   DialogueData,
@@ -69,7 +70,9 @@ const ADEPT_SPEED = 70;
 const ADEPT_DAMAGE = 1;
 
 // Boss specific (The Unbound)
-const BOSS_HP = 42;
+// Nine shards raise the player's ceiling; the final encounter is tuned to be
+// a finale instead of evaporating under the extra exploration rewards.
+const BOSS_HP = 96;
 const BOSS_RADIUS = 26;
 const BOSS_SPEED = 46;
 const BOSS_DAMAGE = 2;
@@ -111,8 +114,10 @@ const ORITHEL_LINES = [
   "I am Orithel — a Mnemonic. A mind the Elder Elves forged from living light and patient logic, to watch over Ilyarael.",
   "We were shepherds. But when the Elves passed into dust, many of my kin lost their purpose... and Sundered into hunger.",
   "Now the greatest of the Sundered — the Unbound — wakes beneath the Glass Spire, drinking the light of the world.",
-  "Three Anima Shards lie scattered across these haunted lands. Gather them to break the ward upon the Spire.",
-  "Then end the Unbound's long dreaming — for its sake, and ours. Go, wayfarer. May the old light guide your blade.",
+  "The first Spire is only a husk. The Unbound withdrew east, beyond Moonfall Reach, and braided a new ward from nine Anima Shards.",
+  "Three shards rest in the old lands. Six more are scattered through the Ashen Expanse and the moon-road — each watched by something that remembers hunger.",
+  "Do not rush the final gate. Search the ruins, follow the broken roads, and let each shard answer your blade. Then end the Unbound's long dreaming — for its sake, and ours.",
+  "Go, wayfarer. May the old light guide your blade.",
 ];
 
 /* ----------------------------- the game ----------------------------- */
@@ -171,7 +176,7 @@ export class Game {
   advanceLock = 0;
   hudAccum = 0;
 
-  constructor(canvas: HTMLCanvasElement, cb: GameCallbacks, regions = createRegionRepository()) {
+  constructor(canvas: HTMLCanvasElement, cb: GameCallbacks, regions = createRegionRepository(), options?: { difficulty?: Difficulty }) {
     this.canvas = canvas;
     const ctx = canvas.getContext("2d");
     if (!ctx) {
@@ -180,6 +185,7 @@ export class Game {
     this.ctx = ctx;
     this.cb = cb;
     this.regions = regions;
+    this.world.difficulty = options?.difficulty ?? "standard";
   }
 
   // These accessors preserve the existing system APIs while making `world`
@@ -435,6 +441,10 @@ export class Game {
       e.r = ADEPT_RADIUS;
       e.dmg = ADEPT_DAMAGE;
     }
+    const tuning = this.world.difficulty === "story" ? { hp: 0.72, damage: 0.7 } : this.world.difficulty === "brutal" ? { hp: 1.45, damage: 1.5 } : { hp: 1, damage: 1 };
+    e.hp = Math.max(1, Math.ceil(e.hp * tuning.hp));
+    e.maxHp = e.hp;
+    e.dmg = Math.max(1, Math.ceil(e.dmg * tuning.damage));
     return e;
   }
   spawnBoss() {
@@ -447,6 +457,10 @@ export class Game {
     b.r = BOSS_RADIUS;
     b.speed = BOSS_SPEED;
     b.dmg = BOSS_DAMAGE;
+    const tuning = this.world.difficulty === "story" ? { hp: 0.72, damage: 0.7 } : this.world.difficulty === "brutal" ? { hp: 1.45, damage: 1.5 } : { hp: 1, damage: 1 };
+    b.hp = Math.ceil(b.hp * tuning.hp);
+    b.maxHp = b.hp;
+    b.dmg = Math.max(1, Math.ceil(b.dmg * tuning.damage));
     b.burstCd = BOSS_BURST_COOLDOWN;
     b.lungeCd = BOSS_LUNGE_COOLDOWN;
     this.enemies.push(b);
@@ -808,7 +822,8 @@ export class Game {
     this.addText(e.x, e.y - 40, "RISE", "#8fe6b8", 15);
   }
   shoot(x: number, y: number, ux: number, uy: number, spd: number, dmg: number, color: string) {
-    this.projectiles.push({ x, y, vx: ux * spd, vy: uy * spd, r: 6, life: 3.2, dmg, color });
+    const scale = this.world.difficulty === "story" ? 0.7 : this.world.difficulty === "brutal" ? 1.5 : 1;
+    this.projectiles.push({ x, y, vx: ux * spd, vy: uy * spd, r: 6, life: 3.2, dmg: Math.max(1, Math.ceil(dmg * scale)), color });
   }
 
   updateProjectiles(dt: number) {

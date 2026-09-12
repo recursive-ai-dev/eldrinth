@@ -27,7 +27,10 @@ export interface GameFlowState {
 
 export class GameFlowSystem {
   currentObjective(state: GameFlowState): string {
-    if (state.shards < state.totalShards) return `Recover the Anima Shards  (${state.shards}/${state.totalShards})`;
+    if (state.shards < state.totalShards) {
+      const region = state.shards < 3 ? "the old lands" : state.shards < 6 ? "the Ashen Expanse" : "Moonfall Reach";
+      return `Recover the Anima Shards in ${region}  (${state.shards}/${state.totalShards})`;
+    }
     if (!state.wardUnlocked) return "The ward weakens...";
     if (!state.bossSpawned) return "Enter the Glass Spire";
     if (state.boss && state.boss.alive) return "Slay the Unbound";

@@ -1,4 +1,5 @@
 export type Dir = "up" | "down" | "left" | "right";
+export type Difficulty = "story" | "standard" | "brutal";
 
 export type EnemyType = "wraith" | "sentinel" | "adept" | "boss";
 export type ItemType = "shard" | "potion";
