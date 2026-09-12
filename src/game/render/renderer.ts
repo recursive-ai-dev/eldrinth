@@ -48,7 +48,6 @@ export interface RenderState {
   shakeMag: number;
   lastShakeX: number;
   lastShakeY: number;
-  objectiveTarget(): { x: number; y: number; kind: "shard" | "boss" } | null;
 }
 
 const CHUNK_TILES = 16;
@@ -468,7 +467,8 @@ export function renderGame(g: RenderState) {
   ctx.restore();
 
   drawLighting(g);
-  drawCompass(g);
+  // There is deliberately no quest compass. Roads, notes, and landmarks are
+  // the navigation system.
 }
 
 function drawWardBarrier(g: RenderState, ctx: CanvasRenderingContext2D) {
@@ -554,11 +554,57 @@ function drawItem(_g: RenderState, ctx: CanvasRenderingContext2D, it: ItemState)
 /** A shared sort pass keeps items, actors, and tall map overlays coherent. */
 function drawSortedWorldObjects(g: RenderState, ctx: CanvasRenderingContext2D) {
   const objects: { y: number; draw: () => void }[] = [];
+  for (const sign of g.map.signs) {
+    const x = sign.x * TILE + TILE / 2, y = sign.y * TILE + TILE / 2;
+    objects.push({ y, draw: () => {
+      ctx.save();
+      ctx.fillStyle = "#382b23";
+      ctx.fillRect(x - 2, y - 4, 4, 13);
+      ctx.fillStyle = "#b9a27b";
+      ctx.strokeStyle = "#44362b";
+      ctx.lineWidth = 2;
+      ctx.fillRect(x - 10, y - 18, 20, 15);
+      ctx.strokeRect(x - 10, y - 18, 20, 15);
+      ctx.fillStyle = "#5e4d3a";
+      for (let line = 0; line < 3; line++) ctx.fillRect(x - 6, y - 14 + line * 4, 12 - line * 2, 1);
+      ctx.restore();
+    } });
+  }
+  for (const fire of g.map.campfires) objects.push({ y: fire.y, draw: () => drawCampfire(g, ctx, fire.x, fire.y) });
   for (const item of g.items) if (!item.taken) objects.push({ y: item.y, draw: () => drawItem(g, ctx, item) });
   for (const enemy of g.enemies) objects.push({ y: enemy.y, draw: () => drawEnemy(ctx, enemy) });
   objects.push({ y: g.player.y, draw: () => drawPlayer(g, ctx) });
   objects.sort((a, b) => a.y - b.y);
   for (const object of objects) object.draw();
+}
+
+function drawCampfire(g: RenderState, ctx: CanvasRenderingContext2D, x: number, y: number) {
+  const flicker = Math.sin(g.time * 11 + x) * 2;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  const glow = ctx.createRadialGradient(x, y - 6, 2, x, y - 6, 34);
+  glow.addColorStop(0, "rgba(255,190,85,0.72)");
+  glow.addColorStop(1, "rgba(255,130,40,0)");
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(x, y - 6, 34, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalCompositeOperation = "source-over";
+  ctx.strokeStyle = "#4b3020";
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(x - 10, y + 7); ctx.lineTo(x + 10, y + 7);
+  ctx.moveTo(x - 8, y + 11); ctx.lineTo(x + 8, y + 3);
+  ctx.stroke();
+  ctx.fillStyle = "#ffb14d";
+  ctx.beginPath();
+  ctx.moveTo(x, y + 5); ctx.quadraticCurveTo(x - 11, y - 5, x + flicker, y - 22); ctx.quadraticCurveTo(x + 13, y - 4, x, y + 5);
+  ctx.fill();
+  ctx.fillStyle = "#fff0ac";
+  ctx.beginPath();
+  ctx.arc(x, y - 5, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
 
@@ -576,6 +622,17 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: EnemyState) {
   if (e.type === "wraith") drawWraith(ctx, e);
   else if (e.type === "sentinel") drawSentinel(ctx, e);
   else if (e.type === "adept") drawAdept(ctx, e);
+  if (e.elite && e.alive) {
+    ctx.strokeStyle = "#ffd36b";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, -e.r * 0.15, e.r + 5 + Math.sin(e.t * 4), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = "#ffe6a3";
+    ctx.fillRect(-9, -e.r - 10, 18, 3);
+    ctx.fillStyle = "#d08f35";
+    ctx.fillRect(-9, -e.r - 10, 18 * Math.max(0, e.hp / e.maxHp), 3);
+  }
   ctx.restore();
 }
 
@@ -987,44 +1044,4 @@ function drawLighting(g: RenderState) {
   ctx.fillStyle = tg;
   ctx.fillRect(0, 0, g.viewW, g.viewH);
   ctx.globalCompositeOperation = "source-over";
-}
-
-function drawCompass(g: RenderState) {
-  const tgt = g.objectiveTarget();
-  if (!tgt) return;
-  const ctx = g.ctx;
-  const sx = tgt.x - g.cam.x;
-  const sy = tgt.y - g.cam.y;
-  const onScreen = sx > -10 && sx < g.viewW + 10 && sy > -10 && sy < g.viewH + 10;
-  const col = tgt.kind === "shard" ? "#5ff7df" : "#ff9a9a";
-  if (onScreen) {
-    ctx.save();
-    ctx.globalAlpha = 0.85;
-    const yo = Math.sin(g.time * 4) * 4;
-    ctx.fillStyle = col;
-    ctx.beginPath();
-    ctx.moveTo(sx, sy - 30 + yo);
-    ctx.lineTo(sx - 7, sy - 42 + yo);
-    ctx.lineTo(sx + 7, sy - 42 + yo);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-  } else {
-    const ang = Math.atan2(sy - g.viewH / 2, sx - g.viewW / 2);
-    const rad = Math.min(g.viewW, g.viewH) / 2 - 54;
-    const ex = g.viewW / 2 + Math.cos(ang) * rad;
-    const ey = g.viewH / 2 + Math.sin(ang) * rad;
-    ctx.save();
-    ctx.translate(ex, ey);
-    ctx.rotate(ang);
-    ctx.globalAlpha = 0.9;
-    ctx.fillStyle = col;
-    ctx.beginPath();
-    ctx.moveTo(12, 0);
-    ctx.lineTo(-8, -7);
-    ctx.lineTo(-8, 7);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-  }
 }

@@ -2,10 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import GameCanvas from "@/components/GameCanvas";
 import HUD from "@/components/HUD";
 import DialogueBox from "@/components/DialogueBox";
+import Journal from "@/components/Journal";
 import PauseOverlay from "@/components/PauseOverlay";
 import TitleScreen from "@/components/TitleScreen";
 import EndScreen from "@/components/EndScreen";
-import { useGameStore, selectScreen, selectPaused, selectHud, selectDialogue, selectSessionId } from "@/stores";
+import IntroSequence from "@/components/IntroSequence";
+import { useGameStore, selectScreen, selectPaused, selectHud, selectDialogue, selectJournal, selectSessionId } from "@/stores";
 import type { GameCallbacks } from "@/game/types";
 import type { Game } from "@/game/engine";
 import type { WorldSnapshot } from "@/game/core/WorldState";
@@ -19,12 +21,15 @@ export default function App() {
   const paused = useGameStore(selectPaused);
   const hud = useGameStore(selectHud);
   const dialogue = useGameStore(selectDialogue);
+  const journal = useGameStore(selectJournal);
   const sessionId = useGameStore(selectSessionId);
-  const { startGame, endGame, setPaused, setHud, setDialogue } = useGameStore();
+  const { startGame, endGame, setPaused, setHud, setDialogue, setJournal } = useGameStore();
+  const [journalOpen, setJournalOpen] = useState(false);
   const [checkpoint, setCheckpoint] = useState<WorldSnapshot | null>(null);
   const [slots, setSlots] = useState<SaveSlot[]>([]);
   const [activeSlot, setActiveSlot] = useState<number | null>(null);
   const [difficulty, setDifficulty] = useState<Difficulty>("standard");
+  const [introPlaying, setIntroPlaying] = useState(false);
 
   const refreshSlots = useCallback(() => { void slotStore.list().then(setSlots).catch(() => setSlots([])); }, []);
   useEffect(() => { refreshSlots(); }, [refreshSlots]);
@@ -34,8 +39,13 @@ export default function App() {
     setActiveSlot(slot);
     setDifficulty(selectedDifficulty);
     void slotStore.remove(slot).then(refreshSlots).catch(() => undefined);
+    setIntroPlaying(true);
+  }, [refreshSlots]);
+
+  const finishIntro = useCallback(() => {
+    setIntroPlaying(false);
     startGame();
-  }, [refreshSlots, startGame]);
+  }, [startGame]);
 
   const resume = useCallback((slot: number) => {
     void slotStore.load(slot).then((saved) => {
@@ -61,12 +71,33 @@ export default function App() {
   }, [refreshSlots]);
 
   const gameRef = useRef<Game | null>(null);
+  const setJournalVisibility = useCallback((open: boolean) => {
+    gameRef.current?.setJournalOpen(open);
+    setJournalOpen(open);
+  }, []);
+  useEffect(() => {
+    const toggleJournal = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || (target instanceof HTMLElement && target.isContentEditable)) return;
+      if (event.key.toLowerCase() === "l" && screen === "overworld" && !dialogue) {
+        event.preventDefault();
+        setJournalOpen((open) => {
+          const next = !open;
+          gameRef.current?.setJournalOpen(next);
+          return next;
+        });
+      }
+    };
+    window.addEventListener("keydown", toggleJournal);
+    return () => window.removeEventListener("keydown", toggleJournal);
+  }, [screen, dialogue]);
   const callbacks: GameCallbacks = {
     onHud: (hudData) => setHud(hudData),
     onDialogue: (dialogueData) => setDialogue(dialogueData),
     onPause: (paused) => setPaused(paused),
     onWin: () => { setCheckpoint(null); endGame("win"); },
     onLose: () => { setCheckpoint(null); endGame("lose"); },
+    onJournal: (entries) => setJournal(entries),
   };
 
   const showGame = screen === "overworld" || screen === "pause";
@@ -87,7 +118,19 @@ export default function App() {
       {showGame && <HUD hud={hud} />}
 
       {showGame && dialogue && (
-        <DialogueBox data={dialogue} onAdvance={() => gameRef.current?.advanceDialogue()} />
+        <DialogueBox
+          data={dialogue}
+          onAdvance={() => gameRef.current?.advanceDialogue()}
+          onChoice={(id) => gameRef.current?.chooseDialogue(id)}
+        />
+      )}
+
+      {showGame && journalOpen && (
+        <Journal
+          entries={journal}
+          onClose={() => setJournalVisibility(false)}
+          onAddNote={(note) => gameRef.current?.addPersonalNote(note)}
+        />
       )}
 
       {showGame && paused && (
@@ -97,7 +140,8 @@ export default function App() {
         />
       )}
 
-      {screen === "title" && <TitleScreen onStart={start} onContinue={resume} onErase={eraseSlot} slots={slots} />}
+      {screen === "title" && !introPlaying && <TitleScreen onStart={start} onContinue={resume} onErase={eraseSlot} slots={slots} />}
+      {screen === "title" && introPlaying && <IntroSequence onComplete={finishIntro} />}
       {screen === "win" && <EndScreen variant="win" onRestart={restart} />}
       {screen === "lose" && <EndScreen variant="lose" onRestart={restart} />}
     </div>

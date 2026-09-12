@@ -124,7 +124,7 @@ class LocalRegionSource implements RegionSource {
     // Used only by non-browser test environments. Yielding keeps its API async.
     await Promise.resolve();
     if (signal.aborted) throw new DOMException("Region load aborted", "AbortError");
-    return { id: regionId, map: generateMap() };
+    return { id: regionId, map: generateMap(regionId) };
   }
 }
 

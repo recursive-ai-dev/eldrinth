@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { HudData, DialogueData } from "@/game/types";
+import type { HudData, DialogueData, JournalEntry } from "@/game/types";
 import { SceneStack, type SceneId } from "@/game/core/SceneStack";
 
 type Screen = SceneId;
@@ -9,11 +9,13 @@ interface GameState {
   sessionId: number;
   hud: HudData;
   dialogue: DialogueData | null;
+  journal: JournalEntry[];
 
   // Actions
   setPaused: (paused: boolean) => void;
   setHud: (hud: HudData) => void;
   setDialogue: (dialogue: DialogueData | null) => void;
+  setJournal: (journal: JournalEntry[]) => void;
 
   // Derived
   startGame: () => void;
@@ -23,6 +25,7 @@ interface GameState {
 }
 
 const initialHud: HudData = {
+  regionName: "The Old Lands",
   hp: 6,
   maxHp: 6,
   stamina: 100,
@@ -38,11 +41,12 @@ const initialHud: HudData = {
   bossHp: 0,
 };
 
-const initialState: Omit<GameState, "setPaused" | "setHud" | "setDialogue" | "startGame" | "endGame" | "togglePause" | "reset"> = {
+const initialState: Omit<GameState, "setPaused" | "setHud" | "setDialogue" | "setJournal" | "startGame" | "endGame" | "togglePause" | "reset"> = {
   scenes: ["title"],
   sessionId: 0,
   hud: initialHud,
   dialogue: null,
+  journal: [],
 };
 
 export const useGameStore = create<GameState>((set) => ({
@@ -58,12 +62,14 @@ export const useGameStore = create<GameState>((set) => ({
   setHud: (hud) => set({ hud }),
 
   setDialogue: (dialogue) => set({ dialogue }),
+  setJournal: (journal) => set({ journal }),
 
   startGame: () => {
     set((state) => ({
       scenes: ["overworld"],
       sessionId: state.sessionId + 1,
       dialogue: null,
+      journal: [],
       hud: initialHud,
     }));
   },
@@ -95,3 +101,4 @@ export const selectPaused = (state: GameState) => state.scenes.includes("pause")
 export const selectSessionId = (state: GameState) => state.sessionId;
 export const selectHud = (state: GameState) => state.hud;
 export const selectDialogue = (state: GameState) => state.dialogue;
+export const selectJournal = (state: GameState) => state.journal;

@@ -4,7 +4,7 @@ import type { Difficulty } from "@/game/types";
 import type { SaveSlot } from "@/game/slots";
 
 const DIFFICULTIES: { id: Difficulty; label: string; description: string }[] = [
-  { id: "story", label: "Story", description: "Gentler foes" },
+  { id: "story", label: "Story", description: "More health · slower, less alert foes" },
   { id: "standard", label: "Standard", description: "Intended challenge" },
   { id: "brutal", label: "Brutal", description: "Hardened, deadlier foes" },
 ];
@@ -108,6 +108,9 @@ export default function TitleScreen({ onStart, onContinue, onErase, slots }: { o
           </div>
           <div>
             <span className="text-teal-200/70">E</span> — Speak / Read
+          </div>
+          <div>
+            <span className="text-teal-200/70">L</span> — Field Journal
           </div>
         </div>
       </div>

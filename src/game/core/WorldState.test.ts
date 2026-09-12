@@ -9,7 +9,7 @@ describe("WorldState snapshots", () => {
       staminaRegenDelay: 0, dir: "down", speed: 1, attackTimer: 0, attackCd: 0,
       attackDur: 0, attacking: false, swingHit: new Set([5]), swingDmg: 1,
       invuln: 0, dashTimer: 0, dashCd: 0, dashDir: "down", dashing: false,
-      walkT: 0, hurtFlash: 0, kx: 0, ky: 0, dying: 0,
+      walkT: 0, hurtFlash: 0, kx: 0, ky: 0, dying: 0, relics: [], dashCostDiscount: 0, attackBonus: 0,
     };
     world.enemies = [{
       id: 5, type: "wraith", x: 1, y: 2, r: 3, hp: 4, maxHp: 4, speed: 1, dmg: 1,
@@ -18,8 +18,14 @@ describe("WorldState snapshots", () => {
       telegraphTimer: 0, wanderA: 0, bob: 0, alive: true, dying: 0,
     }];
     world.boss = world.enemies[0];
+    world.regions = {
+      overworld: { enemies: world.enemies, items: [], bossId: 5, bossSpawned: false },
+    };
+    world.checkpoint = { regionId: "overworld", x: 12, y: 24, name: "Test Wayfire" };
+    world.quests = { facts: ["courier-orders"], resolutions: {} };
     const snapshot = world.snapshot();
     world.player.hp = 0;
+    world.regions.overworld.enemies[0].hp = 0;
 
     const restored = new WorldState();
     restored.restore(snapshot);
@@ -27,5 +33,32 @@ describe("WorldState snapshots", () => {
     expect(restored.player.hp).toBe(4);
     expect(restored.player.swingHit).toEqual(new Set([5]));
     expect(restored.boss).toBe(restored.enemies[0]);
+    expect(restored.regions.overworld.enemies[0].hp).toBe(4);
+    expect(restored.checkpoint).toEqual({ regionId: "overworld", x: 12, y: 24, name: "Test Wayfire" });
+    expect(restored.quests.facts).toEqual(["courier-orders"]);
+  });
+
+  it("migrates dense version-one Story saves into the calmer expedition balance", () => {
+    const world = new WorldState();
+    world.player = {
+      x: 1, y: 2, r: 3, hp: 6, maxHp: 6, stamina: 7, maxStamina: 8,
+      staminaRegenDelay: 0, dir: "down", speed: 1, attackTimer: 0, attackCd: 0,
+      attackDur: 0, attacking: false, swingHit: new Set(), swingDmg: 1,
+      invuln: 0, dashTimer: 0, dashCd: 0, dashDir: "down", dashing: false,
+      walkT: 0, hurtFlash: 0, kx: 0, ky: 0, dying: 0, relics: [], dashCostDiscount: 0, attackBonus: 0,
+    };
+    world.enemies = Array.from({ length: 20 }, (_, id) => ({
+      id, type: "wraith" as const, x: id, y: 0, r: 3, hp: 3, maxHp: 3, speed: 62, dmg: 1,
+      vx: 0, vy: 0, hurt: 0, t: 0, shootCd: 0, lungeCd: 0, lungeTimer: 0,
+      lungeVx: 0, lungeVy: 0, burstCd: 0, summonCd: 0, telegraph: null as const,
+      telegraphTimer: 0, wanderA: 0, bob: 0, alive: true, dying: 0,
+    }));
+    const legacy = { ...world.snapshot(), version: 1 as const, difficulty: "story" as const, bossId: null };
+    const restored = new WorldState();
+    restored.restore(legacy);
+
+    expect(restored.enemies.length).toBeLessThan(20);
+    expect(restored.player.maxHp).toBe(8);
+    expect(restored.enemies[0].speed).toBeCloseTo(45.88);
   });
 });

@@ -21,24 +21,24 @@ export interface GameFlowState {
   messageId: number;
   prompt: string;
   dialogue: DialogueData | null;
-  map: { npc: { x: number; y: number }; signs: Array<{ x: number; y: number; text: string }> };
+  map: { regionName: string; npc: { x: number; y: number }; signs: Array<{ x: number; y: number; text: string }>; campfires: Array<{ x: number; y: number }> };
   items: Array<{ type: string; taken: boolean; x: number; y: number }>;
 }
 
 export class GameFlowSystem {
   currentObjective(state: GameFlowState): string {
     if (state.shards < state.totalShards) {
-      const region = state.shards < 3 ? "the old lands" : state.shards < 6 ? "the Ashen Expanse" : "Moonfall Reach";
-      return `Recover the Anima Shards in ${region}  (${state.shards}/${state.totalShards})`;
+      return "Interpret the clues in your field journal";
     }
-    if (!state.wardUnlocked) return "The ward weakens...";
-    if (!state.bossSpawned) return "Enter the Glass Spire";
-    if (state.boss && state.boss.alive) return "Slay the Unbound";
-    return "The Spire falls silent...";
+    if (!state.wardUnlocked) return "Something ancient has changed";
+    if (!state.bossSpawned) return "Follow what the old records suggest";
+    if (state.boss && state.boss.alive) return "The air around the Spire trembles";
+    return "The Spire falls silent";
   }
 
   buildHud(state: GameFlowState): HudData {
     return {
+      regionName: state.map.regionName,
       hp: Math.max(0, Math.ceil(state.player.hp)),
       maxHp: state.player.maxHp,
       stamina: Math.max(0, state.player.stamina),
@@ -59,6 +59,7 @@ export class GameFlowSystem {
     if (state.dialogue) return state.prompt;
     const p = state.player;
     const npc = state.map.npc;
+    if (state.map.campfires.some((fire) => Math.hypot(p.x - fire.x, p.y - fire.y) < 52)) return "Press E to rest at the wayfire";
     if (Math.hypot(p.x - npc.x, p.y - npc.y) < 48) {
       return "Press E to speak with Orithel";
     }
@@ -66,7 +67,7 @@ export class GameFlowSystem {
       const sx = s.x * TILE + TILE / 2;
       const sy = s.y * TILE + TILE / 2;
       if (Math.hypot(p.x - sx, p.y - sy) < 44) {
-        return "Press E to read";
+        return "Press E to read note";
       }
     }
     return "";

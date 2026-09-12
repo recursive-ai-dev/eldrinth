@@ -75,4 +75,18 @@ describe("AISystem attack telegraphs", () => {
     expect(boss.lungeTimer).toBe(0.5);
     expect(onText).toHaveBeenCalledOnce();
   });
+
+  it("lets Story-mode travellers pass enemies without pulling the whole area", () => {
+    const ai = new AISystem();
+    const standardSentinel = enemy("sentinel");
+    const storySentinel = enemy("sentinel");
+    const standard = { ...context(), player: { x: 250, y: 0, r: 11, dying: 0, invuln: 0, dashing: false } };
+    const story = { ...context(), player: { x: 250, y: 0, r: 11, dying: 0, invuln: 0, dashing: false }, engagementMultiplier: 0.6 };
+
+    ai.updateEnemy(standardSentinel, 0.016, standard);
+    ai.updateEnemy(storySentinel, 0.016, story);
+
+    expect(standardSentinel.vx).toBeGreaterThan(0);
+    expect(storySentinel.vx).toBe(0);
+  });
 });
