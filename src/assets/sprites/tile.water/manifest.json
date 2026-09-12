@@ -1,0 +1,8 @@
+{
+  "kind": "tile",
+  "cellW": 16,
+  "cellH": 16,
+  "static": true,
+  "autotile": true,
+  "masks": 16
+}
