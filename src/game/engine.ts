@@ -22,6 +22,7 @@ import {
 } from "./core/WorldState";
 import { createRegionRepository, type RegionRepository } from "./regions";
 import type { EndingId } from "./core/SceneStack";
+import { shardBleedEntry, shardPickupMessage } from "./escalation";
 import { QUESTS, learnFact, canResolve, questKnown, questJournal, resolveQuest } from "./quests";
 import { AISystem } from "./systems/AISystem";
 import { CombatSystem } from "./systems/CombatSystem";
@@ -879,14 +880,19 @@ export class Game {
           p.hp = Math.min(p.maxHp, p.hp + 2);
           this.shardsBurst(it.x, it.y, "#46f0d8", 18);
           this.addText(it.x, it.y, "ANIMA SHARD", "#5ff7df", 16);
+          const bleed = shardBleedEntry(this.shards);
+          if (bleed && !this.world.journal.some((entry) => entry.id === bleed.id)) {
+            this.world.journal.push(bleed);
+            this.publishJournal();
+          }
           if (this.shards >= this.totalShards) {
             this.wardUnlocked = true;
             this.syncMovementSystem();
-            this.msg("The ward before the Spire falters. The way opens.");
+            this.msg("The ward gives. Nine. It was always going to be nine, and now I know who picked the number.");
             this.burst(it.x, it.y, "#46f0d8", 30);
             this.ring(this.map.bossCenter.x, this.map.bossCenter.y, "#46f0d8");
           } else {
-            this.msg(`Anima Shard recovered (${this.shards}/${this.totalShards}).`);
+            this.msg(shardPickupMessage(this.shards, this.totalShards));
           }
         } else {
           const heal = 4;
