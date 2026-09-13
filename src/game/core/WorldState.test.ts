@@ -61,4 +61,28 @@ describe("WorldState snapshots", () => {
     expect(restored.player.maxHp).toBe(8);
     expect(restored.enemies[0].speed).toBeCloseTo(45.88);
   });
+
+  it("round-trips a resolution that granted no reward", () => {
+    const world = new WorldState();
+    world.player = {
+      x: 1, y: 2, r: 3, hp: 4, maxHp: 6, stamina: 7, maxStamina: 8,
+      staminaRegenDelay: 0, dir: "down", speed: 1, attackTimer: 0, attackCd: 0,
+      attackDur: 0, attacking: false, swingHit: new Set(), swingDmg: 1,
+      invuln: 0, dashTimer: 0, dashCd: 0, dashDir: "down", dashing: false,
+      walkT: 0, hurtFlash: 0, kx: 0, ky: 0, dying: 0, relics: [], dashCostDiscount: 0, attackBonus: 0,
+    };
+    world.quests = {
+      facts: ["courier-orders", "courier-memory"],
+      resolutions: { courier: "end" },
+    };
+
+    const snapshot = world.snapshot();
+    world.quests.resolutions.courier = "bind";
+
+    const restored = new WorldState();
+    restored.restore(snapshot);
+
+    expect(restored.quests.resolutions.courier).toBe("end");
+    expect(restored.quests.facts).toEqual(["courier-orders", "courier-memory"]);
+  });
 });
