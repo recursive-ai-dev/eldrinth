@@ -85,4 +85,30 @@ describe("WorldState snapshots", () => {
     expect(restored.quests.resolutions.courier).toBe("end");
     expect(restored.quests.facts).toEqual(["courier-orders", "courier-memory"]);
   });
+
+  it("drops pre-rewrite narrative journal entries from a v2 save, keeping personal notes and quest facts", () => {
+    const world = new WorldState();
+    world.player = {
+      x: 1, y: 2, r: 3, hp: 4, maxHp: 6, stamina: 7, maxStamina: 8,
+      staminaRegenDelay: 0, dir: "down", speed: 1, attackTimer: 0, attackCd: 0,
+      attackDur: 0, attacking: false, swingHit: new Set(), swingDmg: 1,
+      invuln: 0, dashTimer: 0, dashCd: 0, dashDir: "down", dashing: false,
+      walkT: 0, hurtFlash: 0, kx: 0, ky: 0, dying: 0, relics: [], dashCostDiscount: 0, attackBonus: 0,
+    };
+    world.journal = [
+      { id: "overworld:12:4", title: "Salt-Graves Ledger", text: "Old canon courier orders.", source: "A weathered marker" },
+      { id: "orithel:spire", title: "The Unbound Spire", text: "Old canon Orithel briefing.", source: "Orithel · Ilyarael" },
+      { id: "personal:40:0", title: "My observations", text: "A note I wrote myself.", source: "Camp" },
+      { id: "bleed:6", title: "My observations", text: "Not mine, but new content.", source: "My own hand" },
+    ];
+    world.quests = { facts: ["courier-orders", "spire"], resolutions: { courier: "end" } };
+    const v2 = { ...world.snapshot(), version: 2 as const };
+
+    const restored = new WorldState();
+    restored.restore(v2);
+
+    expect(restored.journal.map((entry) => entry.id)).toEqual(["personal:40:0", "bleed:6"]);
+    expect(restored.quests.facts).toEqual(["courier-orders", "spire"]);
+    expect(restored.quests.resolutions.courier).toBe("end");
+  });
 });
