@@ -24,7 +24,7 @@ from ..math.canvas import (
     Canvas, TAG_BODY, TAG_BELLY, TAG_EYE, TAG_ACCENT, TAG_HAIR, TAG_SKIN, TAG_METAL,
 )
 from ..math.ca import silhouette, evolve, seed_blob, mirror_horizontal, MOORE, VON_NEUMANN
-from ..math.sdf import sd_capsule, sd_circle, sd_ellipse, sd_rhombus, rasterize_sdf
+from ..math.sdf import sd_capsule, sd_circle, sd_ellipse, sd_rhombus, sd_round_box, rasterize_sdf
 from ..math.palette import named_palette, shade_triplet, cosine_palette, PALETTES
 from ..math.pose import DIRECTIONS
 from ..pipeline import finalize, options_from
@@ -248,8 +248,8 @@ class CreatureSpriteGenerator(SpriteGenerator):
                     return sd_ellipse(px, py, ax + sign * 5, wy + 2, 5.5, 3.2) * 3.2
                 rasterize_sdf(canvas, sdf, wb, whi, wsh, TAG_HAIR)
 
-        # horns
-        if horned and xs:
+        # horns (for general archetypes, not biped boss)
+        if horned and archetype != "biped" and xs:
             minx, maxx, miny = min(xs), max(xs), min(ys)
             horn = named_palette("sand", 0.75)
             hhi, hb, hsh = shade_triplet(horn, 0.2, 0.3)
@@ -258,6 +258,95 @@ class CreatureSpriteGenerator(SpriteGenerator):
                 def sdf(px, py, hx=hx, miny=miny, sign=sign):
                     return sd_capsule(px, py, hx, miny, hx + sign * 1.4, miny - 4.2, 0.85)
                 rasterize_sdf(canvas, sdf, hb, hhi, hsh, TAG_METAL)
+
+        # Boss antler-crown (sovereign crown)
+        if archetype == "biped" and xs:
+            minx, maxx, miny, maxy = min(xs), max(xs), min(ys), max(ys)
+            antler_base = named_palette("bone_relic", 0.75)
+            ahi, ab, ash = shade_triplet(antler_base, 0.25, 0.3)
+            scale = max(1.0, w / 32.0)
+            for sign in (-1, 1):
+                ax0 = (minx + maxx) * 0.5 + sign * (maxx - minx) * 0.22
+                ay0 = miny + 1
+                ax1 = ax0 + sign * (maxx - minx) * 0.32
+                ay1 = max(1, miny - int((maxy - miny) * 0.28))
+                def sdf_antler1(px, py, ax0=ax0, ay0=ay0, ax1=ax1, ay1=ay1, scale=scale):
+                    return sd_capsule(px, py, ax0, ay0, ax1, ay1, 1.1 * scale)
+                rasterize_sdf(canvas, sdf_antler1, ab, ahi, ash, TAG_METAL)
+                def sdf_tine(px, py, ax1=ax1, ay1=ay1, sign=sign, scale=scale):
+                    return sd_capsule(px, py, ax1, ay1, ax1 + sign * 2.2 * scale, ay1 - 3.2 * scale, 0.75 * scale)
+                rasterize_sdf(canvas, sdf_tine, ab, ahi, ash, TAG_METAL)
+
+        # Boss ribcage and corrupted heart
+        if archetype == "biped" and xs:
+            cx_mid = (min(xs) + max(xs)) // 2
+            cy_mid = (min(ys) + max(ys)) // 2
+            bone_col = named_palette("bone_relic", 0.8)
+            scale = max(1.0, w / 32.0)
+            if direction != "back":
+                rib_y_list = [cy_mid - int(3 * scale), cy_mid, cy_mid + int(3 * scale)]
+                rib_w = int(4 * scale)
+                for rib_y in rib_y_list:
+                    for dx in range(-rib_w, rib_w + 1):
+                        if abs(dx) >= int(2 * scale) and canvas.opaque(cx_mid + dx, rib_y):
+                            canvas.set(cx_mid + dx, rib_y, bone_col, TAG_METAL)
+                heart_col = (245, 45, 65) if action == "attack" and frame in (1, 2) else (175, 25, 42)
+                heart_hi = (255, 140, 150) if action == "attack" and frame in (1, 2) else (215, 65, 80)
+                hrx = 2.0 * scale
+                hry = 2.6 * scale
+                def sdf_heart(px, py, cx=cx_mid, cy=cy_mid, rx=hrx, ry=hry):
+                    return sd_rhombus(px, py, cx, cy, rx, ry)
+                rasterize_sdf(canvas, sdf_heart, heart_col, heart_hi, color.darken(heart_col, 0.4), TAG_ACCENT)
+            else:
+                spine_h = int(6 * scale)
+                for dy in range(-spine_h, spine_h + 1):
+                    canvas.set(cx_mid, cy_mid + dy, bone_col, TAG_METAL)
+
+        # Golem stone shoulder plating and ward core
+        if archetype == "golem" and xs:
+            minx, maxx, miny, maxy = min(xs), max(xs), min(ys), max(ys)
+            cx_mid = (minx + maxx) // 2
+            cy_mid = (miny + maxy) // 2
+            scale = max(1.0, w / 32.0)
+            stone_dark = color.darken(base, 0.35)
+            stone_hi = color.lighten(base, 0.25)
+            p_y = miny + int((maxy - miny) * 0.25)
+            sh_size = 3.0 * scale
+            for sign in (-1, 1):
+                px_c = cx_mid + sign * int((maxx - minx) * 0.36)
+                def sdf_sh(px, py, px_c=px_c, p_y=p_y, s_sz=sh_size):
+                    return sd_round_box(px, py, px_c, p_y, s_sz, s_sz, 0.8)
+                rasterize_sdf(canvas, sdf_sh, base, stone_hi, stone_dark, TAG_BODY)
+            if direction != "back":
+                pulse = action == "attack" and frame in (1, 2)
+                core_col = (185, 247, 235) if pulse else (55, 195, 190)
+                core_hi = (245, 255, 250) if pulse else (185, 247, 235)
+                crx = 2.0 * scale
+                cry = 2.4 * scale
+                def sdf_core(px, py, cx=cx_mid, cy=cy_mid, rx=crx, ry=cry):
+                    return sd_rhombus(px, py, cx, cy - 1, rx, ry)
+                rasterize_sdf(canvas, sdf_core, core_col, core_hi, color.darken(core_col, 0.4), TAG_ACCENT)
+            else:
+                for dy in (-2, 0, 2):
+                    for dx in (-2, -1, 1, 2):
+                        canvas.set(cx_mid + int(dx * scale), cy_mid + int(dy * scale), (25, 22, 28), TAG_METAL)
+
+        # Wraith trailing spectral mist tendrils
+        if archetype == "tentacle" and xs:
+            minx, maxx, maxy = min(xs), max(xs), max(ys)
+            cx_mid = (minx + maxx) // 2
+            scale = max(1.0, w / 32.0)
+            sway = (-1, 0, 1, 0)[frame % 4]
+            for tx_rel, length in ((-5, 6), (-2, 8), (2, 7), (5, 5)):
+                tx = cx_mid + int(tx_rel * scale)
+                t_len = int(length * scale)
+                for step in range(t_len):
+                    ty = maxy - 2 + step
+                    sw = sway if step > 2 else 0
+                    if 0 <= tx + sw < w and 0 <= ty < h:
+                        fade = step / float(t_len)
+                        col = color.mix(base, (10, 24, 28), fade)
+                        canvas.set(tx + sw, ty, col, TAG_BODY)
 
         # spots
         if xs:
@@ -270,23 +359,46 @@ class CreatureSpriteGenerator(SpriteGenerator):
                     canvas.set(sx, sy, color.mix(base, belly, 0.5), TAG_ACCENT)
                     canvas.set(sx + 1, sy, color.mix(base, belly, 0.35), TAG_ACCENT)
 
-        # eyes — place on the upper third of the silhouette
-        if xs:
+        # eyes (directional, not on back)
+        if direction != "back" and xs:
             minx, maxx, miny, maxy = min(xs), max(xs), min(ys), max(ys)
             ey = miny + max(2, int((maxy - miny) * 0.32))
-            n = geom["eyes"]
-            for i in range(n):
-                t = (i + 1) / (n + 1)
-                ex = int(minx + t * (maxx - minx))
-                if direction in ("left", "right") and n > 1 and i != n // 2:
-                    # profile: keep the nearest eye
-                    continue
-                if canvas.opaque(ex, ey) or canvas.opaque(ex, ey + 1):
-                    canvas.set(ex - 1, ey, (250, 250, 250), TAG_EYE)
-                    canvas.set(ex, ey, (250, 250, 250), TAG_EYE)
-                    canvas.set(ex + 1, ey, (250, 250, 250), TAG_EYE)
-                    canvas.set(ex, ey, accent, TAG_EYE)
-                    canvas.set(ex, ey + 1, color.darken(accent, 0.3), TAG_EYE)
+            if archetype == "tentacle":
+                cx_mid = (minx + maxx) // 2
+                if direction == "right":
+                    canvas.set(cx_mid + 1, ey - 1, (245, 255, 250), TAG_EYE)
+                    canvas.set(cx_mid + 3, ey, (185, 245, 235), TAG_EYE)
+                elif direction == "left":
+                    canvas.set(cx_mid - 3, ey, (185, 245, 235), TAG_EYE)
+                    canvas.set(cx_mid - 1, ey - 1, (245, 255, 250), TAG_EYE)
+                else:
+                    canvas.set(cx_mid - 2, ey, (185, 245, 235), TAG_EYE)
+                    canvas.set(cx_mid, ey - 1, (245, 255, 250), TAG_EYE)
+                    canvas.set(cx_mid + 2, ey, (185, 245, 235), TAG_EYE)
+            else:
+                if direction == "right":
+                    ex = maxx - 3
+                    if 0 <= ex < w:
+                        canvas.set(ex, ey, (250, 250, 250), TAG_EYE)
+                        canvas.set(ex + 1, ey, accent, TAG_EYE)
+                        canvas.set(ex + 1, ey + 1, color.darken(accent, 0.3), TAG_EYE)
+                elif direction == "left":
+                    ex = minx + 2
+                    if 0 <= ex < w:
+                        canvas.set(ex + 1, ey, (250, 250, 250), TAG_EYE)
+                        canvas.set(ex, ey, accent, TAG_EYE)
+                        canvas.set(ex, ey + 1, color.darken(accent, 0.3), TAG_EYE)
+                else:
+                    n = geom["eyes"]
+                    for i in range(n):
+                        t = (i + 1) / (n + 1)
+                        ex = int(minx + t * (maxx - minx))
+                        if canvas.opaque(ex, ey) or canvas.opaque(ex, ey + 1):
+                            canvas.set(ex - 1, ey, (250, 250, 250), TAG_EYE)
+                            canvas.set(ex, ey, (250, 250, 250), TAG_EYE)
+                            canvas.set(ex + 1, ey, (250, 250, 250), TAG_EYE)
+                            canvas.set(ex, ey, accent, TAG_EYE)
+                            canvas.set(ex, ey + 1, color.darken(accent, 0.3), TAG_EYE)
 
         # mouth (wider, pale-toothed snarl through the attack impact)
         if xs:

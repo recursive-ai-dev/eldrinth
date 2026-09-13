@@ -19,7 +19,7 @@ CATALOG = {
     },
     "enemy.boss": {
         "kind": "creature", "archetype": "biped", "seed": "eldrinth-boss-01",
-        "palette": "corrupted_flesh", "anims": ["walk", "attack"],
+        "palette": "corrupted_flesh", "anims": ["walk", "attack"], "size": 64,
     },
     "item.shard": {
         "kind": "item", "category": "gem", "seed": "eldrinth-item-shard-01",
@@ -29,10 +29,18 @@ CATALOG = {
         "kind": "item", "category": "potion", "seed": "eldrinth-item-potion-01",
         "palette": "cult_blood",
     },
+    "prop.campfire": {
+        "kind": "prop", "seed": "eldrinth-prop-campfire-01", "prop_type": "campfire",
+        "palette": "rusted_stone", "anims": ["idle"], "frames": 4, "directions": ["front"],
+    },
+    "prop.sign": {
+        "kind": "prop", "seed": "eldrinth-prop-sign-01", "prop_type": "sign",
+        "palette": "rusted_stone",
+    },
 
     "tile.grass":          {"kind": "tile", "seed": "eldrinth-tile-grass",          "tile_kind": "grass", "palette": "sickly_green", "autotile": True},
     "tile.dgrass":         {"kind": "tile", "seed": "eldrinth-tile-dgrass",         "tile_kind": "moss",  "palette": "sickly_green", "feature": "darken"},
-    "tile.path":           {"kind": "tile", "seed": "eldrinth-tile-path",           "tile_kind": "dirt",  "palette": "rusted_stone"},
+    "tile.path":           {"kind": "tile", "seed": "eldrinth-tile-path",           "tile_kind": "dirt",  "palette": "rusted_stone", "autotile": True},
     "tile.water":          {"kind": "tile", "seed": "eldrinth-tile-water",          "tile_kind": "water", "palette": "black_water", "autotile": True},
     "tile.tree":           {"kind": "tile", "seed": "eldrinth-tile-tree",           "tile_kind": "grass", "palette": "sickly_green", "feature": "tree"},
     "tile.rock":           {"kind": "tile", "seed": "eldrinth-tile-rock",           "tile_kind": "grass", "palette": "sickly_green", "feature": "rock"},
@@ -45,7 +53,7 @@ CATALOG = {
     "tile.bones":          {"kind": "tile", "seed": "eldrinth-tile-bones",          "tile_kind": "grass", "palette": "sickly_green", "feature": "bones"},
     "tile.tallgrass":      {"kind": "tile", "seed": "eldrinth-tile-tallgrass",      "tile_kind": "grass", "palette": "sickly_green", "feature": "tallgrass"},
     "tile.spirefloor":     {"kind": "tile", "seed": "eldrinth-tile-spirefloor",     "tile_kind": "cobble", "palette": "black_water", "feature": "rune"},
-    "tile.sand":           {"kind": "tile", "seed": "eldrinth-tile-sand",           "tile_kind": "sand", "palette": "bone_relic"},
+    "tile.sand":           {"kind": "tile", "seed": "eldrinth-tile-sand",           "tile_kind": "sand", "palette": "bone_relic", "autotile": True},
     "tile.ledge":          {"kind": "tile", "seed": "eldrinth-tile-ledge",          "tile_kind": "stone", "palette": "rusted_stone", "feature": "ledge"},
     "tile.slope_up_left":  {"kind": "tile", "seed": "eldrinth-tile-slope-up-left",  "tile_kind": "dirt", "palette": "rusted_stone", "feature": "slope_left"},
     "tile.slope_up_right": {"kind": "tile", "seed": "eldrinth-tile-slope-up-right", "tile_kind": "dirt", "palette": "rusted_stone", "feature": "slope_right"},
@@ -69,3 +77,5 @@ ENEMY_KEY_BY_TYPE = {
 }
 
 ITEM_KEY_BY_TYPE = {"shard": "item.shard", "potion": "item.potion"}
+
+PROP_KEY_BY_TYPE = {"campfire": "prop.campfire", "sign": "prop.sign"}

@@ -23,7 +23,7 @@ from ..rng import clamp, gaussian
 from ..math.canvas import (
     Canvas, TAG_SKIN, TAG_CLOTH, TAG_HAIR, TAG_EYE, TAG_ACCENT, TAG_OUTLINE, TAG_METAL,
 )
-from ..math.sdf import sd_capsule, sd_ellipse, sd_round_box, sd_circle, rasterize_sdf, op_union
+from ..math.sdf import sd_capsule, sd_ellipse, sd_round_box, sd_circle, rasterize_sdf, op_union, sd_rhombus
 from ..math.palette import named_palette, shade_triplet, cosine_palette, PALETTES
 from ..math.pose import Rig, walk_pose, attack_pose, project_point, DIRECTIONS
 from ..pipeline import finalize, options_from
@@ -187,7 +187,16 @@ class HumanSpriteGenerator(SpriteGenerator):
             has_glasses, has_jewelry, has_hat, gender, direction, frame,
             opt["frames"], action, role,
         )
-        outline = color.darken(skin, 0.55)
+        # Upstream humans derive their silhouette ink from skin tone. That is
+        # suitable for civilian sprites, but it turns one-pixel armor and
+        # weapon edges brown during finalization. Combat roles use their own
+        # dark equipment ink so steel and ritual silhouettes stay readable.
+        if role == "player":
+            outline = (10, 9, 13)
+        elif role == "adept":
+            outline = (10, 6, 12)
+        else:
+            outline = color.darken(skin, 0.55)
         canvas = finalize(
             canvas,
             outline=outline,
@@ -476,24 +485,25 @@ class HumanSpriteGenerator(SpriteGenerator):
             if not dress:
                 draw_leg(hpl, kl, fl, False)
 
-        # head
+        # head and role equipment
         hx = (layout["head_w"] * 0.48) if not side else (layout["head_w"] * 0.46)
         hy = layout["head_h"] * 0.48
-        ell(hd[0], hd[1], hx, hy, skin_b, skin_hi, skin_sh, TAG_SKIN)
 
-        # hair
-        self._hair(canvas, hd, hx, hy, hair_b, hair_hi, hair_sh, hair_style, direction, side, back)
-
-        # face (not on back)
-        if not back:
-            self._face(canvas, rig, direction, cx, skin_b, eye, facial_hair, hair_b, gender, side)
-
-        if has_glasses and not back:
-            self._glasses(canvas, rig, direction, cx)
-        if has_hat:
-            self._hat(canvas, hd, hx, hair_style)
-        if has_jewelry and not back:
-            self._jewelry(canvas, nk, hd, gender)
+        if role == "player":
+            self._knight_equipment(canvas, rig, direction, action, frame, layout, cx)
+        elif role == "adept":
+            self._adept_equipment(canvas, rig, direction, action, frame, layout, cx)
+        else:
+            ell(hd[0], hd[1], hx, hy, skin_b, skin_hi, skin_sh, TAG_SKIN)
+            self._hair(canvas, hd, hx, hy, hair_b, hair_hi, hair_sh, hair_style, direction, side, back)
+            if not back:
+                self._face(canvas, rig, direction, cx, skin_b, eye, facial_hair, hair_b, gender, side)
+            if has_glasses and not back:
+                self._glasses(canvas, rig, direction, cx)
+            if has_hat:
+                self._hat(canvas, hd, hx, hair_style)
+            if has_jewelry and not back:
+                self._jewelry(canvas, nk, hd, gender)
 
         if role in ("player", "adept"):
             self._weapon(canvas, hr, direction, action, frame, role)
@@ -510,7 +520,7 @@ class HumanSpriteGenerator(SpriteGenerator):
             glow = named_palette("cult_blood", 0.82)
             tx = hx + (sign * 7 if impact and direction in ("left", "right") else sign * 2)
             ty = hy - (2 if impact else 8)
-            rasterize_sdf(canvas, lambda px, py: sd_capsule(px, py, hx, hy + 6, tx, ty, 0.8),
+            rasterize_sdf(canvas, lambda px, py: sd_capsule(px, py, hx, hy + 6, tx, ty, 1.15),
                           shaft, color.lighten(shaft, 0.2), color.darken(shaft, 0.3), TAG_METAL)
             rasterize_sdf(canvas, lambda px, py: sd_circle(px, py, tx, ty, 2.0),
                           glow, color.lighten(glow, 0.35), color.darken(glow, 0.25), TAG_ACCENT)
@@ -523,12 +533,210 @@ class HumanSpriteGenerator(SpriteGenerator):
         else:
             swing = (5 if impact else 2) * (-1 if direction == "back" else 1)
             tx, ty = hx + swing, hy - (8 if not impact else 3)
-        rasterize_sdf(canvas, lambda px, py: sd_capsule(px, py, hx, hy, tx, ty, 0.9),
+        rasterize_sdf(canvas, lambda px, py: sd_capsule(px, py, hx, hy, tx, ty, 1.25),
                       steel, color.lighten(steel, 0.38), color.darken(steel, 0.28), TAG_METAL)
         # A dark red crossguard makes the tiny weapon readable at native scale.
         gx, gy = hx, hy
-        rasterize_sdf(canvas, lambda px, py: sd_capsule(px, py, gx - 2, gy, gx + 2, gy, 0.65),
+        rasterize_sdf(canvas, lambda px, py: sd_capsule(px, py, gx - 2, gy, gx + 2, gy, 1.0),
                       blood, color.lighten(blood, 0.2), color.darken(blood, 0.3), TAG_ACCENT)
+
+    def _knight_equipment(self, canvas, rig, direction, action, frame, layout, cx):
+        side = direction in ("left", "right")
+        back = direction == "back"
+        sign = 1 if direction == "right" else -1
+
+        def P(name):
+            return self._pj(rig, name, direction, cx)
+
+        hd = P("head"); nk = P("neck"); ts = P("torso"); hp = P("hip")
+        sl = P("shoulder_l"); sr = P("shoulder_r")
+        el = P("elbow_l"); er = P("elbow_r")
+        hl = P("hand_l"); hr = P("hand_r")
+        kl = P("knee_l"); kr = P("knee_r")
+        fl = P("foot_l"); fr = P("foot_r")
+
+        steel = named_palette("grim_steel", 0.72)
+        steel_hi, steel_b, steel_sh = shade_triplet(steel, 0.28, 0.32)
+        ink = (10, 9, 13)
+        cyan = (57, 197, 191)
+        cyan_hi = (185, 247, 230)
+        cape_dark = (22, 26, 36)
+        cape_lining = (64, 22, 28)
+
+        def cap(ax, ay, bx, by, r, fill, hi, sh, tag, ink=None):
+            def sdf(px, py):
+                return sd_capsule(px, py, ax, ay, bx, by, r)
+            rasterize_sdf(canvas, sdf, fill, hi, sh, tag, ink=ink, ink_width=0.55)
+
+        def rbox(cx_, cy_, hx, hy, rad, fill, hi, sh, tag, ink=None):
+            def sdf(px, py):
+                return sd_round_box(px, py, cx_, cy_, hx, hy, rad)
+            rasterize_sdf(canvas, sdf, fill, hi, sh, tag, ink=ink, ink_width=0.55)
+
+        # 1. CAPE (Back layer)
+        if back:
+            def cape_sdf(px, py):
+                top_y = min(sl[1], sr[1]) - 0.5
+                bot_y = max(fl[1], fr[1]) - 1.0
+                if py < top_y or py > bot_y:
+                    return 999.0
+                t = (py - top_y) / max(1.0, bot_y - top_y)
+                half_w = 4.0 + t * 4.5
+                mid_x = (sl[0] + sr[0]) * 0.5
+                return abs(px - mid_x) - half_w
+            rasterize_sdf(canvas, cape_sdf, cape_dark, color.lighten(cape_dark, 0.15), color.darken(cape_dark, 0.3), TAG_CLOTH, ink=ink)
+            bot_y = int(max(fl[1], fr[1]) - 2.0)
+            cx_mid = int((sl[0] + sr[0]) * 0.5)
+            for dx in range(-6, 7):
+                if canvas.opaque(cx_mid + dx, bot_y):
+                    canvas.set(cx_mid + dx, bot_y, cape_lining, TAG_CLOTH)
+        elif side:
+            def side_cape_sdf(px, py):
+                top_y = min(sl[1], sr[1])
+                bot_y = max(fl[1], fr[1]) - 2.0
+                if py < top_y or py > bot_y:
+                    return 999.0
+                t = (py - top_y) / max(1.0, bot_y - top_y)
+                start_x = ts[0] - sign * 1.0
+                end_x = ts[0] - sign * (4.2 + t * 2.5)
+                min_x = min(start_x, end_x)
+                max_x = max(start_x, end_x)
+                if px < min_x or px > max_x:
+                    return 999.0
+                return -1.0
+            rasterize_sdf(canvas, side_cape_sdf, cape_dark, color.lighten(cape_dark, 0.15), color.darken(cape_dark, 0.3), TAG_CLOTH, ink=ink)
+        else:
+            for side_sign in (-1, 1):
+                def front_cape_sdf(px, py, sgn=side_sign):
+                    top_y = ts[1]
+                    bot_y = max(fl[1], fr[1]) - 2.0
+                    if py < top_y or py > bot_y:
+                        return 999.0
+                    t = (py - top_y) / max(1.0, bot_y - top_y)
+                    cx_c = ts[0] + sgn * (4.0 + t * 2.2)
+                    return abs(px - cx_c) - 1.2
+                rasterize_sdf(canvas, front_cape_sdf, cape_dark, color.lighten(cape_dark, 0.12), color.darken(cape_dark, 0.3), TAG_CLOTH)
+
+        # 2. CUIRASS & FAULDS & PAULDRONS
+        torso_hx = 3.8 if not side else 3.4
+        torso_hy = layout["torso_h"] * 0.55
+        rbox(ts[0], (ts[1] + hp[1]) * 0.5, torso_hx, max(torso_hy, abs(hp[1] - ts[1]) * 0.55 + 1.2),
+             1.2, steel_b, steel_hi, steel_sh, TAG_METAL, ink=ink)
+
+        p_hx = 2.6 if not side else 2.2
+        rbox(sl[0], sl[1] - 0.5, p_hx, 2.0, 0.8, steel_b, steel_hi, steel_sh, TAG_METAL, ink=ink)
+        rbox(sr[0], sr[1] - 0.5, p_hx, 2.0, 0.8, steel_b, steel_hi, steel_sh, TAG_METAL, ink=ink)
+
+        # Articulated plate sleeves, vambraces, gauntlets, and sabatons. The
+        # arm overlays are especially important in the side attack frames:
+        # without them the extended skin-coloured rig reads as a wooden bar.
+        cap(sl[0], sl[1], el[0], el[1], 1.45, steel_b, steel_hi, steel_sh, TAG_METAL, ink=ink)
+        cap(sr[0], sr[1], er[0], er[1], 1.45, steel_b, steel_hi, steel_sh, TAG_METAL, ink=ink)
+        cap(el[0], el[1], hl[0], hl[1], 1.3, steel_b, steel_hi, steel_sh, TAG_METAL, ink=ink)
+        cap(er[0], er[1], hr[0], hr[1], 1.3, steel_b, steel_hi, steel_sh, TAG_METAL, ink=ink)
+        rbox(hl[0], hl[1], 1.2, 1.1, 0.45, steel_b, steel_hi, steel_sh, TAG_METAL, ink=ink)
+        rbox(hr[0], hr[1], 1.2, 1.1, 0.45, steel_b, steel_hi, steel_sh, TAG_METAL, ink=ink)
+        cap(kl[0], kl[1], fl[0], fl[1], 1.6, steel_b, steel_hi, steel_sh, TAG_METAL, ink=ink)
+        cap(kr[0], kr[1], fr[0], fr[1], 1.6, steel_b, steel_hi, steel_sh, TAG_METAL, ink=ink)
+
+        # 3. OATH-MARK (Cyan chest rune)
+        if not back:
+            rx = ts[0] if not side else (ts[0] + sign * 1.8)
+            ry = ts[1]
+            def rune_sdf(px, py):
+                return sd_rhombus(px, py, rx, ry, 1.4, 1.8)
+            rasterize_sdf(canvas, rune_sdf, cyan, cyan_hi, color.darken(cyan, 0.3), TAG_ACCENT)
+            canvas.set(int(round(rx)), int(round(ry)), cyan_hi, TAG_ACCENT)
+
+        # Gorget (neck armour) connecting chest to helm
+        mid_sh_y = (sl[1] + sr[1]) * 0.5
+        gorget_y = (hd[1] + mid_sh_y) * 0.5 + 0.5
+        rbox(hd[0], gorget_y, 2.6 if not side else 2.4, 2.0, 0.6, steel_b, steel_hi, steel_sh, TAG_METAL, ink=ink)
+
+        # 4. GREATHELM (Direction-aware, seated on gorget)
+        helm_y = hd[1] + 0.5
+        def helm_sdf(px, py):
+            d1 = sd_round_box(px, py, hd[0], helm_y, 3.2 if not side else 2.8, 2.8, 1.1)
+            d2 = sd_capsule(px, py, hd[0], helm_y, hd[0], helm_y - 1.2, 2.6 if not side else 2.3)
+            return min(d1, d2)
+        rasterize_sdf(canvas, helm_sdf, steel_b, steel_hi, steel_sh, TAG_METAL, ink=ink, ink_width=0.55)
+
+        if not back:
+            if not side:
+                vy = int(round(helm_y))
+                vx = int(round(hd[0]))
+                for dx in range(-2, 3):
+                    canvas.set(vx + dx, vy, ink, TAG_METAL)
+                canvas.set(vx - 1, vy, cyan, TAG_ACCENT)
+                canvas.set(vx, vy, cyan_hi, TAG_ACCENT)
+                canvas.set(vx + 1, vy, cyan, TAG_ACCENT)
+                canvas.set(vx, vy - 2, steel_hi, TAG_METAL)
+            else:
+                vx = int(round(hd[0] + sign * 1.8))
+                vy = int(round(helm_y))
+                canvas.set(vx, vy, ink, TAG_METAL)
+                canvas.set(vx + sign, vy, cyan_hi, TAG_ACCENT)
+                canvas.set(vx, vy + 1, steel_sh, TAG_METAL)
+                canvas.set(int(round(hd[0] - sign)), vy - 2, steel_hi, TAG_METAL)
+        else:
+            vx = int(round(hd[0]))
+            for dy in range(-2, 2):
+                canvas.set(vx, int(round(helm_y)) + dy, steel_hi, TAG_METAL)
+
+    def _adept_equipment(self, canvas, rig, direction, action, frame, layout, cx):
+        side = direction in ("left", "right")
+        back = direction == "back"
+        sign = 1 if direction == "right" else -1
+
+        def P(name):
+            return self._pj(rig, name, direction, cx)
+
+        hd = P("head"); nk = P("neck"); ts = P("torso"); hp = P("hip")
+        fl = P("foot_l"); fr = P("foot_r")
+
+        blood_b = named_palette("cult_blood", 0.65)
+        blood_hi, blood_b, blood_sh = shade_triplet(blood_b, 0.25, 0.32)
+        void_black = (14, 8, 16)
+        blood_eye = (235, 45, 65)
+        blood_eye_hi = (255, 120, 140)
+        ink = (10, 6, 12)
+
+        def rbox(cx_, cy_, hx, hy, rad, fill, hi, sh, tag, ink=None):
+            def sdf(px, py):
+                return sd_round_box(px, py, cx_, cy_, hx, hy, rad)
+            rasterize_sdf(canvas, sdf, fill, hi, sh, tag, ink=ink, ink_width=0.55)
+
+        # Robe flowing from shoulders to feet
+        bot_y = max(fl[1], fr[1])
+        rbox(ts[0], (ts[1] + bot_y) * 0.5, 3.8 if not side else 3.2, (bot_y - ts[1]) * 0.5 + 1.0,
+             1.4, blood_b, blood_hi, blood_sh, TAG_CLOTH, ink=ink)
+
+        # Hood / Cowl
+        def cowl_sdf(px, py):
+            d1 = sd_round_box(px, py, hd[0], hd[1] + 0.8, 3.5 if not side else 3.1, 2.8, 0.8)
+            d2 = sd_capsule(px, py, hd[0], hd[1] - 0.2, hd[0], hd[1] - 3.2, 2.2 if not side else 1.9)
+            return min(d1, d2)
+        rasterize_sdf(canvas, cowl_sdf, void_black, color.lighten(void_black, 0.2), ink, TAG_CLOTH, ink=ink, ink_width=0.55)
+
+        if not back:
+            ey = int(round(hd[1]))
+            if not side:
+                ex = int(round(hd[0]))
+                canvas.set(ex - 1, ey, blood_eye, TAG_EYE)
+                canvas.set(ex + 1, ey, blood_eye, TAG_EYE)
+                canvas.set(ex - 1, ey - 1, blood_eye_hi, TAG_EYE)
+                canvas.set(ex + 1, ey - 1, blood_eye_hi, TAG_EYE)
+            else:
+                ex = int(round(hd[0] + sign * 1.5))
+                canvas.set(ex, ey, blood_eye, TAG_EYE)
+                canvas.set(ex, ey - 1, blood_eye_hi, TAG_EYE)
+        else:
+            by = int(round(ts[1]))
+            bx = int(round(ts[0]))
+            for dy in (-1, 0, 1):
+                canvas.set(bx, by + dy, (170, 32, 45), TAG_ACCENT)
+            for dx in (-1, 1):
+                canvas.set(bx + dx, by, (170, 32, 45), TAG_ACCENT)
 
     def _hair(self, canvas, hd, hx, hy, hair_b, hair_hi, hair_sh, style, direction, side, back):
         cx, cy = hd[0], hd[1]

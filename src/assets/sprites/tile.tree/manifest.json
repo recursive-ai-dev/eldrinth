@@ -1,15 +1,15 @@
 {
   "autotile": false,
-  "cellH": 16,
-  "cellW": 16,
+  "cellH": 32,
+  "cellW": 32,
   "frames": 4,
   "kind": "tile",
   "masks": 1,
   "pixelHashes": [
-    "7a56b80663835d0a05b220ea29bdb5be",
-    "b578a3c078fbd37ce4e84f9232957aa6",
-    "11343ea3072d7d4485117d69f9ec28f4",
-    "397a583a906f1bc25fa256378f7571d5"
+    "7ec9a248a2f884f1584cbeceab5e2412",
+    "eaeb366f05d59b8362da6b865bc6f78d",
+    "d55b619cf287da41f67f845eabe297f1",
+    "fc4cbb0503d5620e5a17cece54625dab"
   ],
   "static": true,
   "variants": 4

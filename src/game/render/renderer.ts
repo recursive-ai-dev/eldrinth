@@ -35,6 +35,8 @@ export const ENTITY_SPRITE_KEY: Record<string, string> = {
   boss: "enemy.boss",
   shard: "item.shard",
   potion: "item.potion",
+  campfire: "prop.campfire",
+  sign: "prop.sign",
 };
 
 const tileAtlases = new Map<number, SpriteAtlas>();
@@ -92,12 +94,14 @@ function drawEntitySprite(
   if (!atlas.ready || !atlas.image) return false;
   const frame = atlas.getFrame(toSpriteDirection(direction), action, Math.floor(animT * 8));
   if (!frame) return false;
+  const size = Math.round(drawSize);
+  const half = Math.round(size / 2);
   const smoothing = ctx.imageSmoothingEnabled;
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(
     atlas.image,
     frame.sx, frame.sy, frame.sw, frame.sh,
-    -drawSize / 2, -drawSize / 2, drawSize, drawSize,
+    -half, -half, size, size,
   );
   ctx.imageSmoothingEnabled = smoothing;
   return true;
@@ -114,12 +118,14 @@ function drawStaticSprite(
   if (!atlas.ready || !atlas.image) return false;
   const frame = atlas.getStaticFrame();
   if (!frame) return false;
+  const size = Math.round(drawSize);
+  const half = Math.round(size / 2);
   const smoothing = ctx.imageSmoothingEnabled;
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(
     atlas.image,
     frame.sx, frame.sy, frame.sw, frame.sh,
-    x - drawSize / 2, y - drawSize / 2, drawSize, drawSize,
+    Math.round(x) - half, Math.round(y) - half, size, size,
   );
   ctx.imageSmoothingEnabled = smoothing;
   return true;
@@ -258,8 +264,11 @@ export class TileChunkRenderer {
         const ty = startY + y;
         if (tx >= this.map.width || ty >= this.map.height) continue;
         const tile = this.map.tiles[ty * this.map.width + tx];
-        drawTile(groundCtx, tile, x * TILE, y * TILE, tx * TILE, ty * TILE, this.wangMask(tx, ty, tile));
-        if (tileDefinition(tile).tall) drawTallOverlay(overlayCtx, tile, x * TILE, y * TILE);
+        const mask = this.wangMask(tx, ty, tile);
+        drawTile(groundCtx, tile, x * TILE, y * TILE, tx * TILE, ty * TILE, mask);
+        if (tileDefinition(tile).tall) {
+          drawTallOverlay(overlayCtx, tile, x * TILE, y * TILE, tx * TILE, ty * TILE, mask);
+        }
       }
     }
     const made = { ground, overlay, lastUsed: this.frame };
@@ -287,7 +296,9 @@ export class TileChunkRenderer {
   }
 
   private wangMask(x: number, y: number, tile: number): number {
-    if (tile !== T.GRASS && tile !== T.WATER) return 0;
+    const atlas = tileAtlasFor(tile);
+    const autotile = atlas?.manifest?.autotile ?? (tile === T.GRASS || tile === T.WATER);
+    if (!autotile) return 0;
     const same = (xx: number, yy: number) => {
       if (xx < 0 || yy < 0 || xx >= this.map.width || yy >= this.map.height) return true;
       return this.map.tiles[yy * this.map.width + xx] === tile;
@@ -312,8 +323,9 @@ export function drawTile(
   const s = TILE;
   const atlas = tileAtlasFor(t);
   if (atlas?.ready && atlas.image) {
+    const autotile = atlas.manifest?.autotile ?? (t === T.GRASS || t === T.WATER);
     const variant = Math.floor(hash2(seedX, seedY) * 4);
-    const frameIndex = (t === T.GRASS || t === T.WATER) ? wangMask * 4 + variant : variant;
+    const frameIndex = autotile ? wangMask * 4 + variant : variant;
     const frame = atlas.getStaticFrame(frameIndex);
     if (frame) {
       const smoothing = ctx.imageSmoothingEnabled;
@@ -576,8 +588,36 @@ export function drawTile(
 }
 
 /** The portion of a tall tile that must occlude actors below it. */
-function drawTallOverlay(ctx: CanvasRenderingContext2D, tile: number, x: number, y: number) {
+function drawTallOverlay(
+  ctx: CanvasRenderingContext2D,
+  tile: number,
+  x: number,
+  y: number,
+  seedX = x,
+  seedY = y,
+  wangMask = 0,
+) {
   const s = TILE;
+  const atlas = tileAtlasFor(tile);
+  if (atlas?.ready && atlas.image) {
+    const autotile = atlas.manifest?.autotile ?? false;
+    const variant = Math.floor(hash2(seedX, seedY) * 4);
+    const frameIndex = autotile ? wangMask * 4 + variant : variant;
+    const frame = atlas.getStaticFrame(frameIndex);
+    if (frame) {
+      const cutH = Math.floor(frame.sh * 0.60);
+      const destH = Math.floor(s * 0.60);
+      const smoothing = ctx.imageSmoothingEnabled;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(
+        atlas.image,
+        frame.sx, frame.sy, frame.sw, cutH,
+        x, y, s, destH,
+      );
+      ctx.imageSmoothingEnabled = smoothing;
+      return;
+    }
+  }
   ctx.save();
   if (tile === T.TREE) {
     ctx.fillStyle = "rgba(10, 25, 8, 0.58)";
@@ -665,9 +705,9 @@ function drawWardBarrier(g: RenderState, ctx: CanvasRenderingContext2D) {
 
 function drawItem(_g: RenderState, ctx: CanvasRenderingContext2D, it: ItemState) {
   ctx.save();
-  const yo = Math.sin(it.t * 2) * 3;
-  const x = it.x;
-  const y = it.y + yo;
+  const yo = Math.round(Math.sin(it.t * 2) * 3);
+  const x = Math.round(it.x);
+  const y = Math.round(it.y) + yo;
   const glowColor = it.type === "shard" ? "80,240,220" : "255,90,90";
   const glowRadius = it.type === "shard" ? 20 : 16;
   ctx.globalCompositeOperation = "lighter";
@@ -677,7 +717,7 @@ function drawItem(_g: RenderState, ctx: CanvasRenderingContext2D, it: ItemState)
   ctx.fillStyle = spriteGlow;
   ctx.fillRect(x - glowRadius, y - glowRadius, glowRadius * 2, glowRadius * 2);
   ctx.globalCompositeOperation = "source-over";
-  if (drawStaticSprite(ctx, it.type, x, y, it.type === "shard" ? 30 : 28)) {
+  if (drawStaticSprite(ctx, it.type, x, y, 24)) {
     ctx.restore();
     return;
   }
@@ -735,16 +775,19 @@ function drawSortedWorldObjects(g: RenderState, ctx: CanvasRenderingContext2D) {
   for (const sign of g.map.signs) {
     const x = sign.x * TILE + TILE / 2, y = sign.y * TILE + TILE / 2;
     objects.push({ y, draw: () => {
+      const ix = Math.round(x);
+      const iy = Math.round(y);
+      if (drawStaticSprite(ctx, "sign", ix, iy, 32)) return;
       ctx.save();
       ctx.fillStyle = "#382b23";
-      ctx.fillRect(x - 2, y - 4, 4, 13);
+      ctx.fillRect(ix - 2, iy - 4, 4, 13);
       ctx.fillStyle = "#b9a27b";
       ctx.strokeStyle = "#44362b";
       ctx.lineWidth = 2;
-      ctx.fillRect(x - 10, y - 18, 20, 15);
-      ctx.strokeRect(x - 10, y - 18, 20, 15);
+      ctx.fillRect(ix - 10, iy - 18, 20, 15);
+      ctx.strokeRect(ix - 10, iy - 18, 20, 15);
       ctx.fillStyle = "#5e4d3a";
-      for (let line = 0; line < 3; line++) ctx.fillRect(x - 6, y - 14 + line * 4, 12 - line * 2, 1);
+      for (let line = 0; line < 3; line++) ctx.fillRect(ix - 6, iy - 14 + line * 4, 12 - line * 2, 1);
       ctx.restore();
     } });
   }
@@ -757,30 +800,39 @@ function drawSortedWorldObjects(g: RenderState, ctx: CanvasRenderingContext2D) {
 }
 
 function drawCampfire(g: RenderState, ctx: CanvasRenderingContext2D, x: number, y: number) {
-  const flicker = Math.sin(g.time * 11 + x) * 2;
+  const ix = Math.round(x);
+  const iy = Math.round(y);
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
-  const glow = ctx.createRadialGradient(x, y - 6, 2, x, y - 6, 34);
-  glow.addColorStop(0, "rgba(255,190,85,0.72)");
+  const glow = ctx.createRadialGradient(ix, iy - 6, 2, ix, iy - 6, 36);
+  glow.addColorStop(0, "rgba(255,190,85,0.75)");
+  glow.addColorStop(0.5, "rgba(255,130,40,0.3)");
   glow.addColorStop(1, "rgba(255,130,40,0)");
   ctx.fillStyle = glow;
   ctx.beginPath();
-  ctx.arc(x, y - 6, 34, 0, Math.PI * 2);
+  ctx.arc(ix, iy - 6, 36, 0, Math.PI * 2);
   ctx.fill();
   ctx.globalCompositeOperation = "source-over";
+
+  ctx.translate(ix, iy);
+  if (drawEntitySprite(ctx, "campfire", "front", "idle", g.time, 32)) {
+    ctx.restore();
+    return;
+  }
+  const flicker = Math.sin(g.time * 11 + x) * 2;
   ctx.strokeStyle = "#4b3020";
   ctx.lineWidth = 4;
   ctx.beginPath();
-  ctx.moveTo(x - 10, y + 7); ctx.lineTo(x + 10, y + 7);
-  ctx.moveTo(x - 8, y + 11); ctx.lineTo(x + 8, y + 3);
+  ctx.moveTo(-10, 7); ctx.lineTo(10, 7);
+  ctx.moveTo(-8, 11); ctx.lineTo(8, 3);
   ctx.stroke();
   ctx.fillStyle = "#ffb14d";
   ctx.beginPath();
-  ctx.moveTo(x, y + 5); ctx.quadraticCurveTo(x - 11, y - 5, x + flicker, y - 22); ctx.quadraticCurveTo(x + 13, y - 4, x, y + 5);
+  ctx.moveTo(0, 5); ctx.quadraticCurveTo(-11, -5, flicker, -22); ctx.quadraticCurveTo(13, -4, 0, 5);
   ctx.fill();
   ctx.fillStyle = "#fff0ac";
   ctx.beginPath();
-  ctx.arc(x, y - 5, 4, 0, Math.PI * 2);
+  ctx.arc(0, -5, 4, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 }
@@ -790,13 +842,15 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: EnemyState) {
   if (e.telegraph) drawTelegraph(ctx, e);
   if (e.type === "boss") return drawBoss(ctx, e);
   const a = e.dying > 0 ? Math.max(0, e.dying / 0.45) : 1;
+  const ex = Math.round(e.x);
+  const ey = Math.round(e.y);
   ctx.save();
   ctx.globalAlpha = a;
   ctx.fillStyle = "rgba(0,0,0,0.32)";
   ctx.beginPath();
-  ctx.ellipse(e.x, e.y + e.r * 0.6, e.r * 0.8, e.r * 0.35, 0, 0, Math.PI * 2);
+  ctx.ellipse(ex, ey + Math.round(e.r * 0.6), Math.round(e.r * 0.8), Math.round(e.r * 0.35), 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.translate(e.x, e.y);
+  ctx.translate(ex, ey);
   if (e.type === "wraith") drawWraith(ctx, e);
   else if (e.type === "sentinel") drawSentinel(ctx, e);
   else if (e.type === "adept") drawAdept(ctx, e);
@@ -830,7 +884,7 @@ function drawTelegraph(ctx: CanvasRenderingContext2D, e: EnemyState) {
 }
 
 function drawWraith(ctx: CanvasRenderingContext2D, e: EnemyState) {
-  ctx.translate(0, e.bob);
+  ctx.translate(0, Math.round(e.bob));
   ctx.globalCompositeOperation = "lighter";
   const g = ctx.createRadialGradient(0, 0, 0, 0, 0, e.r * 1.6);
   g.addColorStop(0, "rgba(90,210,150,0.4)");
@@ -843,7 +897,7 @@ function drawWraith(ctx: CanvasRenderingContext2D, e: EnemyState) {
   const oldFilter = ctx.filter;
   if (e.hurt > 0) ctx.filter = "brightness(2.2) saturate(0.2)";
   const spriteDrawn = drawEntitySprite(
-    ctx, "wraith", enemySpriteDirection(e), e.telegraph ? "attack" : "walk", e.t, e.r * 3.1,
+    ctx, "wraith", enemySpriteDirection(e), e.telegraph ? "attack" : "walk", e.t, 32,
   );
   ctx.filter = oldFilter;
   if (spriteDrawn) return;
@@ -868,7 +922,7 @@ function drawSentinel(ctx: CanvasRenderingContext2D, e: EnemyState) {
   const oldFilter = ctx.filter;
   if (e.hurt > 0) ctx.filter = "brightness(2.2) saturate(0.2)";
   const spriteDrawn = drawEntitySprite(
-    ctx, "sentinel", enemySpriteDirection(e), e.telegraph ? "attack" : "walk", e.t, e.r * 3.0,
+    ctx, "sentinel", enemySpriteDirection(e), e.telegraph ? "attack" : "walk", e.t, 32,
   );
   ctx.filter = oldFilter;
   if (spriteDrawn) return;
@@ -915,11 +969,11 @@ function drawSentinel(ctx: CanvasRenderingContext2D, e: EnemyState) {
 }
 
 function drawAdept(ctx: CanvasRenderingContext2D, e: EnemyState) {
-  ctx.translate(0, Math.sin(e.t * 3) * 2);
+  ctx.translate(0, Math.round(Math.sin(e.t * 3) * 2));
   const oldFilter = ctx.filter;
   if (e.hurt > 0) ctx.filter = "brightness(2.2) saturate(0.2)";
   const spriteDrawn = drawEntitySprite(
-    ctx, "adept", enemySpriteDirection(e), e.telegraph ? "attack" : "walk", e.t, e.r * 3.2,
+    ctx, "adept", enemySpriteDirection(e), e.telegraph ? "attack" : "walk", e.t, 32,
   );
   ctx.filter = oldFilter;
   if (spriteDrawn) return;
@@ -957,13 +1011,15 @@ function drawAdept(ctx: CanvasRenderingContext2D, e: EnemyState) {
 function drawBoss(ctx: CanvasRenderingContext2D, e: EnemyState) {
   const a = e.dying > 0 ? Math.max(0, e.dying / 1.5) : 1;
   const danger = e.hp / e.maxHp < 0.5;
+  const bx = Math.round(e.x);
+  const by = Math.round(e.y);
   ctx.save();
   ctx.globalAlpha = a;
   ctx.fillStyle = "rgba(0,0,0,0.4)";
   ctx.beginPath();
-  ctx.ellipse(e.x, e.y + e.r * 0.7, e.r, e.r * 0.45, 0, 0, Math.PI * 2);
+  ctx.ellipse(bx, by + Math.round(e.r * 0.7), Math.round(e.r), Math.round(e.r * 0.45), 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.translate(e.x, e.y);
+  ctx.translate(bx, by);
   ctx.globalCompositeOperation = "lighter";
   const og = ctx.createRadialGradient(0, 0, 0, 0, 0, e.r * 1.8);
   og.addColorStop(0, danger ? "rgba(255,60,60,0.35)" : "rgba(60,210,255,0.35)");
@@ -976,7 +1032,7 @@ function drawBoss(ctx: CanvasRenderingContext2D, e: EnemyState) {
   const oldFilter = ctx.filter;
   if (e.hurt > 0) ctx.filter = "brightness(2.2) saturate(0.2)";
   const spriteDrawn = drawEntitySprite(
-    ctx, "boss", enemySpriteDirection(e), e.telegraph ? "attack" : "walk", e.t, e.r * 3.15,
+    ctx, "boss", enemySpriteDirection(e), e.telegraph ? "attack" : "walk", e.t, 64,
   );
   ctx.filter = oldFilter;
   if (spriteDrawn) {
@@ -1047,14 +1103,16 @@ function drawCrystalShape(ctx: CanvasRenderingContext2D, r: number, col: string)
 function drawPlayer(g: RenderState, ctx: CanvasRenderingContext2D) {
   const p = g.player;
   const a = p.dying > 0 ? Math.max(0, p.dying / 0.9) : 1;
+  const px = Math.round(p.x);
+  const py = Math.round(p.y);
   ctx.save();
   ctx.globalAlpha = a;
   ctx.fillStyle = "rgba(0,0,0,0.4)";
   ctx.beginPath();
-  ctx.ellipse(p.x, p.y + p.r * 0.7, p.r * 0.95, p.r * 0.45, 0, 0, Math.PI * 2);
+  ctx.ellipse(px, py + Math.round(p.r * 0.7), Math.round(p.r * 0.95), Math.round(p.r * 0.45), 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.translate(p.x, p.y);
-  const bob = p.dashing ? 0 : Math.sin(p.walkT) * 1.6;
+  ctx.translate(px, py);
+  const bob = p.dashing ? 0 : Math.round(Math.sin(p.walkT) * 1.5);
   ctx.translate(0, bob);
   if (p.dashing) {
     for (let i = 1; i <= 2; i++) {
@@ -1075,9 +1133,12 @@ function drawPlayer(g: RenderState, ctx: CanvasRenderingContext2D) {
 function drawKnightBody(ctx: CanvasRenderingContext2D, p: PlayerState) {
   const oldFilter = ctx.filter;
   if (p.hurtFlash > 0) ctx.filter = "brightness(2.2) saturate(0.15)";
-  const animT = p.attacking ? p.attackDur - p.attackTimer : p.walkT / 16;
+  // Fit all four generated attack frames into the shorter gameplay swing.
+  // Staying just below 0.5 s avoids wrapping the final frame back to zero.
+  const attackProgress = 1 - p.attackTimer / p.attackDur;
+  const animT = p.attacking ? Math.min(0.499, Math.max(0, attackProgress) * 0.5) : p.walkT / 16;
   const spriteDrawn = drawEntitySprite(
-    ctx, "player", p.dir, p.attacking ? "attack" : "walk", animT, TILE * 1.35,
+    ctx, "player", p.dir, p.attacking ? "attack" : "walk", animT, 32,
   );
   ctx.filter = oldFilter;
   if (spriteDrawn) return;
