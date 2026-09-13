@@ -120,14 +120,14 @@ export type Projectile = ProjectileState;
 export type Item = ItemState;
 
 const ORITHEL_LINES = [
-  "You wear the old marks upon your blade... Are you of the Line of Elun? No matter. The living are rare here.",
-  "I am Orithel — a Mnemonic. A mind the Elder Elves forged from living light and patient logic, to watch over Ilyarael.",
-  "We were shepherds. But when the Elves passed into dust, many of my kin lost their purpose... and Sundered into hunger.",
-  "Now the greatest of the Sundered — the Unbound — wakes beneath the Glass Spire, drinking the light of the world.",
-  "The first Spire is only a husk. The Unbound withdrew east, beyond Moonfall Reach, and braided a new ward from nine Anima Shards.",
-  "Three shards rest in the Old Lands. Two lie in the Cinderwild, two on Moonlit Coast, and two in the Starfall Moors. Read the road markers in the southern ash country to find the frontier roads.",
-  "Do not rush the final gate. Search the ruins, follow the broken roads, and let each shard answer your blade. Then end the Unbound's long dreaming — for its sake, and ours.",
-  "Go, wayfarer. May the old light guide your blade.",
+  "You wear the old marks upon your blade. Are you of the Line of Elun? No matter — the living are rare here, and I have learned not to ask twice.",
+  "I am Orithel. A Mnemonic: a mind the Elder Elves drew out of living light and set to watch over Ilyarael, when they could no longer watch it themselves.",
+  "We were shepherds once. When the Elves passed into dust a great many of my kin lost their purpose and Sundered into hunger. You will have met them on the roads by now.",
+  "The greatest of the Sundered — the Unbound — wakes beneath the Glass Spire, and it is drinking the light of this world a swallow at a time.",
+  "The first Spire is a husk. The Unbound withdrew east past Moonfall Reach and braided a new ward from nine Anima Shards. Nine exactly. A tidy number, and it was settled on long before either of us arrived.",
+  "Three shards lie in the Old Lands. Two in the Cinderwild, two on Moonlit Coast, two in the Starfall Moors. Read the markers in the southern ash country and they will give you the frontier roads.",
+  "Do not rush the final gate. Walk the ruins, let each shard answer your blade, and bring the yield back to me. I will keep it safe until the ninth.",
+  "Go, wayfarer. The old light has been very patient. So have I.",
 ];
 
 const WARD_LINES = [
@@ -1070,7 +1070,7 @@ export class Game {
 
   private openWatcherTopics() {
     const resolved = Object.keys(this.world.quests.resolutions).length;
-    this.openDialogue([resolved ? `You have brought ${resolved === 1 ? "one lost story" : `${resolved} lost stories`} back to these halls. What else should we remember?` : "The roads remember more than I do. Ask about what troubles you; bring back what you find, and we will decide what it means."], "Orithel, the Last Watcher", "#9ff7e6");
+    this.openDialogue([resolved ? `You have brought ${resolved === 1 ? "one account" : `${resolved} accounts`} back into this hall, and the record is the better for it. What else should we settle?` : "The roads keep better records than I do. Ask about whatever troubles you, bring back what you find, and we will decide together what it meant."], "Orithel, the Last Watcher", "#9ff7e6");
     this.dialogue!.choices = [
       { id: "spire", label: "The Unbound and the nine shards" },
       ...QUESTS.map((quest) => ({ id: `quest:${quest.id}`, label: `${quest.title}${this.world.quests.resolutions[quest.id] ? " · remembered" : canResolve(this.world.quests, quest) ? " · discuss discoveries" : ""}` })),
@@ -1225,7 +1225,7 @@ export class Game {
       } as const;
       const reward = rewards[fire.relic]();
       this.burst(fire.x, fire.y, "#ffbf66", 20);
-      this.openDialogue([`The flames recognize you. ${reward}.`, "This wayfire is now your refuge. Death will return you here, and resting restores your strength."], fire.name, "#ffd28a");
+      this.openDialogue([`The flames recognise you and read you over, the way a clerk reads a docket. ${reward}.`, "This wayfire is your refuge now. Death returns you here, resting restores your strength, and everything you are carrying is noted down somewhere you cannot see."], fire.name, "#ffd28a");
     } else {
       this.msg(`${fire.name} restores your strength.`);
       this.burst(fire.x, fire.y, "#ffbf66", 10);
