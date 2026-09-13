@@ -12,7 +12,7 @@ interface EndingCopy {
   action: string;
 }
 
-const ENDINGS: Record<EndingId, EndingCopy> = {
+export const ENDINGS: Record<EndingId, EndingCopy> = {
   silence: {
     title: "THE SPIRE FALLS SILENT",
     body: "Nine hundred years of people stop at once. It is the largest thing you will ever do and it takes less time than a breath. The shards scatter into the dawn like fireflies, exactly the way the old songs promised, and Eldrinth stirs beneath a sun it had forgotten. Behind you, in the quiet, something finishes assembling itself and walks out of the Spire wearing your face. It thanks you. It means that, too.",
