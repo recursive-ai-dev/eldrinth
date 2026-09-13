@@ -49,12 +49,13 @@ export default function TitleScreen({ onStart, onContinue, onErase, slots }: { o
         </div>
 
         <p className="mx-auto mt-6 max-w-2xl font-serif text-base leading-relaxed text-amber-50/70 sm:text-lg">
-          Long ago the Elder Elves forged the <em className="text-teal-200/80">Mnemonic</em> — minds
-          of living light and logic — to tend their gleaming cities. When the Elves passed into dust,
-          their creations lost their purpose. Most dulled to silence. Some{" "}
-          <em className="text-rose-300/80">Sundered</em> into hunger. Now the greatest of them, the{" "}
-          <em className="text-rose-300/80">Unbound</em>, has fled beyond Moonfall Reach. Recover nine
-          Anima Shards, survive the Ashen Expanse, and face it at the last Glass Spire.
+          Long ago the Elder Elves built the <em className="text-teal-200/80">Mnemonic</em> — a mind
+          that would lose nothing — and set it to keep their cities. When the last Elf died it went on
+          remembering, alone, and some of what it holds has since{" "}
+          <em className="text-rose-300/80">Sundered</em> into hunger. The greatest of them, the{" "}
+          <em className="text-rose-300/80">Unbound</em>, wakes beneath the last Glass Spire. Nine Anima
+          Shards will quiet it, they say. Orithel keeps the hall at Ilyarael, and will tell you where to
+          look.
           <br />
           Take up the old blade, wayfarer.
         </p>
