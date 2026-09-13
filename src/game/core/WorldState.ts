@@ -1,4 +1,19 @@
-import type { DialogueData, Difficulty, Dir, EnemyType, ItemType, MapData } from "../types";
+import type { DialogueData, Difficulty, Dir, EnemyType, ItemType, JournalEntry, MapData } from "../types";
+import type { QuestProgress } from "../quests";
+
+export interface RegionSnapshot {
+  enemies: EnemyState[];
+  items: ItemState[];
+  bossId: number | null;
+  bossSpawned: boolean;
+}
+
+export interface WayfireCheckpoint {
+  regionId: string;
+  x: number;
+  y: number;
+  name: string;
+}
 
 export interface PlayerState {
   x: number;
@@ -27,6 +42,9 @@ export interface PlayerState {
   kx: number;
   ky: number;
   dying: number;
+  relics: string[];
+  dashCostDiscount: number;
+  attackBonus: number;
 }
 
 export interface EnemyState {
@@ -56,6 +74,7 @@ export interface EnemyState {
   bob: number;
   alive: boolean;
   dying: number;
+  elite?: boolean;
 }
 
 export interface ProjectileState {
@@ -78,7 +97,7 @@ export interface ItemState {
 }
 
 export interface WorldSnapshot {
-  version: 1;
+  version: 1 | 2;
   regionId: string;
   simulationTime: number;
   tick: number;
@@ -97,6 +116,10 @@ export interface WorldSnapshot {
   randomState: number;
   /** Optional so pre-slot checkpoints remain loadable. */
   difficulty?: Difficulty;
+  journal?: JournalEntry[];
+  quests?: QuestProgress;
+  regions?: Record<string, RegionSnapshot>;
+  checkpoint?: WayfireCheckpoint | null;
 }
 
 /**
@@ -124,6 +147,10 @@ export class WorldState {
   private randomState = 0x6d2b79f5;
   dialogue: DialogueData | null = null;
   difficulty: Difficulty = "standard";
+  journal: JournalEntry[] = [];
+  quests: QuestProgress = { facts: [], resolutions: {} };
+  regions: Record<string, RegionSnapshot> = {};
+  checkpoint: WayfireCheckpoint | null = null;
 
   /** Deterministic PRNG for every simulation-affecting random decision. */
   nextRandom(): number {
@@ -139,11 +166,11 @@ export class WorldState {
   snapshot(): WorldSnapshot {
     if (!this.player) throw new Error("Cannot save an uninitialized world.");
     return {
-      version: 1,
+      version: 2,
       regionId: this.regionId,
       simulationTime: this.simulationTime,
       tick: this.tick,
-      player: { ...this.player, swingHit: [...this.player.swingHit] },
+      player: { ...this.player, relics: [...this.player.relics], swingHit: [...this.player.swingHit] },
       enemies: this.enemies.map((enemy) => ({ ...enemy })),
       projectiles: this.projectiles.map((projectile) => ({ ...projectile })),
       items: this.items.map((item) => ({ ...item })),
@@ -157,19 +184,23 @@ export class WorldState {
       nextEnemyId: this.nextEnemyId,
       randomState: this.randomState,
       difficulty: this.difficulty,
+      journal: this.journal.map((entry) => ({ ...entry })),
+      quests: structuredClone(this.quests),
+      regions: structuredClone(this.regions),
+      checkpoint: this.checkpoint ? { ...this.checkpoint } : null,
     };
   }
 
   restore(snapshot: WorldSnapshot) {
-    if (snapshot.version !== 1) throw new Error(`Unsupported world snapshot version: ${snapshot.version}`);
+    if (snapshot.version !== 1 && snapshot.version !== 2) throw new Error(`Unsupported world snapshot version: ${snapshot.version}`);
+    const legacySave = snapshot.version === 1;
     this.regionId = snapshot.regionId;
     this.simulationTime = snapshot.simulationTime;
     this.tick = snapshot.tick;
-    this.player = { ...snapshot.player, swingHit: new Set(snapshot.player.swingHit) };
+    this.player = { ...snapshot.player, relics: [...(snapshot.player.relics ?? [])], dashCostDiscount: snapshot.player.dashCostDiscount ?? 0, attackBonus: snapshot.player.attackBonus ?? 0, swingHit: new Set(snapshot.player.swingHit) };
     this.enemies = snapshot.enemies.map((enemy) => ({ ...enemy }));
     this.projectiles = snapshot.projectiles.map((projectile) => ({ ...projectile }));
     this.items = snapshot.items.map((item) => ({ ...item }));
-    this.boss = snapshot.bossId === null ? null : this.enemies.find((enemy) => enemy.id === snapshot.bossId) ?? null;
     this.wardUnlocked = snapshot.wardUnlocked;
     this.bossSpawned = snapshot.bossSpawned;
     this.shards = snapshot.shards;
@@ -179,6 +210,38 @@ export class WorldState {
     this.nextEnemyId = snapshot.nextEnemyId;
     this.randomState = snapshot.randomState;
     this.difficulty = snapshot.difficulty ?? "standard";
+    this.journal = snapshot.journal?.map((entry) => ({ ...entry })) ?? [];
+    this.quests = structuredClone(snapshot.quests ?? { facts: [], resolutions: {} });
+    this.regions = structuredClone(snapshot.regions ?? {});
+    this.checkpoint = snapshot.checkpoint ? { ...snapshot.checkpoint } : null;
+    if (legacySave) this.migrateLegacyPopulation();
+    this.boss = snapshot.bossId === null ? null : this.enemies.find((enemy) => enemy.id === snapshot.bossId) ?? null;
     this.dialogue = null;
+  }
+
+  /** Version 1 had dense ambient populations; keep old expeditions playable after rebalancing. */
+  private migrateLegacyPopulation() {
+    const migrate = (enemies: EnemyState[], regionId: string) => {
+      const cap = regionId === "overworld" ? 13 : 7;
+      const special = enemies.filter((enemy) => enemy.elite || enemy.type === "boss");
+      const ordinary = enemies.filter((enemy) => !enemy.elite && enemy.type !== "boss");
+      const allowedOrdinary = Math.max(0, cap - special.length);
+      const stride = Math.max(1, Math.ceil(ordinary.length / Math.max(1, allowedOrdinary)));
+      const thinned = ordinary.filter((_, index) => index % stride === 0).slice(0, allowedOrdinary);
+      const result = [...thinned, ...special];
+      if (this.difficulty === "story") {
+        for (const enemy of result) enemy.speed *= 0.74;
+      }
+      return result;
+    };
+
+    this.enemies = migrate(this.enemies, this.regionId);
+    for (const [regionId, region] of Object.entries(this.regions)) {
+      region.enemies = migrate(region.enemies, regionId);
+    }
+    if (this.difficulty === "story") {
+      this.player.maxHp += 2;
+      this.player.hp = Math.min(this.player.maxHp, this.player.hp + 2);
+    }
   }
 }

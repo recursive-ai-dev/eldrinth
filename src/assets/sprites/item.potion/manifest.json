@@ -1,0 +1,13 @@
+{
+  "autotile": false,
+  "cellH": 32,
+  "cellW": 32,
+  "frames": 1,
+  "kind": "item",
+  "masks": 1,
+  "pixelHashes": [
+    "1a2bf9186ab99c2b5df73e518831c852"
+  ],
+  "static": true,
+  "variants": 1
+}

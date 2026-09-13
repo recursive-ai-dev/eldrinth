@@ -2,6 +2,128 @@ import { TILE, T, tileDefinition } from "../constants";
 import { rr, dot, hash2, DIRV, DIRA } from "../math";
 import type { EnemyState, ItemState, PlayerState, ProjectileState } from "../core/WorldState";
 import type { MapData } from "../types";
+import { getAtlasRevision, loadAtlas, preloadAtlases, type SpriteAtlas } from "./spriteAtlas";
+
+export const TILE_SPRITE_KEY: Record<number, string> = {
+  [T.GRASS]: "tile.grass",
+  [T.DGRASS]: "tile.dgrass",
+  [T.PATH]: "tile.path",
+  [T.WATER]: "tile.water",
+  [T.TREE]: "tile.tree",
+  [T.ROCK]: "tile.rock",
+  [T.RFLOOR]: "tile.rfloor",
+  [T.RWALL]: "tile.rwall",
+  [T.CRYSTAL]: "tile.crystal",
+  [T.FLOWER]: "tile.flower",
+  [T.BRIDGE]: "tile.bridge",
+  [T.GRAVE]: "tile.grave",
+  [T.BONES]: "tile.bones",
+  [T.TALLGRASS]: "tile.tallgrass",
+  [T.SPIREFLOOR]: "tile.spirefloor",
+  [T.SAND]: "tile.sand",
+  [T.LEDGE]: "tile.ledge",
+  [T.SLOPE_UP_LEFT]: "tile.slope_up_left",
+  [T.SLOPE_UP_RIGHT]: "tile.slope_up_right",
+  [T.TRIGGER]: "tile.trigger",
+};
+
+export const ENTITY_SPRITE_KEY: Record<string, string> = {
+  player: "player",
+  wraith: "enemy.wraith",
+  sentinel: "enemy.sentinel",
+  adept: "enemy.adept",
+  boss: "enemy.boss",
+  shard: "item.shard",
+  potion: "item.potion",
+};
+
+const tileAtlases = new Map<number, SpriteAtlas>();
+const entityAtlases = new Map<string, SpriteAtlas>();
+
+function tileAtlasFor(tile: number): SpriteAtlas | null {
+  const key = TILE_SPRITE_KEY[tile];
+  if (!key) return null;
+  let atlas = tileAtlases.get(tile);
+  if (!atlas) {
+    atlas = loadAtlas(key);
+    tileAtlases.set(tile, atlas);
+  }
+  return atlas;
+}
+
+function entityAtlasFor(key: string): SpriteAtlas {
+  const assetKey = ENTITY_SPRITE_KEY[key] ?? key;
+  let atlas = entityAtlases.get(assetKey);
+  if (!atlas) {
+    atlas = loadAtlas(assetKey);
+    entityAtlases.set(assetKey, atlas);
+  }
+  return atlas;
+}
+
+export function preloadGameSprites(): Promise<void> {
+  return preloadAtlases([
+    ...Object.values(TILE_SPRITE_KEY),
+    ...new Set(Object.values(ENTITY_SPRITE_KEY)),
+  ]);
+}
+
+function toSpriteDirection(direction: string): string {
+  if (direction === "up") return "back";
+  if (direction === "down") return "front";
+  return direction;
+}
+
+function enemySpriteDirection(enemy: EnemyState): string {
+  if (Math.abs(enemy.vx) > Math.abs(enemy.vy)) return enemy.vx < 0 ? "left" : "right";
+  if (Math.abs(enemy.vy) > 0.1) return enemy.vy < 0 ? "up" : "down";
+  return "down";
+}
+
+function drawEntitySprite(
+  ctx: CanvasRenderingContext2D,
+  key: string,
+  direction: string,
+  action: string,
+  animT: number,
+  drawSize: number,
+): boolean {
+  const atlas = entityAtlasFor(key);
+  if (!atlas.ready || !atlas.image) return false;
+  const frame = atlas.getFrame(toSpriteDirection(direction), action, Math.floor(animT * 8));
+  if (!frame) return false;
+  const smoothing = ctx.imageSmoothingEnabled;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(
+    atlas.image,
+    frame.sx, frame.sy, frame.sw, frame.sh,
+    -drawSize / 2, -drawSize / 2, drawSize, drawSize,
+  );
+  ctx.imageSmoothingEnabled = smoothing;
+  return true;
+}
+
+function drawStaticSprite(
+  ctx: CanvasRenderingContext2D,
+  key: string,
+  x: number,
+  y: number,
+  drawSize: number,
+): boolean {
+  const atlas = entityAtlasFor(key);
+  if (!atlas.ready || !atlas.image) return false;
+  const frame = atlas.getStaticFrame();
+  if (!frame) return false;
+  const smoothing = ctx.imageSmoothingEnabled;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(
+    atlas.image,
+    frame.sx, frame.sy, frame.sw, frame.sh,
+    x - drawSize / 2, y - drawSize / 2, drawSize, drawSize,
+  );
+  ctx.imageSmoothingEnabled = smoothing;
+  return true;
+}
 
 export interface ParticleRenderState {
   x: number;
@@ -48,7 +170,6 @@ export interface RenderState {
   shakeMag: number;
   lastShakeX: number;
   lastShakeY: number;
-  objectiveTarget(): { x: number; y: number; kind: "shard" | "boss" } | null;
 }
 
 const CHUNK_TILES = 16;
@@ -69,6 +190,7 @@ interface RenderChunk {
 export class TileChunkRenderer {
   private readonly chunks = new Map<string, RenderChunk>();
   private frame = 0;
+  private atlasRevision = getAtlasRevision();
 
   constructor(private readonly map: MapData) {}
 
@@ -77,6 +199,7 @@ export class TileChunkRenderer {
   }
 
   drawGround(ctx: CanvasRenderingContext2D, cam: { x: number; y: number }, viewW: number, viewH: number) {
+    this.refreshForLoadedAtlases();
     this.frame++;
     for (const [cx, cy] of this.chunkRange(cam, viewW, viewH, 0)) {
       const chunk = this.get(cx, cy);
@@ -135,7 +258,7 @@ export class TileChunkRenderer {
         const ty = startY + y;
         if (tx >= this.map.width || ty >= this.map.height) continue;
         const tile = this.map.tiles[ty * this.map.width + tx];
-        drawTile(groundCtx, tile, x * TILE, y * TILE, tx * TILE, ty * TILE);
+        drawTile(groundCtx, tile, x * TILE, y * TILE, tx * TILE, ty * TILE, this.wangMask(tx, ty, tile));
         if (tileDefinition(tile).tall) drawTallOverlay(overlayCtx, tile, x * TILE, y * TILE);
       }
     }
@@ -155,13 +278,54 @@ export class TileChunkRenderer {
       this.chunks.delete(oldestKey);
     }
   }
+
+  private refreshForLoadedAtlases() {
+    const current = getAtlasRevision();
+    if (current === this.atlasRevision) return;
+    this.atlasRevision = current;
+    this.chunks.clear();
+  }
+
+  private wangMask(x: number, y: number, tile: number): number {
+    if (tile !== T.GRASS && tile !== T.WATER) return 0;
+    const same = (xx: number, yy: number) => {
+      if (xx < 0 || yy < 0 || xx >= this.map.width || yy >= this.map.height) return true;
+      return this.map.tiles[yy * this.map.width + xx] === tile;
+    };
+    return (same(x, y - 1) ? 1 : 0)
+      | (same(x + 1, y) ? 2 : 0)
+      | (same(x, y + 1) ? 4 : 0)
+      | (same(x - 1, y) ? 8 : 0);
+  }
 }
 
 /* ----------------------------- tile rendering ----------------------------- */
-export function drawTile(ctx: CanvasRenderingContext2D, t: number, x: number, y: number, seedX = x, seedY = y) {
+export function drawTile(
+  ctx: CanvasRenderingContext2D,
+  t: number,
+  x: number,
+  y: number,
+  seedX = x,
+  seedY = y,
+  wangMask = 0,
+) {
   const s = TILE;
+  const atlas = tileAtlasFor(t);
+  if (atlas?.ready && atlas.image) {
+    const variant = Math.floor(hash2(seedX, seedY) * 4);
+    const frameIndex = (t === T.GRASS || t === T.WATER) ? wangMask * 4 + variant : variant;
+    const frame = atlas.getStaticFrame(frameIndex);
+    if (frame) {
+      const smoothing = ctx.imageSmoothingEnabled;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(atlas.image, frame.sx, frame.sy, frame.sw, frame.sh, x, y, s, s);
+      ctx.imageSmoothingEnabled = smoothing;
+      return;
+    }
+  }
   // Raster coordinates are chunk-local; variation remains globally stable so
   // a tile keeps the same appearance when its chunk is evicted and rebuilt.
+  // The procedural branch below is a resilient loading/error fallback.
   const r = hash2(seedX, seedY);
   switch (t) {
     case T.GRASS: {
@@ -468,7 +632,8 @@ export function renderGame(g: RenderState) {
   ctx.restore();
 
   drawLighting(g);
-  drawCompass(g);
+  // There is deliberately no quest compass. Roads, notes, and landmarks are
+  // the navigation system.
 }
 
 function drawWardBarrier(g: RenderState, ctx: CanvasRenderingContext2D) {
@@ -503,6 +668,19 @@ function drawItem(_g: RenderState, ctx: CanvasRenderingContext2D, it: ItemState)
   const yo = Math.sin(it.t * 2) * 3;
   const x = it.x;
   const y = it.y + yo;
+  const glowColor = it.type === "shard" ? "80,240,220" : "255,90,90";
+  const glowRadius = it.type === "shard" ? 20 : 16;
+  ctx.globalCompositeOperation = "lighter";
+  const spriteGlow = ctx.createRadialGradient(x, y, 0, x, y, glowRadius);
+  spriteGlow.addColorStop(0, `rgba(${glowColor},0.52)`);
+  spriteGlow.addColorStop(1, `rgba(${glowColor},0)`);
+  ctx.fillStyle = spriteGlow;
+  ctx.fillRect(x - glowRadius, y - glowRadius, glowRadius * 2, glowRadius * 2);
+  ctx.globalCompositeOperation = "source-over";
+  if (drawStaticSprite(ctx, it.type, x, y, it.type === "shard" ? 30 : 28)) {
+    ctx.restore();
+    return;
+  }
   if (it.type === "shard") {
       ctx.globalCompositeOperation = "lighter";
       const g1 = ctx.createRadialGradient(x, y, 0, x, y, 18);
@@ -554,11 +732,57 @@ function drawItem(_g: RenderState, ctx: CanvasRenderingContext2D, it: ItemState)
 /** A shared sort pass keeps items, actors, and tall map overlays coherent. */
 function drawSortedWorldObjects(g: RenderState, ctx: CanvasRenderingContext2D) {
   const objects: { y: number; draw: () => void }[] = [];
+  for (const sign of g.map.signs) {
+    const x = sign.x * TILE + TILE / 2, y = sign.y * TILE + TILE / 2;
+    objects.push({ y, draw: () => {
+      ctx.save();
+      ctx.fillStyle = "#382b23";
+      ctx.fillRect(x - 2, y - 4, 4, 13);
+      ctx.fillStyle = "#b9a27b";
+      ctx.strokeStyle = "#44362b";
+      ctx.lineWidth = 2;
+      ctx.fillRect(x - 10, y - 18, 20, 15);
+      ctx.strokeRect(x - 10, y - 18, 20, 15);
+      ctx.fillStyle = "#5e4d3a";
+      for (let line = 0; line < 3; line++) ctx.fillRect(x - 6, y - 14 + line * 4, 12 - line * 2, 1);
+      ctx.restore();
+    } });
+  }
+  for (const fire of g.map.campfires) objects.push({ y: fire.y, draw: () => drawCampfire(g, ctx, fire.x, fire.y) });
   for (const item of g.items) if (!item.taken) objects.push({ y: item.y, draw: () => drawItem(g, ctx, item) });
   for (const enemy of g.enemies) objects.push({ y: enemy.y, draw: () => drawEnemy(ctx, enemy) });
   objects.push({ y: g.player.y, draw: () => drawPlayer(g, ctx) });
   objects.sort((a, b) => a.y - b.y);
   for (const object of objects) object.draw();
+}
+
+function drawCampfire(g: RenderState, ctx: CanvasRenderingContext2D, x: number, y: number) {
+  const flicker = Math.sin(g.time * 11 + x) * 2;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  const glow = ctx.createRadialGradient(x, y - 6, 2, x, y - 6, 34);
+  glow.addColorStop(0, "rgba(255,190,85,0.72)");
+  glow.addColorStop(1, "rgba(255,130,40,0)");
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(x, y - 6, 34, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalCompositeOperation = "source-over";
+  ctx.strokeStyle = "#4b3020";
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(x - 10, y + 7); ctx.lineTo(x + 10, y + 7);
+  ctx.moveTo(x - 8, y + 11); ctx.lineTo(x + 8, y + 3);
+  ctx.stroke();
+  ctx.fillStyle = "#ffb14d";
+  ctx.beginPath();
+  ctx.moveTo(x, y + 5); ctx.quadraticCurveTo(x - 11, y - 5, x + flicker, y - 22); ctx.quadraticCurveTo(x + 13, y - 4, x, y + 5);
+  ctx.fill();
+  ctx.fillStyle = "#fff0ac";
+  ctx.beginPath();
+  ctx.arc(x, y - 5, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
 
@@ -576,6 +800,17 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: EnemyState) {
   if (e.type === "wraith") drawWraith(ctx, e);
   else if (e.type === "sentinel") drawSentinel(ctx, e);
   else if (e.type === "adept") drawAdept(ctx, e);
+  if (e.elite && e.alive) {
+    ctx.strokeStyle = "#ffd36b";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, -e.r * 0.15, e.r + 5 + Math.sin(e.t * 4), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = "#ffe6a3";
+    ctx.fillRect(-9, -e.r - 10, 18, 3);
+    ctx.fillStyle = "#d08f35";
+    ctx.fillRect(-9, -e.r - 10, 18 * Math.max(0, e.hp / e.maxHp), 3);
+  }
   ctx.restore();
 }
 
@@ -605,6 +840,13 @@ function drawWraith(ctx: CanvasRenderingContext2D, e: EnemyState) {
   ctx.arc(0, 0, e.r * 1.6, 0, Math.PI * 2);
   ctx.fill();
   ctx.globalCompositeOperation = "source-over";
+  const oldFilter = ctx.filter;
+  if (e.hurt > 0) ctx.filter = "brightness(2.2) saturate(0.2)";
+  const spriteDrawn = drawEntitySprite(
+    ctx, "wraith", enemySpriteDirection(e), e.telegraph ? "attack" : "walk", e.t, e.r * 3.1,
+  );
+  ctx.filter = oldFilter;
+  if (spriteDrawn) return;
   ctx.fillStyle = e.hurt > 0 ? "#ffffff" : "rgba(150,225,180,0.6)";
   ctx.beginPath();
   ctx.moveTo(0, -e.r);
@@ -623,6 +865,13 @@ function drawWraith(ctx: CanvasRenderingContext2D, e: EnemyState) {
 }
 
 function drawSentinel(ctx: CanvasRenderingContext2D, e: EnemyState) {
+  const oldFilter = ctx.filter;
+  if (e.hurt > 0) ctx.filter = "brightness(2.2) saturate(0.2)";
+  const spriteDrawn = drawEntitySprite(
+    ctx, "sentinel", enemySpriteDirection(e), e.telegraph ? "attack" : "walk", e.t, e.r * 3.0,
+  );
+  ctx.filter = oldFilter;
+  if (spriteDrawn) return;
   const bob = Math.sin(e.t * 6) * 1.5;
   ctx.fillStyle = "#20242c";
   ctx.fillRect(-6, 4 + bob, 4, 7);
@@ -667,6 +916,13 @@ function drawSentinel(ctx: CanvasRenderingContext2D, e: EnemyState) {
 
 function drawAdept(ctx: CanvasRenderingContext2D, e: EnemyState) {
   ctx.translate(0, Math.sin(e.t * 3) * 2);
+  const oldFilter = ctx.filter;
+  if (e.hurt > 0) ctx.filter = "brightness(2.2) saturate(0.2)";
+  const spriteDrawn = drawEntitySprite(
+    ctx, "adept", enemySpriteDirection(e), e.telegraph ? "attack" : "walk", e.t, e.r * 3.2,
+  );
+  ctx.filter = oldFilter;
+  if (spriteDrawn) return;
   ctx.fillStyle = e.hurt > 0 ? "#fff" : "#3a2150";
   ctx.beginPath();
   ctx.moveTo(0, -e.r);
@@ -717,6 +973,16 @@ function drawBoss(ctx: CanvasRenderingContext2D, e: EnemyState) {
   ctx.arc(0, 0, e.r * 1.8, 0, Math.PI * 2);
   ctx.fill();
   ctx.globalCompositeOperation = "source-over";
+  const oldFilter = ctx.filter;
+  if (e.hurt > 0) ctx.filter = "brightness(2.2) saturate(0.2)";
+  const spriteDrawn = drawEntitySprite(
+    ctx, "boss", enemySpriteDirection(e), e.telegraph ? "attack" : "walk", e.t, e.r * 3.15,
+  );
+  ctx.filter = oldFilter;
+  if (spriteDrawn) {
+    ctx.restore();
+    return;
+  }
   ctx.save();
   ctx.rotate(e.t * 0.6);
   ctx.strokeStyle = danger ? "rgba(255,120,120,0.6)" : "rgba(120,220,255,0.6)";
@@ -807,6 +1073,14 @@ function drawPlayer(g: RenderState, ctx: CanvasRenderingContext2D) {
 }
 
 function drawKnightBody(ctx: CanvasRenderingContext2D, p: PlayerState) {
+  const oldFilter = ctx.filter;
+  if (p.hurtFlash > 0) ctx.filter = "brightness(2.2) saturate(0.15)";
+  const animT = p.attacking ? p.attackDur - p.attackTimer : p.walkT / 16;
+  const spriteDrawn = drawEntitySprite(
+    ctx, "player", p.dir, p.attacking ? "attack" : "walk", animT, TILE * 1.35,
+  );
+  ctx.filter = oldFilter;
+  if (spriteDrawn) return;
   const hurt = p.hurtFlash > 0;
   ctx.fillStyle = hurt ? "#ffd0d0" : "#16323e";
   ctx.beginPath();
@@ -987,44 +1261,4 @@ function drawLighting(g: RenderState) {
   ctx.fillStyle = tg;
   ctx.fillRect(0, 0, g.viewW, g.viewH);
   ctx.globalCompositeOperation = "source-over";
-}
-
-function drawCompass(g: RenderState) {
-  const tgt = g.objectiveTarget();
-  if (!tgt) return;
-  const ctx = g.ctx;
-  const sx = tgt.x - g.cam.x;
-  const sy = tgt.y - g.cam.y;
-  const onScreen = sx > -10 && sx < g.viewW + 10 && sy > -10 && sy < g.viewH + 10;
-  const col = tgt.kind === "shard" ? "#5ff7df" : "#ff9a9a";
-  if (onScreen) {
-    ctx.save();
-    ctx.globalAlpha = 0.85;
-    const yo = Math.sin(g.time * 4) * 4;
-    ctx.fillStyle = col;
-    ctx.beginPath();
-    ctx.moveTo(sx, sy - 30 + yo);
-    ctx.lineTo(sx - 7, sy - 42 + yo);
-    ctx.lineTo(sx + 7, sy - 42 + yo);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-  } else {
-    const ang = Math.atan2(sy - g.viewH / 2, sx - g.viewW / 2);
-    const rad = Math.min(g.viewW, g.viewH) / 2 - 54;
-    const ex = g.viewW / 2 + Math.cos(ang) * rad;
-    const ey = g.viewH / 2 + Math.sin(ang) * rad;
-    ctx.save();
-    ctx.translate(ex, ey);
-    ctx.rotate(ang);
-    ctx.globalAlpha = 0.9;
-    ctx.fillStyle = col;
-    ctx.beginPath();
-    ctx.moveTo(12, 0);
-    ctx.lineTo(-8, -7);
-    ctx.lineTo(-8, 7);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-  }
 }

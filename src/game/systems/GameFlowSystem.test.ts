@@ -16,7 +16,7 @@ describe("GameFlowSystem HUD", () => {
       messageId: 0,
       prompt: "",
       dialogue: null,
-      map: { npc: { x: 0, y: 0 }, signs: [] },
+      map: { regionName: "Test", npc: { x: 0, y: 0 }, signs: [], campfires: [] },
       items: [],
     });
 
