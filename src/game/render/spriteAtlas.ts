@@ -12,7 +12,7 @@ export interface ActionMeta {
 }
 
 export interface SpriteManifest {
-  kind: "human" | "creature" | "item" | "tile";
+  kind: "human" | "creature" | "item" | "tile" | "prop";
   cellW: number;
   cellH: number;
   directions?: string[];
@@ -25,6 +25,7 @@ export interface SpriteManifest {
 export interface SpriteAtlas {
   ready: boolean;
   image: HTMLImageElement | null;
+  manifest?: SpriteManifest | null;
   getFrame(direction: string, action: string, frame: number): FrameRect | null;
   getStaticFrame(maskOrIndex?: number): FrameRect | null;
 }
@@ -98,6 +99,7 @@ export function loadAtlas(entityKey: string): SpriteAtlas {
   const atlas: LoadedAtlas = {
     ready: false,
     image: null,
+    manifest: manifest ?? null,
     loaded,
     getFrame(direction, action, frame) {
       if (!atlas.ready || !manifest) return null;

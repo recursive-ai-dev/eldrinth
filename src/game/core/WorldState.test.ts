@@ -50,7 +50,7 @@ describe("WorldState snapshots", () => {
     world.enemies = Array.from({ length: 20 }, (_, id) => ({
       id, type: "wraith" as const, x: id, y: 0, r: 3, hp: 3, maxHp: 3, speed: 62, dmg: 1,
       vx: 0, vy: 0, hurt: 0, t: 0, shootCd: 0, lungeCd: 0, lungeTimer: 0,
-      lungeVx: 0, lungeVy: 0, burstCd: 0, summonCd: 0, telegraph: null as const,
+      lungeVx: 0, lungeVy: 0, burstCd: 0, summonCd: 0, telegraph: null,
       telegraphTimer: 0, wanderA: 0, bob: 0, alive: true, dying: 0,
     }));
     const legacy = { ...world.snapshot(), version: 1 as const, difficulty: "story" as const, bossId: null };

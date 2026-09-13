@@ -741,6 +741,10 @@ export class Game {
       my /= len;
       this.moveEntity(p, mx * p.speed * dt, my * p.speed * dt);
       p.walkT += dt * 16;
+    } else {
+      // Generated walk sheets reserve frame zero as the neutral pose. Reset
+      // the phase while stationary so the player does not freeze mid-stride.
+      p.walkT = 0;
     }
 
     p.attackCd = Math.max(0, p.attackCd - dt);

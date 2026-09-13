@@ -105,12 +105,16 @@ class SpriteGenerator:
     #: `frame` entirely — the web UI uses this to disable playback for them.
     animated: bool = False
 
-    def __init__(self, size: Optional[int] = None, size_xy: Optional[Tuple[int, int]] = None):
+    def __init__(self, size: Optional[Any] = None, size_xy: Optional[Tuple[int, int]] = None):
         if size_xy is not None:
-            self.size = size_xy
+            self.size = (int(size_xy[0]), int(size_xy[1]))
+        elif isinstance(size, (tuple, list)):
+            self.size = (int(size[0]), int(size[1]))
+        elif size is not None:
+            s = int(size)
+            self.size = (s, s)
         else:
-            s = size or self.default_size[0]
-            self.size = (s, s) if size is None else (size, size)
+            self.size = self.default_size
         if self.size[0] <= 0 or self.size[1] <= 0:
             raise ValueError("Sprite size must be positive")
 

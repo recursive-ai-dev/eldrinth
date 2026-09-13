@@ -1,4 +1,4 @@
-import initSqlJs from "sql.js";
+import initSqlJs, { type Database } from "sql.js";
 import wasmUrl from "sql.js/dist/sql-wasm.wasm?url";
 import type { WorldSnapshot } from "./core/WorldState";
 import type { Difficulty } from "./types";
@@ -60,7 +60,7 @@ class SlotStore {
   async list(): Promise<SaveSlot[]> {
     const result = (await this.db()).exec("SELECT id, difficulty, shards, updated_at FROM save_slots ORDER BY id")[0];
     if (!result) return [];
-    return result.values.map((row) => ({ id: Number(row[0]), difficulty: row[1] as Difficulty, shards: Number(row[2]), updatedAt: Number(row[3]) }));
+    return result.values.map((row: any[]) => ({ id: Number(row[0]), difficulty: row[1] as Difficulty, shards: Number(row[2]), updatedAt: Number(row[3]) }));
   }
 
   async load(id: number): Promise<SlotSave | null> {

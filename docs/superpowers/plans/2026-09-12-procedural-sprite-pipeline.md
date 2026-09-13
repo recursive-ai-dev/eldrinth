@@ -53,7 +53,7 @@ TypeScript/Vite/Canvas2D (game), Vitest (tests).
 **Interfaces:**
 - Produces: `tools.spritegen.generator.registry.get_generator(name: str, **kwargs)`, returning a `SpriteGenerator` whose `.generate(seed=0, **options) -> Sprite` is used by every later task.
 
-- [ ] **Step 1: Copy the generator package**
+- [x] **Step 1: Copy the generator package**
 
 ```bash
 mkdir -p /home/damien/Projects/eldrinth/tools/spritegen
@@ -69,7 +69,7 @@ imported transitively by a module you DO need (check with `grep -rn "import"
 tools/spritegen/generator`), keep only the imported module, not the whole
 file's unused surface.
 
-- [ ] **Step 2: Write a README noting this is vendored**
+- [x] **Step 2: Write a README noting this is vendored**
 
 Create `tools/spritegen/README.md`:
 
@@ -87,7 +87,7 @@ Requires Python 3.10+, Pillow, numpy (`pip install -r requirements.txt`).
 Regenerate all game art: `npm run gen:sprites`
 ```
 
-- [ ] **Step 3: Write and run a smoke test**
+- [x] **Step 3: Write and run a smoke test**
 
 Create `tools/spritegen/smoke_test.py`:
 
@@ -117,7 +117,7 @@ if __name__ == "__main__":
 Run: `cd /home/damien/Projects/eldrinth && python3 tools/spritegen/smoke_test.py`
 Expected: prints `OK: <32-char-hex-hash>` with no traceback.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /home/damien/Projects/eldrinth
@@ -139,7 +139,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 - Consumes: the existing `PALETTES: Dict[str, Tuple[Vec3, Vec3, Vec3, Vec3]]` module-level dict and `named_palette(name: str, t: float) -> RGB` in this file.
 - Produces: eight new palette names usable anywhere via `named_palette(<name>, t)`: `grim_steel`, `wraith_ash`, `rusted_stone`, `cult_blood`, `corrupted_flesh`, `bone_relic`, `sickly_green`, `black_water`.
 
-- [ ] **Step 1: Add the new palette entries**
+- [x] **Step 1: Add the new palette entries**
 
 In `tools/spritegen/generator/math/palette.py`, find the `PALETTES = { ... }`
 dict and add these entries (values are cosine-palette `(bias, amplitude,
@@ -197,7 +197,7 @@ the existing entries):
     ),
 ```
 
-- [ ] **Step 2: Write and run the palette test**
+- [x] **Step 2: Write and run the palette test**
 
 Create `tools/spritegen/palette_test.py`:
 
@@ -231,7 +231,7 @@ if __name__ == "__main__":
 Run: `python3 tools/spritegen/palette_test.py`
 Expected: `OK: 8 palettes valid`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tools/spritegen/generator/math/palette.py tools/spritegen/palette_test.py
@@ -252,7 +252,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 - Consumes: `_ARCHETYPES` list and `rng.choice` call in `CreatureSpriteGenerator._build`.
 - Produces: `CreatureSpriteGenerator().generate(seed, archetype="golem")` now forces that archetype instead of picking randomly from the seed; omitting `archetype` keeps today's random-from-seed behavior unchanged.
 
-- [ ] **Step 1: Patch `_build` to accept an explicit archetype**
+- [x] **Step 1: Patch `_build` to accept an explicit archetype**
 
 In `tools/spritegen/generator/sprites/creature.py`, change:
 
@@ -280,7 +280,7 @@ preceding line normalizes a *different*, fixed set of keys and does not
 pass `archetype` through, so read `archetype` from the original `options`
 dict, not from `opt`.
 
-- [ ] **Step 2: Write and run the override test**
+- [x] **Step 2: Write and run the override test**
 
 Create `tools/spritegen/creature_archetype_test.py`:
 
@@ -312,7 +312,7 @@ if __name__ == "__main__":
 Run: `python3 tools/spritegen/creature_archetype_test.py`
 Expected: `OK: forced=golem, unforced= <some archetype>` with no assertion error.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tools/spritegen/generator/sprites/creature.py tools/spritegen/creature_archetype_test.py
@@ -336,7 +336,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 - Consumes: `Rig`, `Joint`, `DIRECTIONS` from `math/pose.py`; `options_from` from `pipeline.py`.
 - Produces: `HumanSpriteGenerator().generate(seed, action="attack", frame=N, frames=M)` and `HumanSpriteGenerator().generate_anim_sheet(seed, action="attack")` render a forward weapon-thrust pose instead of the walk cycle.
 
-- [ ] **Step 1: Add `attack_pose` to `math/pose.py`**
+- [x] **Step 1: Add `attack_pose` to `math/pose.py`**
 
 Add this function after `walk_pose` in `tools/spritegen/generator/math/pose.py`:
 
@@ -393,7 +393,7 @@ def attack_pose(rig: Rig, frame: int, nframes: int = 4, facing: str = "front") -
     return out
 ```
 
-- [ ] **Step 2: Thread `action` through `pipeline.options_from`**
+- [x] **Step 2: Thread `action` through `pipeline.options_from`**
 
 In `tools/spritegen/generator/pipeline.py`, find `options_from` and add
 `"action"` to the normalized dict it returns (default `"walk"`):
@@ -408,7 +408,7 @@ style — `options_from` already builds a dict of normalized keys from the
 raw `options` mapping; insert this line where the other keys are set,
 before the `return normalized` at the end of the function).
 
-- [ ] **Step 3: Use `action` in `human.py`'s `_render`**
+- [x] **Step 3: Use `action` in `human.py`'s `_render`**
 
 In `tools/spritegen/generator/sprites/human.py`, change the import at the
 top:
@@ -469,7 +469,7 @@ Also add `"action": action,` to the `spec` dict already built in `_build`
 (next to the existing `"direction": direction, "frame": frame,` entries),
 so the manifest records which action a sheet belongs to.
 
-- [ ] **Step 4: Accept `action` in `SpriteGenerator.generate_walk`/`generate_anim_sheet`**
+- [x] **Step 4: Accept `action` in `SpriteGenerator.generate_walk`/`generate_anim_sheet`**
 
 In `tools/spritegen/generator/sprites/base.py`, these two methods already
 forward arbitrary `**options` to `self.generate(...)`, so `action="attack"`
@@ -485,7 +485,7 @@ confirming this — but add a short comment so a future reader doesn't assume
                 for i in range(frames)]
 ```
 
-- [ ] **Step 5: Write and run the attack-pose test**
+- [x] **Step 5: Write and run the attack-pose test**
 
 Create `tools/spritegen/human_attack_test.py`:
 
@@ -518,7 +518,7 @@ if __name__ == "__main__":
 Run: `python3 tools/spritegen/human_attack_test.py`
 Expected: `OK: attack sheet (<w>, <h>)` with no assertion error.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add tools/spritegen/generator/math/pose.py tools/spritegen/generator/pipeline.py \
@@ -541,7 +541,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 - Consumes: the `_build`/`_render` methods patched in Task 3, and `options_from` from `pipeline.py` (already imported in this file).
 - Produces: `CreatureSpriteGenerator().generate(seed, action="attack", frame=N)` renders a forward-lunging, mouth-wide variant; `action` defaults to `"walk"` and is recorded in `spec["action"]`.
 
-- [ ] **Step 1: Read `action` in `_build` and pass it to `_render`**
+- [x] **Step 1: Read `action` in `_build` and pass it to `_render`**
 
 In `tools/spritegen/generator/sprites/creature.py`, in `_build` (patched in
 Task 3), add after the `opt = options_from(options)` line:
@@ -562,7 +562,7 @@ Update the `self._render(...)` call to append `action`:
 Add `"action": action,` to the `spec` dict next to the existing
 `"direction": direction, "frame": frame,` entries.
 
-- [ ] **Step 2: Use `action` in `_render` for a lunge + wide-mouth attack look**
+- [x] **Step 2: Use `action` in `_render` for a lunge + wide-mouth attack look**
 
 Change the `_render` signature:
 
@@ -623,7 +623,7 @@ calls to depend on `action`:
                 canvas.set(mx + dx, my - 1, (240, 240, 230), TAG_ACCENT)
 ```
 
-- [ ] **Step 3: Write and run the creature attack test**
+- [x] **Step 3: Write and run the creature attack test**
 
 Create `tools/spritegen/creature_attack_test.py`:
 
@@ -652,7 +652,7 @@ if __name__ == "__main__":
 Run: `python3 tools/spritegen/creature_attack_test.py`
 Expected: `OK: creature attack differs from walk`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tools/spritegen/generator/sprites/creature.py tools/spritegen/creature_attack_test.py
@@ -673,7 +673,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 - Consumes: `generator.registry.get_generator` (Task 1), the `archetype`/`action`/`palette` options added in Tasks 2-5.
 - Produces: `CATALOG: Dict[str, dict]` — one entry per game entity, each with at minimum `{"kind": str, "seed": str}` and generator-specific keys (`archetype`, `palette`, `anims`, `autotile`, `mask` as applicable). This is the single source of truth every later task (driver script, completeness test) reads.
 
-- [ ] **Step 1: Write the catalog**
+- [x] **Step 1: Write the catalog**
 
 Create `tools/spritegen/catalog.py`. This must have exactly one entry per
 `T` tile value, `EnemyType`, `ItemType`, and `player` — see Global
@@ -765,7 +765,7 @@ named override consistently is scoped as the driver script's job, not a
 further generator patch, to keep this plan's generator-patch surface
 minimal — see Task 7 Step 2).
 
-- [ ] **Step 2: Write and run the catalog test**
+- [x] **Step 2: Write and run the catalog test**
 
 Create `tools/spritegen/catalog_test.py`:
 
@@ -806,7 +806,7 @@ if __name__ == "__main__":
 Run: `python3 tools/spritegen/catalog_test.py`
 Expected: `OK: 27 catalog entries` (20 tiles + 4 enemies + 2 items + player).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tools/spritegen/catalog.py tools/spritegen/catalog_test.py
@@ -840,7 +840,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
   ```
   For static kinds (`item`, `tile`) manifest is `{"kind": ..., "cellW": ..., "cellH": ..., "static": true}` and `sheet.png` is a single frame (plus, for autotiled tiles, 16 mask frames laid out left-to-right — see Step 2).
 
-- [ ] **Step 1: Write the driver for animated kinds (human/creature)**
+- [x] **Step 1: Write the driver for animated kinds (human/creature)**
 
 Create `tools/spritegen/gen_sprites.py`:
 
@@ -970,7 +970,7 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 2: Note the palette-hint gap and resolve it**
+- [x] **Step 2: Note the palette-hint gap and resolve it**
 
 `palette_hint` in the catalog (Task 6) isn't consumed by `gen_animated`/
 `gen_static` above, because neither `human.py` nor `creature.py` accepts a
@@ -991,7 +991,7 @@ block this task on wiring a full override — that is out of scope per the
 spec's YAGNI direction (ship the pipeline first, tune per-entity palettes
 as a fast follow once art is visible in-game).
 
-- [ ] **Step 3: Run the driver and inspect output**
+- [x] **Step 3: Run the driver and inspect output**
 
 ```bash
 cd /home/damien/Projects/eldrinth
@@ -1005,7 +1005,7 @@ Expected: 27 lines of `  <key>: WxH (...)` output, then `Done.`, and
 (`tile.water/sheet.png`, `player/sheet.png`, `enemy.sentinel/sheet.png`) in
 an image viewer to confirm they're non-empty, non-corrupt pixel art.
 
-- [ ] **Step 4: Commit the driver script and generated assets**
+- [x] **Step 4: Commit the driver script and generated assets**
 
 ```bash
 git add tools/spritegen/gen_sprites.py src/assets/sprites
@@ -1024,7 +1024,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 **Interfaces:**
 - Produces: `npm run gen:sprites` runs Task 7's driver script.
 
-- [ ] **Step 1: Add the script**
+- [x] **Step 1: Add the script**
 
 In `package.json`, add to `"scripts"`:
 
@@ -1032,14 +1032,14 @@ In `package.json`, add to `"scripts"`:
     "gen:sprites": "python3 tools/spritegen/gen_sprites.py"
 ```
 
-- [ ] **Step 2: Verify it runs**
+- [x] **Step 2: Verify it runs**
 
 Run: `npm run gen:sprites`
 Expected: same output as Task 7 Step 3 (idempotent — pixel content is
 identical since generation is deterministic; running it again produces byte-
 identical PNGs).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add package.json
@@ -1071,7 +1071,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
   export function preloadAtlases(entityKeys: string[]): Promise<void>;
   ```
 
-- [ ] **Step 1: Write the loader**
+- [x] **Step 1: Write the loader**
 
 Vite's `import.meta.glob` lets us load every generated sprite folder without
 hand-writing one `import` per entity. Create `src/game/render/spriteAtlas.ts`:
@@ -1206,7 +1206,7 @@ export async function preloadAtlases(entityKeys: string[]): Promise<void> {
 }
 ```
 
-- [ ] **Step 2: Write frame-lookup tests against a fake manifest**
+- [x] **Step 2: Write frame-lookup tests against a fake manifest**
 
 Create `src/game/render/spriteAtlas.test.ts`:
 
@@ -1273,7 +1273,7 @@ describe("sprite frame lookup", () => {
 Run: `npx vitest run src/game/render/spriteAtlas.test.ts`
 Expected: 6 passing tests.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/game/render/spriteAtlas.ts src/game/render/spriteAtlas.test.ts
@@ -1293,7 +1293,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 - Consumes: `loadAtlas`/`FrameRect` from Task 9's `spriteAtlas.ts`; `T` from `constants.ts`.
 - Produces: `drawTile` keeps its exact signature `(ctx, t, x, y, seedX, seedY)` so `TileChunkRenderer` (its only caller) needs no interface change — only its body changes from vector fills to `drawImage`.
 
-- [ ] **Step 1: Add a tile-key lookup and atlas preload**
+- [x] **Step 1: Add a tile-key lookup and atlas preload**
 
 At the top of `renderer.ts`, add:
 
@@ -1330,7 +1330,7 @@ Python/catalog side; this TS-side map is exercised the moment any tile
 fails to render, since `tileAtlasFor` returning `null` falls through to the
 existing flat-fill `default` case below).
 
-- [ ] **Step 2: Replace `drawTile`'s body with sprite drawing + flat-fill fallback**
+- [x] **Step 2: Replace `drawTile`'s body with sprite drawing + flat-fill fallback**
 
 Replace the whole `drawTile` function body (the `switch (t) { ... }` and its
 40+ cases) with:
@@ -1365,7 +1365,7 @@ import and `dot`/`rr` helpers may now be unused in this file; if so, remove
 those now-dead imports (check with the compiler/linter after this change,
 per Task 11's build verification).
 
-- [ ] **Step 3: Preload tile atlases once at renderer/game startup**
+- [x] **Step 3: Preload tile atlases once at renderer/game startup**
 
 Find where `TileChunkRenderer` is constructed (search `new TileChunkRenderer(` in `src/game/engine.ts`) and, right after construction, preload every tile key used by the current map so the first frames aren't drawn before atlases are ready:
 
@@ -1378,14 +1378,14 @@ void preloadAtlases(Object.values(TILE_SPRITE_KEY));
 (`TILE_SPRITE_KEY` needs to be exported from `renderer.ts` for this import
 to work: add `export` to its declaration in Step 1.)
 
-- [ ] **Step 4: Manually verify in the browser**
+- [x] **Step 4: Manually verify in the browser**
 
 Run: `npm run dev`, open the game, walk around.
 Expected: tiles render as pixel art (once `npm run gen:sprites` output from
 Task 7 exists) instead of flat vector fills; no console errors about
 missing atlases for any tile type actually placed on the map.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/game/render/renderer.ts src/game/engine.ts
@@ -1405,7 +1405,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 - Consumes: `loadAtlas`/`FrameRect` (Task 9); existing `EnemyState`/`PlayerState` fields already used by these functions (`e.type`, `e.dir` — confirm this field exists on `EnemyState`/read from `WorldState.ts` if not already visible in scope — `e.t` (elapsed time), `e.attacking`/`p.attacking`, `p.dir`, `p.walkT`).
 - Produces: `drawKnightBody`, `drawWraith`, `drawSentinel`, `drawAdept`, `drawBoss` keep their existing call sites in `drawEnemy`/`drawPlayer` unchanged in signature, only their bodies change to `drawImage`.
 
-- [ ] **Step 1: Add an entity-sprite drawing helper**
+- [x] **Step 1: Add an entity-sprite drawing helper**
 
 Add near the tile helpers from Task 10:
 
@@ -1454,7 +1454,7 @@ function drawEntitySprite(
 }
 ```
 
-- [ ] **Step 2: Wire `drawKnightBody`**
+- [x] **Step 2: Wire `drawKnightBody`**
 
 Replace `drawKnightBody`'s body (all the `fillStyle`/`beginPath` calls) with:
 
@@ -1482,7 +1482,7 @@ full original ~50-line body) — it's a development safety net for a
 not-yet-loaded atlas, not a permanent second art style; Task 12's
 completeness check ensures the real sprite is always present by ship time.
 
-- [ ] **Step 3: Wire `drawWraith`, `drawSentinel`, `drawAdept`, `drawBoss`**
+- [x] **Step 3: Wire `drawWraith`, `drawSentinel`, `drawAdept`, `drawBoss`**
 
 Each of these currently draws in the enemy's local (translated) space — keep
 that calling convention. Replace each function's body with the same
@@ -1511,13 +1511,13 @@ today (confirm via `src/game/core/WorldState.ts`) — pass `"front"` as a
 fixed direction for enemies in this pass; giving enemies real directional
 facing is a reasonable follow-up, not required for sprites to render.
 
-- [ ] **Step 4: Manually verify in the browser**
+- [x] **Step 4: Manually verify in the browser**
 
 Run: `npm run dev`, engage an enemy in combat.
 Expected: player and enemies render as animated pixel-art sprites; attacking
 visibly switches to the attack animation; no console errors.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/game/render/renderer.ts
@@ -1537,7 +1537,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 
 **Interfaces:** none (build config only).
 
-- [ ] **Step 1: Remove the plugin from Vite config**
+- [x] **Step 1: Remove the plugin from Vite config**
 
 In `vite.config.ts`, remove the import and usage:
 
@@ -1549,13 +1549,13 @@ In `vite.config.ts`, remove the import and usage:
 +  plugins: [react(), tailwindcss()],
 ```
 
-- [ ] **Step 2: Remove the dependency**
+- [x] **Step 2: Remove the dependency**
 
 ```bash
 npm uninstall vite-plugin-singlefile
 ```
 
-- [ ] **Step 3: Update ROADMAP.md**
+- [x] **Step 3: Update ROADMAP.md**
 
 Find the line "Keep the browser-only, single-file build" (or equivalent) in
 `ROADMAP.md` and replace it with a note that the constraint was
@@ -1566,13 +1566,13 @@ deliberately dropped:
   sprite/tile image assets — see docs/superpowers/specs/2026-09-12-procedural-sprite-pipeline-design.md).
 ```
 
-- [ ] **Step 4: Verify the build**
+- [x] **Step 4: Verify the build**
 
 Run: `npm run build`
 Expected: succeeds, and `dist/` now contains separate `.png`/`.js`/`.css`
 files (not one single `index.html` with everything inlined).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add vite.config.ts package.json package-lock.json ROADMAP.md
@@ -1595,7 +1595,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
   drift if `renderer.ts`'s map ever falls out of sync with `T`), and the
   generated `src/assets/sprites/*/manifest.json` files on disk.
 
-- [ ] **Step 1: Write the completeness test**
+- [x] **Step 1: Write the completeness test**
 
 Create `src/game/render/spriteCatalog.test.ts`:
 
@@ -1631,14 +1631,14 @@ describe("sprite catalog completeness", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test**
+- [x] **Step 2: Run the test**
 
 Run: `npx vitest run src/game/render/spriteCatalog.test.ts`
 Expected: 2 passing tests (assuming Task 7's `npm run gen:sprites` has been
 run and its output committed). If it fails, that means an asset is missing
 — run `npm run gen:sprites` again and re-commit `src/assets/sprites/`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/game/render/spriteCatalog.test.ts
@@ -1653,7 +1653,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Run the full test suite**
+- [x] **Step 1: Run the full test suite**
 
 Run: `npx vitest run`
 Expected: all tests pass, including the pre-existing
@@ -1661,12 +1661,12 @@ Expected: all tests pass, including the pre-existing
 `regions.test.ts`/`map.test.ts`/`quests.test.ts` (untouched by this plan)
 alongside the new `spriteAtlas.test.ts` and `spriteCatalog.test.ts`.
 
-- [ ] **Step 2: Type-check and build**
+- [x] **Step 2: Type-check and build**
 
 Run: `npx tsc --noEmit && npm run build`
 Expected: no type errors, build succeeds.
 
-- [ ] **Step 3: Manual playthrough**
+- [x] **Step 3: Manual playthrough**
 
 Run: `npm run dev`, then play through: title screen → into a region with
 several different tile types → fight each enemy type → pick up a shard and
@@ -1674,7 +1674,7 @@ a potion. Confirm every tile type and entity renders as pixel art (not a
 flat-color fallback rect), walk/attack animations play, and there are no
 console errors.
 
-- [ ] **Step 4: Final commit if any fixes were needed**
+- [x] **Step 4: Final commit if any fixes were needed**
 
 If manual verification surfaced any bugs, fix them and commit:
 

@@ -1,6 +1,6 @@
 # ONBOARDING — ELDRINTH: The Unbound Spire
 
-> A single-file-bundle, 2D open-world dark-fantasy action RPG that runs entirely in the browser.
+> A 2D open-world dark-fantasy action RPG that runs entirely in the browser.
 > You play a lone wayfarer hunting three **Anima Shards** to break the ward on the **Glass Spire**,
 > then slaying the **Unbound** — a mad, elf-forged artificial mind.
 
@@ -29,9 +29,10 @@ and how to make common changes without breaking things.
 
 ## 1. What This Is
 
-ELDRINTH is a small but complete HTML5 canvas game. There is **no backend, no network, no build-time
-data fetching** — everything (map, art, logic) is generated procedurally or drawn at runtime with the
-Canvas 2D API. The React layer is a *thin shell* that mounts the game canvas and overlays HUD/menus.
+ELDRINTH is a small but complete HTML5 canvas game. There is **no backend, no network, or build-time
+data fetching**. Maps and gameplay are deterministic; committed pixel-art atlases are generated offline
+by `tools/spritegen`, then drawn through the Canvas 2D renderer. The React layer is a *thin shell* that
+mounts the game canvas and overlays HUD/menus.
 
 Key gameplay facts (handy for new contributors):
 
@@ -52,7 +53,8 @@ Key gameplay facts (handy for new contributors):
 | Bundler / dev server | Vite 7                                                           |
 | Styling            | Tailwind CSS v4 (via `@tailwindcss/vite` plugin)                  |
 | Rendering          | HTML5 Canvas 2D (`<canvas>`, no WebGL, no game engine)           |
-| Single-file output | `vite-plugin-singlefile` (everything inlined into one `index.html`) |
+| Art pipeline       | Offline Python/Pillow sprite generation adapted from `shed-dev-sprites` |
+| Build output       | Multi-file static bundle with cacheable image atlases              |
 | Utility CSS class  | `clsx` + `tailwind-merge` (`cn()` helper)                         |
 
 Versions are pinned in `package.json`. The styling pipeline is the new **Tailwind v4** model: there is
@@ -65,6 +67,8 @@ Versions are pinned in `package.json`. The styling pipeline is the new **Tailwin
 
 - **Node.js** (the lockfile resolves Vite 7, which requires a modern Node — 18+ recommended, 20+ safest).
 - A package manager. The repo ships a `package-lock.json`, so use **npm**.
+- **Python 3.10+, Pillow, and numpy** only when regenerating sprite assets; they are not runtime/build
+  dependencies for the browser game.
 
 No global installs are needed.
 
@@ -75,6 +79,7 @@ No global installs are needed.
 ```bash
 npm install        # install dependencies
 npm run dev        # start Vite dev server (hot reload)
+npm run gen:sprites # regenerate committed sprite atlases (Python + Pillow + numpy)
 ```
 
 Then open the URL Vite prints (typically `http://localhost:5173`).
@@ -82,7 +87,7 @@ Then open the URL Vite prints (typically `http://localhost:5173`).
 Other scripts:
 
 ```bash
-npm run build      # production build -> dist/index.html (single file)
+npm run build      # production build -> dist/ plus separate cacheable assets
 npm run preview    # serve the production build locally
 ```
 
@@ -99,13 +104,13 @@ eldrinth/
 ├── index.html                 # App entry HTML; loads /src/main.tsx; Google Fonts (Cinzel, EB Garamond)
 ├── package.json               # Scripts, pinned deps
 ├── tsconfig.json              # Strict TS config; path alias "@/*" -> "src/*"
-├── vite.config.ts             # Vite + React + Tailwind + single-file plugin; "@" alias
+├── vite.config.ts             # Vite + React + Tailwind; emits cacheable sprite assets; "@" alias
 ├── src/
 │   ├── main.tsx               # React root: createRoot(<App/>)
 │   ├── App.tsx                # Top-level screen state machine (title/play/win/lose) + HUD wiring
 │   ├── index.css              # Tailwind import + custom keyframes/animations (msgFade, flick, vignette...)
 │   ├── vite-env.d.ts          # Vite client types
-│   ├── assets/                # Static images: title.jpg, ending.jpg
+│   ├── assets/                # UI images plus generated sprites/* sheets and manifests
 │   ├── components/            # React overlays (NOT game logic)
 │   │   ├── GameCanvas.tsx     # Mounts <canvas>, instantiates & drives the Game class
 │   │   ├── HUD.tsx            # Hearts, shards, objective, boss bar, prompts, messages
@@ -120,9 +125,12 @@ eldrinth/
 │   │   ├── constants.ts       # TILE size, MAP_W/H, tile-type ids (T), SOLID_TILES set
 │   │   ├── math.ts            # Pure helpers shared by logic + rendering (clamp, rr, dot, hash2, DIRV/DIRA)
 │   │   └── render/
-│   │       └── renderer.ts    # All Canvas drawing: drawTile, buildStaticCanvas, renderGame + draw* functions
+│   │       ├── renderer.ts    # Atlas-backed world rendering plus procedural lighting/effects
+│   │       └── spriteAtlas.ts # Vite asset discovery, image preload/cache, frame lookup
 │   └── utils/
 │       └── cn.ts              # cn(...classes) -> clsx + tailwind-merge
+├── tools/spritegen/           # Vendored/adapted shed-dev-sprites generator and catalog
+└── docs/superpowers/          # Sprite pipeline design and implementation plan
 ```
 
 **Mental model:** everything under `src/game/` is the *game* (canvas, simulation, art). Everything under
@@ -268,18 +276,18 @@ Enemy behaviors (`updateEnemy`, `engine.ts:983`):
 
 ### Rendering
 
-`render()` (`engine.ts:1326`):
+`renderGame()` (`game/render/renderer.ts`):
 1. Set DPR transform; clear.
 2. Apply screen **shake** offset.
-3. `ctx.save()` + translate by `-cam`; draw the pre-rendered **static** terrain canvas (`staticCanvas`,
-   built once in `buildStatic`), then ward barrier, items, enemies (depth-sorted by `y`), player,
-   projectiles, particles, floating texts; `ctx.restore()`.
-4. Overlays: `drawLighting()` (atmospheric vignette/glow) and `drawCompass()` (off-screen objective arrow).
-   *(See `engine.ts` lines ~1717+ for `drawLighting`/`drawCompass`/`drawSword`/etc.)*
+3. Translate by `-cam`; draw nearby terrain chunks baked from generated tile atlases, then the ward,
+   depth-sorted props/items/actors, projectiles, particles, floating text, and tall-tile overlays.
+4. Draw atmospheric lighting and vignette effects.
 
-All art is **procedural vector drawing** on the canvas — there are no sprite sheets. Player & enemies are
-composed of `moveTo`/`arc`/`fill` calls (e.g. `drawKnightBody`, `drawWraith`, `drawBoss`). Colors are
-hardcoded hex/rgba. The "light" look uses `globalCompositeOperation = "lighter"` for additive glow.
+Tiles, the player, enemies, pickups, campfires, and signs use committed PNG sheets under
+`src/assets/sprites/`. `spriteAtlas.ts` preloads them and resolves direction/action/frame rectangles;
+nearest-neighbour Canvas drawing preserves crisp pixels. Procedural Canvas work remains for transient
+effects such as glow, attack arcs, projectiles, particles, telegraphs, shadows, and lighting. Missing
+assets retain simple development fallbacks, while catalog tests ensure every shipped visual is present.
 
 ---
 
@@ -355,8 +363,8 @@ Damage/knockback: `hitEnemy`/`damagePlayer`. Speeds: `Player.speed`, `Enemy.spee
 - **DPR handling**: canvas backing store is scaled by `devicePixelRatio` (capped at 2) in `resize()`
   (`engine.ts:1289`); all drawing uses CSS pixel coordinates thanks to the `setTransform(dpr,...)` at the top
   of `render()`.
-- **No tests / no lint script**: the project has none defined. Verify changes by `npm run dev` and playing,
-  and `npx tsc --noEmit` for types.
+- **Tests are invoked directly**: run `npx vitest run`, `npx tsc --noEmit`, and the Python checks in
+  `tools/spritegen/*_test.py`. There is no lint script.
 
 ---
 
@@ -366,9 +374,9 @@ Damage/knockback: `hitEnemy`/`damagePlayer`. Speeds: `Player.speed`, `Enemy.spee
 npm run build
 ```
 
-`vite-plugin-singlefile` inlines the JS, CSS, and assets into a **single `dist/index.html`** — no separate
-asset files, no server required. You can open `dist/index.html` directly in a browser (or host it as a
-static file anywhere). `npm run preview` serves the built file locally for a final check.
+The production output is deliberately multi-file: JavaScript, CSS, WebAssembly, JPGs, and generated PNG
+atlases are emitted as separate cacheable assets under `dist/assets/`. Use `npm run preview` or any static
+HTTP server for the final check.
 
 There is no CI, no environment config, and no backend. The game is fully client-side and self-contained.
 
