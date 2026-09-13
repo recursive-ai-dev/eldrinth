@@ -1106,11 +1106,13 @@ export class Game {
     const choice = resolveQuest(this.world.quests, questId, choiceId);
     if (!choice) return;
     const p = this.player;
-    const { stat, amount } = choice.reward;
-    if (stat === "health") { p.maxHp += amount; p.hp = Math.min(p.maxHp, p.hp + amount); }
-    if (stat === "stamina") { p.maxStamina += amount; p.stamina = p.maxStamina; }
-    if (stat === "blade") p.attackBonus += amount;
-    if (stat === "dash") p.dashCostDiscount += amount;
+    if (choice.reward) {
+      const { stat, amount } = choice.reward;
+      if (stat === "health") { p.maxHp += amount; p.hp = Math.min(p.maxHp, p.hp + amount); }
+      if (stat === "stamina") { p.maxStamina += amount; p.stamina = p.maxStamina; }
+      if (stat === "blade") p.attackBonus += amount;
+      if (stat === "dash") p.dashCostDiscount += amount;
+    }
     this.publishJournal();
     this.openDialogue([choice.text], "Orithel, the Last Watcher", "#9ff7e6");
     this.msg("Your decision has been recorded in the journal.");

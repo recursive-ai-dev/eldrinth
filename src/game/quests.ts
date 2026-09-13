@@ -10,7 +10,7 @@ export interface QuestDefinition {
   title: string;
   lead: string;
   evidence: { fact: string; title: string; text: string }[];
-  choices: { id: string; label: string; text: string; reward: { stat: "health" | "stamina" | "blade" | "dash"; amount: number } }[];
+  choices: { id: string; label: string; text: string; reward?: { stat: "health" | "stamina" | "blade" | "dash"; amount: number } }[];
 }
 
 /** Authored knowledge, not coordinates: the journal only exposes learned facts. */
@@ -25,6 +25,7 @@ export const QUESTS: QuestDefinition[] = [
     choices: [
       { id: "release", label: "Release the child into the wayfires. (+2 health)", text: "Orithel opens the vessel. A small voice thanks us before it scatters among the flames. The wayfires now carry two lives, and their warmth stays with me. Maximum health +2.", reward: { stat: "health", amount: 2 } },
       { id: "bind", label: "Bind the memory to my blade. (+1 damage)", text: "Orithel binds the child's light into my weapon. The blade cuts deeper; the vessel falls silent. He asks me to remember whose strength I carry. Blade damage +1.", reward: { stat: "blade", amount: 1 } },
+      { id: "end", label: "End it. Take nothing.", text: "I did it outside, away from the hall, and Orithel did not stop me — he only noted that the yield was lost and asked me not to make a habit of it. It stopped being awake. That is the whole of what I accomplished, and I am not sorry." },
     ],
   },
   {
