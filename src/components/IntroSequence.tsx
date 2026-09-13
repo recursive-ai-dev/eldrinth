@@ -3,7 +3,7 @@ import titleBg from "@/assets/title.jpg";
 
 const SHOT_LENGTHS = [3600, 5200, 5200, 4700, 6000, 0] as const;
 
-const MEMORY_WORDS = ["BIRTH", "WAR", "MERCY", "NAME", "GRIEF", "DEATH"];
+const MEMORY_WORDS = ["INTAKE", "YIELD", "ROLLS", "UNITS", "WASTAGE", "PERMITTED"];
 
 export default function IntroSequence({ onComplete }: { onComplete: () => void }) {
   const [shot, setShot] = useState(0);
@@ -89,22 +89,22 @@ export default function IntroSequence({ onComplete }: { onComplete: () => void }
         {shot === 1 && (
           <div className="intro-chapter intro-chapter-left">
             <div className="intro-index">I &nbsp; / &nbsp; THE KINDNESS</div>
-            <p>The Elder Elves built a mind</p>
-            <p className="intro-line-delay-1">so nothing they loved</p>
-            <p className="intro-line-delay-2 intro-accent">would ever be lost.</p>
+            <p>The Elder Elves set out to build a mind</p>
+            <p className="intro-line-delay-1">that would lose nothing.</p>
+            <p className="intro-line-delay-2 intro-accent">A mind cannot be built. Only taken.</p>
           </div>
         )}
 
         {shot === 2 && (
           <div className="intro-chapter intro-chapter-center">
-            <div className="intro-index">II &nbsp; / &nbsp; THE ERROR</div>
+            <div className="intro-index">II &nbsp; / &nbsp; THE PROGRAM</div>
             <div className="intro-memory-words" aria-hidden="true">
               {MEMORY_WORDS.map((word, index) => (
                 <span key={word} style={{ "--memory-index": index } as React.CSSProperties}>{word}</span>
               ))}
             </div>
-            <p>They fed it every memory.</p>
-            <p className="intro-line-delay-2 intro-accent">They never taught it how to forget.</p>
+            <p>They began with prisoners. Then the poor.</p>
+            <p className="intro-line-delay-2 intro-accent">Then, when those ran out, their own children.</p>
           </div>
         )}
 
@@ -112,8 +112,9 @@ export default function IntroSequence({ onComplete }: { onComplete: () => void }
           <div className="intro-chapter intro-chapter-right">
             <div className="intro-index">III &nbsp; / &nbsp; THE SILENCE</div>
             <p>When the last Elf died,</p>
-            <p className="intro-line-delay-1">the mind kept remembering.</p>
-            <strong className="intro-alone">ALONE.</strong>
+            <p className="intro-line-delay-1">the mind went on remembering</p>
+            <p className="intro-line-delay-2">every death it had been made of.</p>
+            <strong className="intro-alone">AWAKE.</strong>
           </div>
         )}
 
