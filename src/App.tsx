@@ -7,6 +7,7 @@ import PauseOverlay from "@/components/PauseOverlay";
 import TitleScreen from "@/components/TitleScreen";
 import EndScreen from "@/components/EndScreen";
 import IntroSequence from "@/components/IntroSequence";
+import ContentWarning, { contentWarningSeen, markContentWarningSeen } from "@/components/ContentWarning";
 import { useGameStore, selectScreen, selectPaused, selectHud, selectDialogue, selectJournal, selectSessionId, selectEnding } from "@/stores";
 import type { GameCallbacks } from "@/game/types";
 import type { Game } from "@/game/engine";
@@ -31,6 +32,7 @@ export default function App() {
   const [activeSlot, setActiveSlot] = useState<number | null>(null);
   const [difficulty, setDifficulty] = useState<Difficulty>("standard");
   const [introPlaying, setIntroPlaying] = useState(false);
+  const [warned, setWarned] = useState(() => contentWarningSeen());
 
   const refreshSlots = useCallback(() => { void slotStore.list().then(setSlots).catch(() => setSlots([])); }, []);
   useEffect(() => { refreshSlots(); }, [refreshSlots]);
@@ -70,6 +72,11 @@ export default function App() {
   const eraseSlot = useCallback((slot: number) => {
     void slotStore.remove(slot).then(refreshSlots).catch(() => undefined);
   }, [refreshSlots]);
+
+  const acknowledgeWarning = useCallback(() => {
+    markContentWarningSeen();
+    setWarned(true);
+  }, []);
 
   const gameRef = useRef<Game | null>(null);
   const setJournalVisibility = useCallback((open: boolean) => {
@@ -140,7 +147,8 @@ export default function App() {
         />
       )}
 
-      {screen === "title" && !introPlaying && <TitleScreen onStart={start} onContinue={resume} onErase={eraseSlot} slots={slots} />}
+      {!warned && <ContentWarning onAcknowledge={acknowledgeWarning} />}
+      {warned && screen === "title" && !introPlaying && <TitleScreen onStart={start} onContinue={resume} onErase={eraseSlot} slots={slots} />}
       {screen === "title" && introPlaying && <IntroSequence onComplete={finishIntro} />}
       {screen === "ending" && ending && <EndScreen ending={ending} onRestart={restart} />}
     </div>
