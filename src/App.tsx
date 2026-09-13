@@ -149,7 +149,7 @@ export default function App() {
 
       {!warned && <ContentWarning onAcknowledge={acknowledgeWarning} />}
       {warned && screen === "title" && !introPlaying && <TitleScreen onStart={start} onContinue={resume} onErase={eraseSlot} slots={slots} />}
-      {screen === "title" && introPlaying && <IntroSequence onComplete={finishIntro} />}
+      {warned && screen === "title" && introPlaying && <IntroSequence onComplete={finishIntro} />}
       {screen === "ending" && ending && <EndScreen ending={ending} onRestart={restart} />}
     </div>
   );
