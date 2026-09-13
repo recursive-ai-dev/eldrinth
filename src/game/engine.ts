@@ -129,6 +129,12 @@ const ORITHEL_LINES = [
   "Go, wayfarer. May the old light guide your blade.",
 ];
 
+const WARD_LINES = [
+  "There you are. Nine. You have no idea how rarely it runs this cleanly, and I would like you to hear me say so.",
+  "I will take them now. The Unbound has been very loud for a very long time, and it will be a kindness to everyone — itself most of all — when it stops.",
+  "You have been extraordinary. I want you to understand that I mean that. I have said it before, and I have always meant it.",
+];
+
 /* ----------------------------- the game ----------------------------- */
 export class Game {
   canvas: HTMLCanvasElement;
@@ -773,9 +779,9 @@ export class Game {
       if (exit) void this.changeRegion(exit);
     }
 
-    if (this.world.regionId === "overworld" && !this.changingRegion && !this.bossSpawned && this.wardUnlocked) {
+    if (this.world.regionId === "overworld" && !this.changingRegion && !this.bossSpawned && this.wardUnlocked && !this.dialogue && !this.ended) {
       if (Math.hypot(p.x - this.map.bossCenter.x, p.y - this.map.bossCenter.y) < TILE * 5)
-        this.spawnBoss();
+        this.openWardChoice();
     }
   }
 
@@ -1067,6 +1073,15 @@ export class Game {
     this.cb.onDialogue({ ...this.dialogue! });
   }
 
+  private openWardChoice() {
+    this.openDialogue(WARD_LINES.slice(), "Orithel, the Architect", "#9ff7e6");
+    this.dialogue!.choices = [
+      { id: "ending:surrender", label: "Give him the nine." },
+      { id: "ending:refuse", label: "No." },
+    ];
+    this.cb.onDialogue({ ...this.dialogue! });
+  }
+
   chooseDialogue(id: string) {
     if (!this.dialogue?.choices?.some((choice) => choice.id === id)) return;
     this.input.clear();
@@ -1076,6 +1091,18 @@ export class Game {
       return;
     }
     if (id === "topics") { this.openWatcherTopics(); return; }
+    if (id === "ending:surrender") {
+      this.dialogue = null;
+      this.cb.onDialogue(null);
+      this.spawnBoss();
+      return;
+    }
+    if (id === "ending:refuse") {
+      this.dialogue = null;
+      this.cb.onDialogue(null);
+      this.endRun("refusal");
+      return;
+    }
     if (id === "spire") {
       if (learnFact(this.world.quests, "spire")) {
         this.world.journal.push({ id: "orithel:spire", title: "The Unbound Spire", text: ORITHEL_LINES.slice(3, 7).join(" "), source: "Orithel · Ilyarael" });
