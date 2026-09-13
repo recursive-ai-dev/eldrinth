@@ -1,4 +1,7 @@
-export type SceneId = "title" | "overworld" | "interior" | "menu" | "pause" | "cutscene" | "win" | "lose";
+export type SceneId = "title" | "overworld" | "interior" | "menu" | "pause" | "cutscene" | "ending";
+
+/** Which ending a finished run reached. `silence` is the old "win". */
+export type EndingId = "silence" | "refusal" | "spent";
 
 /** A small, explicit stack. Overlay scenes never replace the world beneath them. */
 export class SceneStack {

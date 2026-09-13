@@ -21,6 +21,7 @@ import {
   type WorldSnapshot,
 } from "./core/WorldState";
 import { createRegionRepository, type RegionRepository } from "./regions";
+import type { EndingId } from "./core/SceneStack";
 import { QUESTS, learnFact, canResolve, questKnown, questJournal, resolveQuest } from "./quests";
 import { AISystem } from "./systems/AISystem";
 import { CombatSystem } from "./systems/CombatSystem";
@@ -638,7 +639,7 @@ export class Game {
         if (e.dying <= 0) {
           if (e.type === "boss") {
             this.boss = null;
-            this.endWin();
+            this.endRun("silence");
           }
           this.enemies.splice(i, 1);
         }
@@ -710,7 +711,7 @@ export class Game {
         if (this.world.checkpoint) this.respawnAtCheckpoint();
         else {
           this.ended = true;
-          this.cb.onLose();
+          this.cb.onEnd("spent");
         }
       }
       return;
@@ -1222,11 +1223,11 @@ export class Game {
     void this.changeRegion({ x: 0, y: 0, targetRegion: point.regionId, destination: { x: point.x, y: point.y }, label: point.name });
   }
 
-  endWin() {
+  endRun(ending: EndingId) {
     if (this.ended) return;
     this.ended = true;
-    this.msg("The Unbound is silenced. Dawn returns to Eldrinth.");
-    this.cb.onWin();
+    if (ending === "silence") this.msg("The Unbound stops. All of it, at once.");
+    this.cb.onEnd(ending);
   }
 
   msg(text: string) {
