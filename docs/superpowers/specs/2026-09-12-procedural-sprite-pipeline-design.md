@@ -42,11 +42,23 @@ Two existing tools were evaluated as generation sources:
    move to sprites together, so the game doesn't end up half-procedural/
    half-sprite.
 4. **Animation**: full walk-cycle and attack/idle animation frames from day
-   one (the generator already produces these cheaply), not static-only.
+   one. Verified against the actual generator code: it natively supports only
+   a directional walk cycle (`generate_anim_sheet` → 4 directions × N frames,
+   frame 0 doubling as an idle pose) — there is no attack-pose logic
+   anywhere in `human.py`/`creature.py`/`math/pose.py`. This plan therefore
+   includes writing new attack-pose kinematics (a lunge/swing variant of the
+   walk pose) into the vendored copy, rather than assuming it already exists.
 5. **Integration architecture**: vendor the Python generator into the repo as
    a dev-time-only tool, driven by a catalog mapping game entities to
    generator params, producing committed PNG sheet + JSON manifest assets.
    Python never ships in the browser bundle and is never called at runtime.
+   The vendored CLI surface (`cli.py`) is bypassed for our own generation
+   script — it has dead/unreachable option paths (`--mode poses/anim/autotile`
+   aren't in its own `argparse` `choices`, and options like `--direction` are
+   read by `_gen_kwargs` but never registered as CLI flags). Our
+   `gen_sprites.py` script calls `registry.get_generator()` and the
+   `SpriteGenerator` methods (`generate`, `generate_walk`,
+   `generate_anim_sheet`) directly instead.
 
 ## Architecture
 
@@ -54,7 +66,7 @@ Two existing tools were evaluated as generation sources:
 tools/spritegen/                  (vendored + adapted from shed-dev-sprites)
   generator/...                   existing math + sprite modules (human, creature, item, tile)
   catalog.py                      NEW: eldrinth entity -> generator params mapping
-  cli.py                          extended with a --catalog batch mode
+  gen_sprites.py                  NEW: catalog-driven batch generator + art direction
 
 src/assets/sprites/
   <entity-id>/
@@ -68,13 +80,19 @@ src/game/render/
 
 ### Generation flow
 
-`npm run gen:sprites` → a small Node script shells out to
-`tools/spritegen/cli.py --catalog` → Python reads `catalog.py`, generates one
+`npm run gen:sprites` → Python runs `tools/spritegen/gen_sprites.py` → reads
+`catalog.py`, generates one
 sheet + manifest per catalog entry → writes to `src/assets/sprites/*` →
 committed to the repo like any other source asset → Vite bundles them as
-normal static assets → `spriteAtlas.ts` loads them via `Image`/`fetch` at
+normal static assets (with inlining disabled) → `spriteAtlas.ts` loads them via `Image` at
 game-init and caches decoded bitmaps → the renderer looks up the right frame
 per draw call by entity type, facing direction, and animation time.
+
+Terrain sheets contain four deterministic material variants to prevent visible
+grid repetition. Grass and water combine those variants with all 16 Wang edge
+masks. Landmark tiles and combatants receive deterministic, integer-pixel art
+direction over the generated material/body layer so trees, graves, the knight,
+and each enemy retain unmistakable silhouettes instead of generic textures.
 
 ### Catalog
 
@@ -82,11 +100,11 @@ One entry per distinct visual thing the game needs, e.g.:
 
 ```python
 CATALOG = {
-    "player":         {"kind": "human",    "seed": "eldrinth-player-01", "palette": "grim_steel",      "anims": ["walk", "attack", "idle"]},
-    "enemy.wraith":   {"kind": "creature", "archetype": "tentacle", "seed": "wraith-a1",  "palette": "wraith_ash",       "anims": ["walk", "attack", "idle"]},
-    "enemy.sentinel": {"kind": "creature", "archetype": "golem",    "seed": "sentinel-a1","palette": "rusted_stone",     "anims": ["walk", "attack", "idle"]},
-    "enemy.adept":    {"kind": "human",    "seed": "adept-a1",      "palette": "cult_blood",       "anims": ["walk", "attack", "idle"]},
-    "enemy.boss":     {"kind": "creature", "archetype": "biped",    "seed": "boss-a1",     "palette": "corrupted_flesh", "anims": ["walk", "attack", "idle"]},
+    "player":         {"kind": "human",    "seed": "eldrinth-player-01", "palette": "grim_steel",      "anims": ["walk", "attack"]},
+    "enemy.wraith":   {"kind": "creature", "archetype": "tentacle", "seed": "wraith-a1",  "palette": "wraith_ash",       "anims": ["walk", "attack"]},
+    "enemy.sentinel": {"kind": "creature", "archetype": "golem",    "seed": "sentinel-a1","palette": "rusted_stone",     "anims": ["walk", "attack"]},
+    "enemy.adept":    {"kind": "human",    "seed": "adept-a1",      "palette": "cult_blood",       "anims": ["walk", "attack"]},
+    "enemy.boss":     {"kind": "creature", "archetype": "biped",    "seed": "boss-a1",     "palette": "corrupted_flesh", "anims": ["walk", "attack"]},
     "tile.grass":     {"kind": "tile",     "seed": "grass-a1",      "palette": "sickly_green"},
     "tile.water":     {"kind": "tile",     "seed": "water-a1",      "palette": "black_water", "autotile": True},
     "item.shard":     {"kind": "item",     "seed": "shard-a1",      "palette": "bone_relic"},
@@ -94,9 +112,30 @@ CATALOG = {
 }
 ```
 
-Every value of the existing `T` tile enum (`src/game/constants.ts`) and every
-enemy/item type gets exactly one catalog entry — this is the single source of
-truth for what art exists.
+Frame 0 of the `"walk"` animation doubles as the idle/neutral pose (this is
+how the generator already behaves — no separate idle action needed).
+
+Every value of the existing `T` tile enum (`src/game/constants.ts`, 20
+values: `GRASS, DGRASS, PATH, WATER, TREE, ROCK, RFLOOR, RWALL, CRYSTAL,
+FLOWER, BRIDGE, GRAVE, BONES, TALLGRASS, SPIREFLOOR, SAND, LEDGE,
+SLOPE_UP_LEFT, SLOPE_UP_RIGHT, TRIGGER`) and every enemy type (`wraith,
+sentinel, adept, boss`) and item type (`shard, potion`) gets exactly one
+catalog entry — this is the single source of truth for what art exists.
+
+Two required patches to the vendored generator, since verified code reading
+showed these aren't currently supported:
+
+- `creature.py`'s `_build()` currently always picks its archetype internally
+  via `rng.choice(_ARCHETYPES)` seeded from `seed` — it ignores any caller
+  input. Patch it to use `options.get("archetype")` when provided, falling
+  back to the random choice only if omitted, so the catalog can force
+  `sentinel → golem`, `wraith → tentacle`, etc.
+- New attack-pose kinematics: add an `attack_pose()` function alongside the
+  existing `walk_pose()` in `math/pose.py` (a weapon-arm/lunge offset variant
+  driven by the same per-frame parametrization), and thread an `action`
+  option (`"walk" | "attack"`) through `human.py`/`creature.py`/`base.py`'s
+  `generate_walk`/`generate_anim_sheet` so callers can request an attack
+  sheet the same way they request a walk sheet.
 
 ### Art direction (palettes)
 

@@ -41,6 +41,8 @@ export interface AIContext {
   onText?: (x: number, y: number, text: string, color: string, size: number) => void;
   onShake?: (mag: number) => void;
   random?: () => number;
+  /** Scales how close a non-boss enemy must be before it commits to combat. */
+  engagementMultiplier?: number;
 }
 
 export class AISystem {
@@ -51,6 +53,7 @@ export class AISystem {
     const dist = Math.hypot(dx, dy) || 1;
     const ux = dx / dist;
     const uy = dy / dist;
+    const awareness = ctx.engagementMultiplier ?? 1;
 
     if (enemy.type === "boss") {
       this.updateBoss(enemy, dt, dist, ux, uy, ctx);
@@ -61,7 +64,7 @@ export class AISystem {
     let mvy = 0;
     if (enemy.telegraphTimer > 0) enemy.telegraphTimer -= dt;
     if (enemy.type === "wraith") {
-      if (dist < 260) {
+      if (dist < 260 * awareness) {
         mvx = ux * enemy.speed;
         mvy = uy * enemy.speed;
       } else {
@@ -71,13 +74,13 @@ export class AISystem {
       }
       enemy.bob = Math.sin(enemy.t * 4) * 3;
     } else if (enemy.type === "sentinel") {
-      if (dist < 320) {
+      if (dist < 320 * awareness) {
         mvx = ux * enemy.speed;
         mvy = uy * enemy.speed;
       }
     } else if (enemy.type === "adept") {
       enemy.shootCd -= dt;
-      if (dist < 360) {
+      if (dist < 360 * awareness) {
         if (dist < 168) {
           mvx = -ux * enemy.speed * 0.95;
           mvy = -uy * enemy.speed * 0.95;

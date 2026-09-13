@@ -57,8 +57,11 @@ export default function HUD({ hud }: { hud: HudData }) {
       {/* Top-center: objective */}
       <div className="absolute left-1/2 top-4 w-[min(560px,80vw)] -translate-x-1/2">
         <div className="rounded-lg border border-amber-200/15 bg-black/45 px-4 py-2 text-center backdrop-blur-sm">
+          <div className="mb-1 font-title text-[10px] uppercase tracking-[0.3em] text-teal-200/65">
+            {hud.regionName}
+          </div>
           <div className="font-title text-[10px] uppercase tracking-[0.3em] text-amber-200/60">
-            Quest
+            Rumour
           </div>
           <div className="font-title text-sm tracking-wide text-amber-50">{hud.objective}</div>
         </div>

@@ -1,97 +1,29 @@
-Based on an analysis of the repository artifacts—a standalone, browser-only 2D top-down dark-fantasy action RPG (`ELDRINTH: The Unbound Spire`) built with React 19, Vite 7, TypeScript, Tailwind CSS v4, and HTML5 Canvas 2D via `vite-plugin-singlefile`—the current codebase provides an end-to-end slice (player controls, procedural seeded world map, basic enemy AI, dialogue, boss encounter, and HUD/menus).
+# Eldrinth development roadmap
 
-However, all core systems, physics, state, entities, and drawing loops reside in a single monolithic orchestrator (`engine.ts`), the world is static after generation, combat mechanics lack depth/variety, and persistence is nonexistent.
+Eldrinth will be a compact action RPG built around self-directed discovery. The player learns routes, threats, and motives from landmarks, witnesses, and a personal field journal. The journal preserves knowledge; it does not turn discoveries into map pins or a checklist.
 
----
+## Milestone 1 — A journey worth following (implemented)
 
-### Architectural Assessment & Core Decisions
+The first complete playable arc now has four connected regions: the Old Lands, Cinderwild, Moonlit Coast, and Starfall Moors. Nine shards are placed across those lands, and road signs provide directional, landmark-based information for finding them.
 
-* **Engine Decoupling & Modularization:** Refactor `engine.ts` out of its single-file state machine into specialized sub-modules: an entity-component or dedicated subsystem model (`InputManager`, `SpatialHash`, `CombatEngine`, `Camera`, `ParticleSystem`).
-* **Persistence & State Integrity:** Retain client-only, zero-backend philosophy by implementing deterministic seed saving and a local storage schema (`IndexedDB`/`localStorage`) for settings, unlocked lore, and run meta-progression without breaking the `vite-plugin-singlefile` constraint.
-* **Canvas Performance & Asset Optimization:** Transition from unbatched direct vector draws to pre-rendered offscreen sprite canvases/buffers for animated entities, reducing frame spikes during radial bullet bursts and heavy particle counts.
-* **Combat & World Depth:** Broaden enemy behavior trees (steering behaviors, telegraph windups), introduce status effects/stamina to prevent dodge-roll/dash spam, and expand the deterministic world generator with modular dungeon/ruin sub-biomes.
+Three investigations run alongside the main pilgrimage:
 
----
+- **The Courier Who Never Came:** compare the orders in Ilyarael with a memory at the Cinderwild shrine.
+- **Names the Tide Kept:** compare the salt-graves ledger with the coastal beacon confession.
+- **A Borrowed Dawn:** read the Starfall observatory record and defeat the astronomer's guardian.
 
-### Time-Agnostic Development Roadmap
+Discoveries can be made in any order. Once enough evidence is brought back to Orithel, the player chooses the outcome and receives one permanent, saveable reward. The journal also accepts player-written observations. Region inhabitants, collected shards, quest decisions, wayfire checkpoints, relics, and notes survive saving, refreshes, deaths, and return trips.
 
-```
-[Phase 1: Architecture & Decoupling] ➔ [Phase 2: Combat & System Depth] ➔ [Phase 3: World & Content Expansion] ➔ [Phase 4: Audio, Polish & Meta-Progression]
+## Milestone 2 — Make each expedition play differently
 
-```
+Add small, authored activity sites to each region: a hazardous crossing, a combat arena, a hidden refuge, and one optional encounter with a unique rule. Each site should offer a clue, material, or relationship rather than generic loot.
 
-#### Phase 1: Engine Modernization & Architecture Decoupling
+Build a light equipment layer around meaningful tradeoffs: two active tools and three relic slots, with effects that change play patterns such as projectile-deflecting dashes, a slower heavy strike, or a lantern that reveals concealed messages. Expand enemy telegraphs and give each region one elite behavior that changes how the player uses space.
 
-* **Target:** Establish modular architectural foundations, deterministic decoupling, and spatial partitioning.
-* **Subsystem Extraction:**
-* Break `engine.ts` into isolated controllers under `src/game/systems/`:
-* `PhysicsSystem.ts`: Axis-separated continuous collision detection and sliding logic.
-* `SpatialGrid.ts`: Uniform grid/spatial hash replacing $O(N)$ enemy-projectile and attack-box distance iterations.
-* `ParticleManager.ts`: Object-pooled particle arrays to eliminate GC allocations during combat bursts.
+## Milestone 3 — Turn knowledge into mastery
 
+Add New Pilgrimage mode with a seed shown in the journal, optional challenge vows, completion records, and alternate route conditions. The main story should remain finishable without every optional discovery; a fully investigated run should unlock a more informed final encounter and an epilogue that reflects the player's decisions.
 
+## Production bar
 
-
-* **Input & Camera Abstraction:**
-* Implement an input remapping layer with customizable bindings and Gamepad API support alongside the existing keyboard listeners.
-* Upgrade camera tracking from basic lerping to bounded deadzone tracking with dynamic zoom on boss encounters.
-
-
-* **Verification & Benchmarking:**
-* Implement headless game loop verification tests (`vitest`) for collision math, deterministic map generation consistency across seeds, and state transitions.
-
-
-
-#### Phase 2: Combat Mechanics & Entity System Depth
-
-* **Target:** Elevate player and enemy combat from flat stat exchanges to dynamic, readable action-RPG mechanics.
-* **Player Combat Loop:**
-* Add a stamina/poise resource bar to balance the infinite dash-spam exploit.
-* Implement an attack combo chain (e.g., 3-hit light sequence with directional variations) and parry/block timing windows.
-* Introduce consumable item hotbars and passive relics altering baseline traits (e.g., increased i-frames, projectile reflection on dash).
-
-
-* **Enemy Behavior & AI Refactoring:**
-* Replace monolithic `switch(type)` updates with an extensible behavior interface or lightweight behavior tree (`Patrol`, `Telegraph`, `Execute`, `Recovery`, `Flee`).
-* Introduce distinct telegraph indicators (canvas visual rings/lines) for adept spells, sentinel charges, and boss radial barrages.
-
-
-* **Entity Diversity:**
-* Add intermediate miniboss encounters guarding Shard locations.
-* Create environmental hazards (e.g., poison miasma in Weeping Forest, crumbling bridges over Murkwater lake).
-
-
-
-#### Phase 3: Procedural World Generation & Lore Expansion
-
-* **Target:** Transform the single static layout into a dynamic, multi-zone world with optional objectives and emergent discovery.
-* **Map Generation Overhaul:**
-* Parameterize `src/game/map.ts` to accept custom run seeds while preserving reproducible generation via PRNG (`mulberry32`).
-* Implement a multi-room cellular automata or BSP generator for the Ruins of Ilyarael to create subterranean dungeon interiors.
-* Introduce procedural points of interest (campsites, shrines, lore obelisks) with unique interactive event flags.
-
-
-* **Dialogue & Quest Data Engine:**
-* Decouple dialogue strings from code into a structured dialogue graph supporting branching choices, conditional lore unlocks, and NPC state progression.
-* Add animated text rendering and response choices within `DialogueBox.tsx`.
-
-
-
-#### Phase 4: Audio Synthesis, Meta-Progression & Production Readiness
-
-* **Target:** Deliver complete sensory immersion and long-term replayability within a self-contained single-file bundle.
-* **Procedural/Embedded Audio Pipeline:**
-* Implement a procedural Web Audio API sound synthesizer (`ZzFX` or custom oscillator chains) for sword swings, impacts, footsteps, dash swooshes, and boss roars without external binary asset overhead.
-* Add ambient procedural soundscapes (wind, water, dungeon drones) modulated by biome coordinates.
-
-
-* **Persistence & Replayability:**
-* Implement `SaveManager` using `localStorage` for run saves, high scores, best completion times, and speedrun splits.
-* Add NG+ difficulty scalers and a "Permadeath / Iron Wayfarer" mode.
-
-
-* **UX & Production Polish:**
-* Add full mobile touch controls (virtual D-pad/action buttons) overlaying the canvas when touch events are detected.
-* Add CRT/bloom post-processing toggles using lightweight canvas blending shaders.
-* Set up CI pipeline for automated single-file bundle size tracking and strict TypeScript verification.
-
+Keep the browser-only build, with the old single-file constraint deliberately dropped so real sprite and tile atlases can ship as image assets (see the procedural sprite pipeline design spec). Every saveable gameplay change needs a deterministic state test, and every new landmark needs a visible in-world silhouette, a journal record, and directions expressed through geography rather than coordinates or markers. Performance work focuses on stable frame times during boss patterns and clean recovery from tab suspension or a failed region load.

@@ -69,7 +69,7 @@ class SlotStore {
     const [difficulty, shards, updatedAt, json] = result.values[0];
     try {
       const world = JSON.parse(String(json)) as WorldSnapshot;
-      if (world.version !== 1 || !world.player) return null;
+      if ((world.version !== 1 && world.version !== 2) || !world.player) return null;
       return { id, difficulty: difficulty as Difficulty, shards: Number(shards), updatedAt: Number(updatedAt), world };
     } catch { return null; }
   }

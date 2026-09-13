@@ -1,0 +1,62 @@
+{
+  "actions": {
+    "attack": {
+      "fps": 8,
+      "frames": 4,
+      "row": 1
+    },
+    "walk": {
+      "fps": 8,
+      "frames": 4,
+      "row": 0
+    }
+  },
+  "cellH": 32,
+  "cellW": 32,
+  "directions": [
+    "front",
+    "right",
+    "back",
+    "left"
+  ],
+  "kind": "human",
+  "pixelHashes": {
+    "attack": [
+      "81df38750b98e1079872c66d2389cf3c",
+      "e7ffbd6514f067c06f7a3efac92134f3",
+      "f3fac99f0aeef593f4502a965840fcdf",
+      "777da098e70936e973d27868c1d5050e",
+      "df24523b240536bed3c6796e36ac067b",
+      "cd9888f05ab08e0b2ddd7d99ae4a5f54",
+      "f5644be0e3e338bc2fe88dc4ac84ef81",
+      "1427fedf9e089e6a72d73149ea4583a0",
+      "e14e47ffdec96bdfe4ba295796389409",
+      "ff35828706030f0120e8b896636fbff5",
+      "6590ecbada258e591c825de9e5636b2d",
+      "2205c297aee7cabe4b73c26077c4a334",
+      "e455f1e783b995fbc6ceeae12fc9e741",
+      "6a2cf4b8ec2485a72367d11334c03a25",
+      "9a0d972a1373261b81dcfd1ced0f4dfb",
+      "2b082dded69d145455a2be92a53e8be0"
+    ],
+    "walk": [
+      "777da098e70936e973d27868c1d5050e",
+      "45cfb0297ad677df60de5eef38f11efc",
+      "777da098e70936e973d27868c1d5050e",
+      "080192b3967adf62b7ecf49705784f6a",
+      "1427fedf9e089e6a72d73149ea4583a0",
+      "5647fd66cbd31283273f08c36b289ab9",
+      "1427fedf9e089e6a72d73149ea4583a0",
+      "3c886287cc4c31d568c73c25170d47e4",
+      "2205c297aee7cabe4b73c26077c4a334",
+      "cdff684213b6ee3c60ca8aa5509555d0",
+      "2205c297aee7cabe4b73c26077c4a334",
+      "f5ea63e9a479036ab146a37c3d329e42",
+      "2b082dded69d145455a2be92a53e8be0",
+      "d76cd3377a513a6f4e617830f8fc792d",
+      "2b082dded69d145455a2be92a53e8be0",
+      "2c48267a638e1a0a68bd1e1c3e6fc0ec"
+    ]
+  },
+  "static": false
+}

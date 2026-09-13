@@ -7,9 +7,10 @@ import type {
   MapData,
   GameCallbacks,
   DialogueData,
+  RegionExit,
 } from "./types";
 import { clamp, DIRV } from "./math";
-import { renderGame, TileChunkRenderer } from "./render/renderer";
+import { preloadGameSprites, renderGame, TileChunkRenderer } from "./render/renderer";
 import { FixedStepLoop } from "./core/FixedStepLoop";
 import {
   WorldState,
@@ -20,6 +21,7 @@ import {
   type WorldSnapshot,
 } from "./core/WorldState";
 import { createRegionRepository, type RegionRepository } from "./regions";
+import { QUESTS, learnFact, canResolve, questKnown, questJournal, resolveQuest } from "./quests";
 import { AISystem } from "./systems/AISystem";
 import { CombatSystem } from "./systems/CombatSystem";
 import { GameFlowSystem } from "./systems/GameFlowSystem";
@@ -79,6 +81,12 @@ const BOSS_DAMAGE = 2;
 const BOSS_BURST_COOLDOWN = 2.2;
 const BOSS_LUNGE_COOLDOWN = 3.5;
 
+const DIFFICULTY_TUNING = {
+  story: { hp: 0.65, damage: 0.6, speed: 0.74, awareness: 0.6, playerHealth: 2, hitInvulnerability: 1.25 },
+  standard: { hp: 1, damage: 1, speed: 1, awareness: 1, playerHealth: 0, hitInvulnerability: PLAYER_INVULN_HIT },
+  brutal: { hp: 1.45, damage: 1.5, speed: 1.08, awareness: 1.08, playerHealth: 0, hitInvulnerability: 0.78 },
+} as const;
+
 // Interaction distances
 const INTERACT_NPC_DISTANCE = 48;
 const INTERACT_SIGN_DISTANCE = 44;
@@ -115,7 +123,7 @@ const ORITHEL_LINES = [
   "We were shepherds. But when the Elves passed into dust, many of my kin lost their purpose... and Sundered into hunger.",
   "Now the greatest of the Sundered — the Unbound — wakes beneath the Glass Spire, drinking the light of the world.",
   "The first Spire is only a husk. The Unbound withdrew east, beyond Moonfall Reach, and braided a new ward from nine Anima Shards.",
-  "Three shards rest in the old lands. Six more are scattered through the Ashen Expanse and the moon-road — each watched by something that remembers hunger.",
+  "Three shards rest in the Old Lands. Two lie in the Cinderwild, two on Moonlit Coast, and two in the Starfall Moors. Read the road markers in the southern ash country to find the frontier roads.",
   "Do not rush the final gate. Search the ruins, follow the broken roads, and let each shard answer your blade. Then end the Unbound's long dreaming — for its sake, and ours.",
   "Go, wayfarer. May the old light guide your blade.",
 ];
@@ -143,6 +151,10 @@ export class Game {
   flow = new GameFlowSystem();
   private readonly regions: RegionRepository;
   private regionAbort = new AbortController();
+  /** Dynamic inhabitants are retained per region, while static terrain stays cached by RegionRepository. */
+  private changingRegion = false;
+  private regionGateCooldown = 0;
+  journalOpen = false;
   private initPromise: Promise<void> | null = null;
   private destroyed = false;
   private readonly gameLoop = new FixedStepLoop({
@@ -230,6 +242,7 @@ export class Game {
 
   private async initialize() {
     try {
+      const spriteLoad = preloadGameSprites();
       const region = await this.regions.acquire(this.world.regionId, this.regionAbort.signal);
       if (this.destroyed) {
         this.regions.release(region.id);
@@ -241,15 +254,17 @@ export class Game {
       this.wardSet = new Set(this.map.wardTiles);
       this.syncMovementSystem();
 
+      await spriteLoad;
       this.tileRenderer = new TileChunkRenderer(this.map);
 
       const s = this.map.spawn;
+      const startingHealth = PLAYER_START_HP + DIFFICULTY_TUNING[this.world.difficulty].playerHealth;
       this.player = {
         x: s.x,
         y: s.y,
         r: PLAYER_RADIUS,
-        hp: PLAYER_START_HP,
-        maxHp: PLAYER_START_HP,
+        hp: startingHealth,
+        maxHp: startingHealth,
         stamina: PLAYER_MAX_STAMINA,
         maxStamina: PLAYER_MAX_STAMINA,
         staminaRegenDelay: 0,
@@ -271,14 +286,12 @@ export class Game {
         kx: 0,
         ky: 0,
         dying: 0,
+        relics: [],
+        dashCostDiscount: 0,
+        attackBonus: 0,
       };
 
-      for (const es of this.map.enemySpawns) {
-        const t = this.findWalkableTile(es.x, es.y);
-        this.enemies.push(this.makeEnemy(es.type, t.x, t.y));
-      }
-      for (const sh of this.map.shards)
-        this.items.push({ x: sh.x, y: sh.y, type: "shard", t: this.world.nextRandom() * 6, taken: false });
+      this.restoreOrPopulateRegion();
 
       this.input.bind({
         onKeyDown: this.onKeyDown,
@@ -290,6 +303,7 @@ export class Game {
       this.centerCam();
       this.tileRenderer.warm(this.cam, this.viewW, this.viewH);
       this.message = "Seek the Anima Shards — or speak with the Watcher in the ruins.";
+      this.publishJournal();
       this.pushHud();
       this.initialized = true;
     } catch (e) {
@@ -301,6 +315,75 @@ export class Game {
       this.items = [];
       this.destroy();
       throw e;
+    }
+  }
+
+  private restoreOrPopulateRegion() {
+    const stored = this.world.regions[this.world.regionId];
+    if (stored) {
+      this.enemies = stored.enemies;
+      this.items = stored.items;
+      this.boss = stored.enemies.find((enemy) => enemy.id === stored.bossId) ?? null;
+      this.bossSpawned = stored.bossSpawned;
+      return;
+    }
+    this.enemies = [];
+    this.items = [];
+    this.projectiles = [];
+    this.boss = null;
+    this.bossSpawned = false;
+    for (const es of this.map.enemySpawns) {
+      const t = this.findWalkableTile(es.x, es.y);
+      const enemy = this.makeEnemy(es.type, t.x, t.y);
+      if (es.elite) {
+        enemy.elite = true;
+        enemy.hp = Math.ceil(enemy.hp * 2.25);
+        enemy.maxHp = enemy.hp;
+        enemy.speed *= 1.12;
+        enemy.dmg += 1;
+      }
+      this.enemies.push(enemy);
+    }
+    for (const shard of this.map.shards)
+      this.items.push({ x: shard.x, y: shard.y, type: "shard", t: this.world.nextRandom() * 6, taken: false });
+    this.rememberRegion();
+  }
+
+  private rememberRegion() {
+    this.world.regions[this.world.regionId] = { enemies: this.enemies, items: this.items, bossId: this.boss?.id ?? null, bossSpawned: this.bossSpawned };
+  }
+
+  private async changeRegion(exit: RegionExit) {
+    if (this.changingRegion || this.destroyed) return;
+    this.changingRegion = true;
+    const previousId = this.world.regionId;
+    try {
+      const region = await this.regions.acquire(exit.targetRegion, this.regionAbort.signal);
+      if (this.destroyed) { this.regions.release(region.id); return; }
+      this.rememberRegion();
+      this.regions.release(previousId);
+      this.world.regionId = region.id;
+      this.map = region.map;
+      this.mapPxW = this.map.width * TILE;
+      this.mapPxH = this.map.height * TILE;
+      this.wardSet = new Set(this.map.wardTiles);
+      this.syncMovementSystem();
+      this.restoreOrPopulateRegion();
+      this.projectiles = [];
+      this.particles = [];
+      this.texts = [];
+      this.player.x = exit.destination.x;
+      this.player.y = exit.destination.y;
+      this.tileRenderer = new TileChunkRenderer(this.map);
+      this.centerCam();
+      this.tileRenderer.warm(this.cam, this.viewW, this.viewH);
+      this.regionGateCooldown = 1.25;
+      this.msg(`You arrive in ${this.map.regionName}.`);
+      this.pushHud();
+    } catch (error) {
+      if (!this.destroyed) console.error("Region transition failed:", error);
+    } finally {
+      this.changingRegion = false;
     }
   }
 
@@ -321,6 +404,7 @@ export class Game {
   }
 
   saveWorld(): WorldSnapshot {
+    this.rememberRegion();
     return this.world.snapshot();
   }
 
@@ -331,6 +415,8 @@ export class Game {
       throw new Error(`Region ${snapshot.regionId} must be acquired before loading its world snapshot.`);
     }
     this.world.restore(snapshot);
+    this.rememberRegion();
+    this.publishJournal();
     this.wardSet = new Set(this.map.wardTiles);
     this.syncMovementSystem();
     this.centerCam();
@@ -441,10 +527,11 @@ export class Game {
       e.r = ADEPT_RADIUS;
       e.dmg = ADEPT_DAMAGE;
     }
-    const tuning = this.world.difficulty === "story" ? { hp: 0.72, damage: 0.7 } : this.world.difficulty === "brutal" ? { hp: 1.45, damage: 1.5 } : { hp: 1, damage: 1 };
+    const tuning = DIFFICULTY_TUNING[this.world.difficulty];
     e.hp = Math.max(1, Math.ceil(e.hp * tuning.hp));
     e.maxHp = e.hp;
-    e.dmg = Math.max(1, Math.ceil(e.dmg * tuning.damage));
+    e.dmg = Math.max(1, Math.round(e.dmg * tuning.damage));
+    e.speed *= tuning.speed;
     return e;
   }
   spawnBoss() {
@@ -457,10 +544,11 @@ export class Game {
     b.r = BOSS_RADIUS;
     b.speed = BOSS_SPEED;
     b.dmg = BOSS_DAMAGE;
-    const tuning = this.world.difficulty === "story" ? { hp: 0.72, damage: 0.7 } : this.world.difficulty === "brutal" ? { hp: 1.45, damage: 1.5 } : { hp: 1, damage: 1 };
+    const tuning = DIFFICULTY_TUNING[this.world.difficulty];
     b.hp = Math.ceil(b.hp * tuning.hp);
     b.maxHp = b.hp;
-    b.dmg = Math.max(1, Math.ceil(b.dmg * tuning.damage));
+    b.dmg = Math.max(1, Math.round(b.dmg * tuning.damage));
+    b.speed *= tuning.speed;
     b.burstCd = BOSS_BURST_COOLDOWN;
     b.lungeCd = BOSS_LUNGE_COOLDOWN;
     this.enemies.push(b);
@@ -485,6 +573,10 @@ export class Game {
     this.syncMovementSystem();
     this.cb.onPause(b);
   }
+  setJournalOpen(open: boolean) {
+    this.journalOpen = open;
+    this.input.clear();
+  }
   togglePause() {
     this.setPaused(!this.paused);
   }
@@ -498,7 +590,7 @@ export class Game {
    */
   simulateStep(dt: number) {
     this.processInputCommands();
-    if (!this.paused && !this.dialogue && !this.ended) {
+    if (!this.paused && !this.journalOpen && !this.changingRegion && !this.dialogue && !this.ended) {
       this.world.simulationTime += dt;
       this.world.tick++;
       this.update(dt);
@@ -512,12 +604,19 @@ export class Game {
   }
 
   private processInputCommands() {
+    if (this.journalOpen || this.changingRegion) return;
     if (this.input.consumePressed("escape") || this.input.consumePressed("p")) {
       if (!this.dialogue && !this.ended) this.togglePause();
       return;
     }
     if (this.paused || this.ended) return;
     if (this.dialogue) {
+      if (this.dialogue.choices) {
+        for (let i = 0; i < this.dialogue.choices.length; i++) {
+          if (this.input.consumePressed(String(i + 1))) { this.chooseDialogue(this.dialogue.choices[i].id); break; }
+        }
+        return;
+      }
       if (this.input.consumePressed("e") || this.input.consumePressed("enter") || this.input.consumePressed(" ") || this.input.consumePressed("j")) {
         this.advanceDialogue();
       }
@@ -529,6 +628,7 @@ export class Game {
   }
 
   private update(dt: number) {
+    this.regionGateCooldown = Math.max(0, this.regionGateCooldown - dt);
     this.updatePlayer(dt);
     for (const e of this.enemies) this.updateEnemy(e, dt);
     for (let i = this.enemies.length - 1; i >= 0; i--) {
@@ -607,8 +707,11 @@ export class Game {
     if (p.dying > 0) {
       p.dying -= dt;
       if (p.dying <= 0 && !this.ended) {
-        this.ended = true;
-        this.cb.onLose();
+        if (this.world.checkpoint) this.respawnAtCheckpoint();
+        else {
+          this.ended = true;
+          this.cb.onLose();
+        }
       }
       return;
     }
@@ -660,7 +763,12 @@ export class Game {
 
     this.checkPickups();
 
-    if (!this.bossSpawned && this.wardUnlocked) {
+    if (this.regionGateCooldown <= 0 && !this.changingRegion) {
+      const exit = this.map.exits.find((gate) => Math.hypot(p.x - (gate.x * TILE + TILE / 2), p.y - (gate.y * TILE + TILE / 2)) < TILE * 1.35);
+      if (exit) void this.changeRegion(exit);
+    }
+
+    if (this.world.regionId === "overworld" && !this.changingRegion && !this.bossSpawned && this.wardUnlocked) {
       if (Math.hypot(p.x - this.map.bossCenter.x, p.y - this.map.bossCenter.y) < TILE * 5)
         this.spawnBoss();
     }
@@ -673,15 +781,16 @@ export class Game {
     p.attackTimer = p.attackDur;
     p.attackCd = p.attackDur + PLAYER_ATTACK_COOLDOWN;
     p.swingHit.clear();
-    p.swingDmg = PLAYER_ATTACK_DAMAGE;
+    p.swingDmg = PLAYER_ATTACK_DAMAGE + p.attackBonus;
   }
   startDash() {
     const p = this.player;
-    if (this.ended || p.dying > 0 || p.dashing || p.dashCd > 0 || p.stamina < PLAYER_DASH_STAMINA_COST) return;
+    const dashCost = Math.max(10, PLAYER_DASH_STAMINA_COST - p.dashCostDiscount);
+    if (this.ended || p.dying > 0 || p.dashing || p.dashCd > 0 || p.stamina < dashCost) return;
     p.dashing = true;
     p.dashTimer = PLAYER_DASH_DURATION;
     p.dashCd = PLAYER_DASH_COOLDOWN;
-    p.stamina -= PLAYER_DASH_STAMINA_COST;
+    p.stamina -= dashCost;
     p.staminaRegenDelay = PLAYER_STAMINA_REGEN_DELAY;
     p.dashDir = p.dir;
     p.invuln = Math.max(p.invuln, PLAYER_INVULN_DASH);
@@ -719,13 +828,20 @@ export class Game {
     this.shardsBurst(e.x, e.y, col, e.type === "boss" ? 40 : 14);
     if (e.type !== "boss" && this.world.nextRandom() < 0.28)
       this.items.push({ x: e.x, y: e.y, type: "potion", t: 0, taken: false });
+    if (e.elite) {
+      if (learnFact(this.world.quests, `warden:${this.world.regionId}`)) this.publishJournal();
+      this.items.push({ x: e.x + 12, y: e.y, type: "potion", t: 0, taken: false });
+      this.items.push({ x: e.x - 12, y: e.y, type: "potion", t: 0, taken: false });
+      this.addText(e.x, e.y - 32, "WARDEN FALLEN", "#ffd36b", 15);
+      this.msg("The region's warden has fallen. A wayfire answers in the distance.");
+    }
   }
 
   damagePlayer(dmg: number, fx: number, fy: number) {
     const p = this.player;
     if (p.invuln > 0 || p.dashing || this.ended || p.dying > 0) return;
     p.hp -= dmg;
-    p.invuln = PLAYER_INVULN_HIT;
+    p.invuln = DIFFICULTY_TUNING[this.world.difficulty].hitInvulnerability;
     p.hurtFlash = PLAYER_HURT_FLASH;
     const a = Math.atan2(p.y - fy, p.x - fx);
     p.kx += Math.cos(a) * 300;
@@ -798,6 +914,7 @@ export class Game {
       onText: (x, y, text, color, size) => this.addText(x, y, text, color, size),
       onShake: (mag) => this.shake(mag),
       random: () => this.world.nextRandom(),
+      engagementMultiplier: DIFFICULTY_TUNING[this.world.difficulty].awareness,
     });
 
     this.moveEntity(e, e.vx * dt, e.vy * dt);
@@ -923,6 +1040,78 @@ export class Game {
   }
 
   /* ----------------------------- dialogue ----------------------------- */
+  private publishJournal() {
+    this.cb.onJournal([...this.world.journal, ...questJournal(this.world.quests)]);
+  }
+
+  addPersonalNote(text: string) {
+    const trimmed = text.trim().slice(0, 1200);
+    if (!trimmed) return;
+    this.world.journal.push({ id: `personal:${this.world.tick}:${this.world.journal.length}`, title: "My observations", text: trimmed, source: this.map.regionName });
+    this.publishJournal();
+  }
+
+  private openWatcherTopics() {
+    const resolved = Object.keys(this.world.quests.resolutions).length;
+    this.openDialogue([resolved ? `You have brought ${resolved === 1 ? "one lost story" : `${resolved} lost stories`} back to these halls. What else should we remember?` : "The roads remember more than I do. Ask about what troubles you; bring back what you find, and we will decide what it means."], "Orithel, the Last Watcher", "#9ff7e6");
+    this.dialogue!.choices = [
+      { id: "spire", label: "The Unbound and the nine shards" },
+      ...QUESTS.map((quest) => ({ id: `quest:${quest.id}`, label: `${quest.title}${this.world.quests.resolutions[quest.id] ? " · remembered" : canResolve(this.world.quests, quest) ? " · discuss discoveries" : ""}` })),
+      { id: "leave", label: "Farewell" },
+    ];
+    this.cb.onDialogue({ ...this.dialogue! });
+  }
+
+  chooseDialogue(id: string) {
+    if (!this.dialogue?.choices?.some((choice) => choice.id === id)) return;
+    this.input.clear();
+    if (id === "leave") {
+      this.dialogue = null;
+      this.cb.onDialogue(null);
+      return;
+    }
+    if (id === "topics") { this.openWatcherTopics(); return; }
+    if (id === "spire") {
+      if (learnFact(this.world.quests, "spire")) {
+        this.world.journal.push({ id: "orithel:spire", title: "The Unbound Spire", text: ORITHEL_LINES.slice(3, 7).join(" "), source: "Orithel · Ilyarael" });
+        this.publishJournal();
+      }
+      this.openDialogue(ORITHEL_LINES.slice(), "Orithel, the Last Watcher", "#9ff7e6");
+      return;
+    }
+    if (id.startsWith("quest:")) {
+      const quest = QUESTS.find((entry) => entry.id === id.slice(6));
+      if (!quest) return;
+      learnFact(this.world.quests, `lead:${quest.id}`);
+      this.publishJournal();
+      const resolution = quest.choices.find((entry) => entry.id === this.world.quests.resolutions[quest.id]);
+      const evidence = quest.evidence.filter(({ fact }) => this.world.quests.facts.includes(fact));
+      const text = resolution?.text ?? (canResolve(this.world.quests, quest)
+        ? `${evidence.map((entry) => entry.text).join(" ")} What do you ask of me?`
+        : `${quest.lead}${questKnown(this.world.quests, quest) && evidence.length ? ` You have learned this: ${evidence.map((entry) => entry.text).join(" ")}` : ""}`);
+      this.openDialogue([text], "Orithel · " + quest.title, "#9ff7e6");
+      this.dialogue!.choices = [
+        ...(canResolve(this.world.quests, quest) ? quest.choices.map((choice) => ({ id: `resolve:${quest.id}:${choice.id}`, label: choice.label })) : []),
+        { id: "topics", label: "Ask about something else" },
+        { id: "leave", label: "Leave the decision for now" },
+      ];
+      this.cb.onDialogue({ ...this.dialogue! });
+      return;
+    }
+    const [, questId, choiceId] = id.split(":");
+    const choice = resolveQuest(this.world.quests, questId, choiceId);
+    if (!choice) return;
+    const p = this.player;
+    const { stat, amount } = choice.reward;
+    if (stat === "health") { p.maxHp += amount; p.hp = Math.min(p.maxHp, p.hp + amount); }
+    if (stat === "stamina") { p.maxStamina += amount; p.stamina = p.maxStamina; }
+    if (stat === "blade") p.attackBonus += amount;
+    if (stat === "dash") p.dashCostDiscount += amount;
+    this.publishJournal();
+    this.openDialogue([choice.text], "Orithel, the Last Watcher", "#9ff7e6");
+    this.msg("Your decision has been recorded in the journal.");
+  }
+
   openDialogue(lines: string[], speaker: string, color: string) {
     this.dialogueLines = lines;
     this.dialogueSpeaker = speaker;
@@ -934,6 +1123,7 @@ export class Game {
   }
   advanceDialogue() {
     if (!this.dialogue) return;
+    if (this.dialogue.choices) return;
     if (this.advanceLock > 0) return;
     this.advanceLock = 0.16;
     this.dialogue.index++;
@@ -951,19 +1141,79 @@ export class Game {
   }
   tryInteract() {
     const p = this.player;
+    const fire = this.map.campfires.find((campfire) => Math.hypot(p.x - campfire.x, p.y - campfire.y) < 52);
+    if (fire) {
+      this.restAtCampfire(fire);
+      return;
+    }
     const npc = this.map.npc;
     if (Math.hypot(p.x - npc.x, p.y - npc.y) < INTERACT_NPC_DISTANCE) {
-      this.openDialogue(ORITHEL_LINES.slice(), "Orithel, the Last Watcher", "#9ff7e6");
+      this.openWatcherTopics();
       return;
     }
     for (const s of this.map.signs) {
       const sx = s.x * TILE + TILE / 2;
       const sy = s.y * TILE + TILE / 2;
       if (Math.hypot(p.x - sx, p.y - sy) < INTERACT_SIGN_DISTANCE) {
-        this.openDialogue([s.text], "Weathered Carving", "#cdbf9a");
+        this.discoverNote(s);
+        this.openDialogue([s.text], s.title ?? "Unmarked Field Note", "#cdbf9a");
         return;
       }
     }
+  }
+
+  private discoverNote(sign: import("./types").SignData) {
+    if (sign.fact) learnFact(this.world.quests, sign.fact);
+    const id = `${this.world.regionId}:${sign.x}:${sign.y}`;
+    if (!this.world.journal.some((entry) => entry.id === id)) this.world.journal.push({ id, title: sign.title ?? "Unmarked Field Note", text: sign.text, source: this.map.regionName });
+    this.publishJournal();
+    this.msg("A note has been copied into your journal. Press L to read it.");
+  }
+
+  private restAtCampfire(fire: import("./types").CampfireData) {
+    const p = this.player;
+    this.world.checkpoint = { regionId: this.world.regionId, x: fire.x, y: fire.y, name: fire.name };
+    p.hp = p.maxHp;
+    p.stamina = p.maxStamina;
+    if (!p.relics.includes(fire.relic)) {
+      p.relics.push(fire.relic);
+      const rewards = {
+        emberheart: () => { p.maxHp += 2; p.hp = p.maxHp; return "EMBERHEART — maximum health +2"; },
+        ashstep: () => { p.dashCostDiscount += 12; return "ASHSTEP — dash stamina cost -12"; },
+        tidewell: () => { p.maxStamina += 25; p.stamina = p.maxStamina; return "TIDEWELL — maximum stamina +25"; },
+        starblade: () => { p.attackBonus += 1; return "STARBLADE — blade damage +1"; },
+      } as const;
+      const reward = rewards[fire.relic]();
+      this.burst(fire.x, fire.y, "#ffbf66", 20);
+      this.openDialogue([`The flames recognize you. ${reward}.`, "This wayfire is now your refuge. Death will return you here, and resting restores your strength."], fire.name, "#ffd28a");
+    } else {
+      this.msg(`${fire.name} restores your strength.`);
+      this.burst(fire.x, fire.y, "#ffbf66", 10);
+    }
+  }
+
+  private respawnAtCheckpoint() {
+    const point = this.world.checkpoint;
+    if (!point) return;
+    const p = this.player;
+    p.dying = 0;
+    p.hp = p.maxHp;
+    p.stamina = p.maxStamina;
+    p.invuln = 1.5;
+    p.kx = 0;
+    p.ky = 0;
+    p.dashing = false;
+    p.attacking = false;
+    p.swingHit.clear();
+    this.projectiles = [];
+    if (point.regionId === this.world.regionId) {
+      p.x = point.x;
+      p.y = point.y;
+      this.centerCam();
+      this.msg(`The wayfire draws you back: ${point.name}.`);
+      return;
+    }
+    void this.changeRegion({ x: 0, y: 0, targetRegion: point.regionId, destination: { x: point.x, y: point.y }, label: point.name });
   }
 
   endWin() {

@@ -1,0 +1,62 @@
+{
+  "actions": {
+    "attack": {
+      "fps": 8,
+      "frames": 4,
+      "row": 1
+    },
+    "walk": {
+      "fps": 8,
+      "frames": 4,
+      "row": 0
+    }
+  },
+  "cellH": 32,
+  "cellW": 32,
+  "directions": [
+    "front",
+    "right",
+    "back",
+    "left"
+  ],
+  "kind": "creature",
+  "pixelHashes": {
+    "attack": [
+      "557be265f29b09ddb3231e4f6b586f9c",
+      "41ad4d3598773a705327dd40f2b1e37f",
+      "5787b2e6336efb17da1f307a756d9967",
+      "41ad4d3598773a705327dd40f2b1e37f",
+      "31eefc64f8d14a769391ba4e6c9a9395",
+      "a5cb26bd01480c14f3d209dcbf9e7ebb",
+      "865298328ec504899d427248bc74d3a8",
+      "a5cb26bd01480c14f3d209dcbf9e7ebb",
+      "557be265f29b09ddb3231e4f6b586f9c",
+      "41ad4d3598773a705327dd40f2b1e37f",
+      "5787b2e6336efb17da1f307a756d9967",
+      "41ad4d3598773a705327dd40f2b1e37f",
+      "31eefc64f8d14a769391ba4e6c9a9395",
+      "a5cb26bd01480c14f3d209dcbf9e7ebb",
+      "865298328ec504899d427248bc74d3a8",
+      "a5cb26bd01480c14f3d209dcbf9e7ebb"
+    ],
+    "walk": [
+      "557be265f29b09ddb3231e4f6b586f9c",
+      "1f6b3f3332570ee8f51eb54edac48b68",
+      "1252fcdc817746cffb10f788580a4fdd",
+      "1f6b3f3332570ee8f51eb54edac48b68",
+      "31eefc64f8d14a769391ba4e6c9a9395",
+      "6f48bff2cb7087e7f239448cb3a2354e",
+      "280b8d2875431e401cd36631fae2169e",
+      "6f48bff2cb7087e7f239448cb3a2354e",
+      "557be265f29b09ddb3231e4f6b586f9c",
+      "1f6b3f3332570ee8f51eb54edac48b68",
+      "1252fcdc817746cffb10f788580a4fdd",
+      "1f6b3f3332570ee8f51eb54edac48b68",
+      "31eefc64f8d14a769391ba4e6c9a9395",
+      "6f48bff2cb7087e7f239448cb3a2354e",
+      "280b8d2875431e401cd36631fae2169e",
+      "6f48bff2cb7087e7f239448cb3a2354e"
+    ]
+  },
+  "static": false
+}

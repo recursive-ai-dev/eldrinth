@@ -9,6 +9,7 @@ export default function GameCanvas({
   onReady,
   initialSnapshot,
   onCheckpoint,
+  difficulty,
 }: {
   callbacks: GameCallbacks;
   onReady?: (g: Game) => void;
@@ -29,8 +30,12 @@ export default function GameCanvas({
       onPause: (p) => cbRef.current.onPause(p),
       onWin: () => cbRef.current.onWin(),
       onLose: () => cbRef.current.onLose(),
+      onJournal: (entries) => cbRef.current.onJournal(entries),
     };
     const game = new Game(canvas, proxy, undefined, { difficulty });
+    // Acquire the saved region before restoring its local entities. This keeps
+    // a checkpoint in any of the connected maps loadable after a refresh.
+    if (initialSnapshot) game.world.regionId = initialSnapshot.regionId;
     let disposed = false;
     const checkpoint = () => {
       if (!disposed && game.initialized && !game.ended) onCheckpoint?.(game.saveWorld());

@@ -2,7 +2,7 @@
 import { generateMap } from "./map";
 
 self.onmessage = ({ data }: MessageEvent<{ id: string }>) => {
-  const map = generateMap();
+  const map = generateMap(data.id);
   self.postMessage({ id: data.id, map }, [map.tiles.buffer]);
 };
 

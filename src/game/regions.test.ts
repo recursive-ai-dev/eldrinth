@@ -8,11 +8,12 @@ describe("RegionRepository", () => {
       load: async (id) => ({
         id,
         map: {
+          regionName: "Test",
           width: 1,
           height: 1,
           tiles: new Uint8Array([T.GRASS]),
           wardTiles: [],
-          spawn: { x: 0, y: 0 }, npc: { x: 0, y: 0 }, signs: [], shards: [], enemySpawns: [], bossCenter: { x: 0, y: 0 },
+          spawn: { x: 0, y: 0 }, npc: { x: 0, y: 0 }, signs: [], shards: [], enemySpawns: [], bossCenter: { x: 0, y: 0 }, exits: [], campfires: [],
         },
       }),
     };
