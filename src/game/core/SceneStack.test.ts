@@ -11,4 +11,12 @@ describe("SceneStack", () => {
     scenes.pop();
     expect(scenes.top()).toBe("overworld");
   });
+
+  it("replaces the world with a single ending scene", () => {
+    const scenes = new SceneStack(["overworld"]);
+    scenes.replace("ending");
+
+    expect(scenes.snapshot()).toEqual(["ending"]);
+    expect(scenes.has("overworld")).toBe(false);
+  });
 });

@@ -28,8 +28,7 @@ export default function GameCanvas({
       onHud: (d) => cbRef.current.onHud(d),
       onDialogue: (d) => cbRef.current.onDialogue(d),
       onPause: (p) => cbRef.current.onPause(p),
-      onWin: () => cbRef.current.onWin(),
-      onLose: () => cbRef.current.onLose(),
+      onEnd: (ending) => cbRef.current.onEnd(ending),
       onJournal: (entries) => cbRef.current.onJournal(entries),
     };
     const game = new Game(canvas, proxy, undefined, { difficulty });

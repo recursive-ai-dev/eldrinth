@@ -1,3 +1,5 @@
+import type { EndingId } from "./core/SceneStack";
+
 export type Dir = "up" | "down" | "left" | "right";
 export type Difficulty = "story" | "standard" | "brutal";
 
@@ -96,7 +98,6 @@ export interface GameCallbacks {
   onHud: (d: HudData) => void;
   onDialogue: (d: DialogueData | null) => void;
   onPause: (paused: boolean) => void;
-  onWin: () => void;
-  onLose: () => void;
+  onEnd: (ending: EndingId) => void;
   onJournal: (entries: JournalEntry[]) => void;
 }

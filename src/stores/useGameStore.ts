@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { HudData, DialogueData, JournalEntry } from "@/game/types";
-import { SceneStack, type SceneId } from "@/game/core/SceneStack";
+import { SceneStack, type SceneId, type EndingId } from "@/game/core/SceneStack";
 
 type Screen = SceneId;
 
@@ -10,6 +10,7 @@ interface GameState {
   hud: HudData;
   dialogue: DialogueData | null;
   journal: JournalEntry[];
+  ending: EndingId | null;
 
   // Actions
   setPaused: (paused: boolean) => void;
@@ -19,7 +20,7 @@ interface GameState {
 
   // Derived
   startGame: () => void;
-  endGame: (result: "win" | "lose") => void;
+  endGame: (ending: EndingId) => void;
   togglePause: () => void;
   reset: () => void;
 }
@@ -47,6 +48,7 @@ const initialState: Omit<GameState, "setPaused" | "setHud" | "setDialogue" | "se
   hud: initialHud,
   dialogue: null,
   journal: [],
+  ending: null,
 };
 
 export const useGameStore = create<GameState>((set) => ({
@@ -71,12 +73,14 @@ export const useGameStore = create<GameState>((set) => ({
       dialogue: null,
       journal: [],
       hud: initialHud,
+      ending: null,
     }));
   },
 
-  endGame: (result: "win" | "lose") => {
+  endGame: (ending: EndingId) => {
     set({
-      scenes: [result === "win" ? "win" : "lose"],
+      scenes: ["ending"],
+      ending,
       dialogue: null,
     });
   },
@@ -102,3 +106,4 @@ export const selectSessionId = (state: GameState) => state.sessionId;
 export const selectHud = (state: GameState) => state.hud;
 export const selectDialogue = (state: GameState) => state.dialogue;
 export const selectJournal = (state: GameState) => state.journal;
+export const selectEnding = (state: GameState) => state.ending;
