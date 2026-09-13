@@ -26,3 +26,30 @@ export function shardBleedEntry(count: number): JournalEntry | null {
   if (!text) return null;
   return { id: `bleed:${count}`, title: "My observations", text, source: "My own hand" };
 }
+
+/** Orithel's closing lines at the ward gate, once all nine shards are in hand. */
+export const WARD_LINES = [
+  "There you are. Nine. You have no idea how rarely it runs this cleanly, and I would like you to hear me say so.",
+  "I will take them now. The Unbound has been very loud for a very long time, and it will be a kindness to everyone — itself most of all — when it stops.",
+  "You have been extraordinary. I want you to understand that I mean that. I have said it before, and I have always meant it.",
+];
+
+export interface DialogueChoice {
+  id: string;
+  label: string;
+}
+
+/**
+ * Pure construction of the ward-gate dialogue: every line the player must read
+ * before the ending choice is offered. Kept separate from Game so it can be
+ * unit-tested without pulling in the whole engine.
+ */
+export function wardDialogue(): { lines: string[]; choices: DialogueChoice[] } {
+  return {
+    lines: WARD_LINES.slice(),
+    choices: [
+      { id: "ending:surrender", label: "Give him the nine." },
+      { id: "ending:refuse", label: "No." },
+    ],
+  };
+}

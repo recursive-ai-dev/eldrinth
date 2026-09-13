@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { shardBleedEntry, shardPickupMessage } from "./escalation";
+import { shardBleedEntry, shardPickupMessage, WARD_LINES, wardDialogue } from "./escalation";
 
 describe("shard escalation", () => {
   it("reports a plain count for the early shards", () => {
@@ -28,5 +28,18 @@ describe("shard escalation", () => {
       expect(entry?.source).toBe("My own hand");
     }
     expect(shardBleedEntry(8)?.text).toContain("Do not surrender it");
+  });
+});
+
+describe("ward dialogue", () => {
+  it("carries every one of Orithel's ward lines", () => {
+    const { lines } = wardDialogue();
+    for (const line of WARD_LINES) expect(lines).toContain(line);
+    expect(lines).toHaveLength(WARD_LINES.length);
+  });
+
+  it("offers exactly the two ending choices", () => {
+    const { choices } = wardDialogue();
+    expect(choices.map((choice) => choice.id)).toEqual(["ending:surrender", "ending:refuse"]);
   });
 });
