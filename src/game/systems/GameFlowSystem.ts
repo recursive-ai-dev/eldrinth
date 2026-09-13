@@ -28,11 +28,11 @@ export interface GameFlowState {
 export class GameFlowSystem {
   currentObjective(state: GameFlowState): string {
     if (state.shards < state.totalShards) {
-      return "Interpret the clues in your field journal";
+      return "Read the roads. Record what was taken.";
     }
-    if (!state.wardUnlocked) return "Something ancient has changed";
-    if (!state.bossSpawned) return "Follow what the old records suggest";
-    if (state.boss && state.boss.alive) return "The air around the Spire trembles";
+    if (!state.wardUnlocked) return "Something in the east stops pretending";
+    if (!state.bossSpawned) return "The ward is open. Orithel is waiting at the Spire.";
+    if (state.boss && state.boss.alive) return "Nine hundred years are awake and screaming";
     return "The Spire falls silent";
   }
 
