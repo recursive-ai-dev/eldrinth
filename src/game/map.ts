@@ -238,23 +238,23 @@ export function generateMap(regionId = "overworld"): MapData {
       x: 13,
       y: 27,
       title: "A Traveller's Primer",
-      text: "MOVE  WASD / Arrows · ATTACK  J / Space · DASH  Shift · SPEAK / READ  E · JOURNAL  L · PAUSE  Esc. The Watcher lives in Ilyarael: follow this road east to the junction, then south past the wayfire into the ruined hall. Keep your own notes. Roads and witnesses are your guides.",
+      text: "MOVE  WASD / Arrows · ATTACK  J / Space · DASH  Shift · SPEAK / READ  E · JOURNAL  L · PAUSE  Esc. The Watcher keeps the hall in Ilyarael: this road east to the junction, then south past the wayfire into the ruin. Write down what you find. Nobody else is going to.",
     },
     {
       x: 33,
       y: 35,
       title: "Inscription at Ilyarael",
-      text: "Here stood Ilyarael. Orithel tends the hall through this northern doorway. A scout left three sightings: north along the western forest track; north of the mountain pass beyond the lake; and east of this hall's approach, beneath an adept's watch.",
+      text: "Here stood Ilyarael. Orithel keeps the hall through this northern doorway. A scout left three sightings before she stopped reporting: north along the western forest track; north of the mountain pass beyond the lake; and east of this approach, beneath an adept's watch.",
     },
-    { x: 35, y: 41, title: "The Courier's Orders", fact: "courier-orders", text: "Deliver the vessel to the broken shrine northeast of the Cinderwild's central stone circle. Do not listen to it. Beneath the seal, another hand writes: ‘It speaks with a child's voice. I will hear it before I surrender it.’" },
-    { x: 44, y: 13, title: "The Spire Warning", text: "Beyond the black ridge stands a glass tower. The old moon-road crosses the lake, then keeps east. Those who followed it spoke of a sleeping thing." },
-    { x: 52, y: 16, title: "A Pilgrim's Correction", text: "The first Spire is empty. Its keeper fled east beyond the old ward. The road of pale stone is the surest route, though the southern ash road has fewer eyes." },
-    { x: 64, y: 54, title: "Charred Surveyor's Page", text: "No fragments remain in the ash country. At this junction the south road reaches Moonlit Coast; the road east, past Moonfall Crossing, enters the Cinderwild. Each frontier holds two fragments. Both offer a road onward to the Starfall Moors, where the last pair fell." },
-    { x: 78, y: 55, title: "Moonfall Crossing", text: "The road east enters the Cinderwild. The northern branch returns toward the Spire. Nine fragments answer its ward: three in the Old Lands and two in each frontier — Cinderwild, Moonlit Coast, Starfall Moors." },
-    { x: 76, y: 22, title: "Offering Ledger", text: "Before entering Moonfall Reach, travellers left offerings at the fork north of the ash road. The last party took the eastern path and never returned." },
-    { x: 79, y: 14, title: "The Last Ward", text: "Nine Anima Shards shall quiet the dreamer. No fewer. The ward does not point the way; it only remembers what was taken." },
-    { x: 96, y: 56, title: "East Road Marker", text: "The Cinderwild lies east: ash storms, broken shrines, and no easy return. A scout mentioned a tall stone circle at its heart." },
-    { x: 62, y: 69, title: "South Road Marker", text: "Moonlit Coast lies south. Follow the salt wind to lands the old maps forgot; a pale beacon burns where its roads meet." },
+    { x: 35, y: 41, title: "The Courier's Orders", fact: "courier-orders", text: "Deliver the vessel to the collector at the broken shrine northeast of the Cinderwild's central circle. Do not open it. Do not listen to it. Beneath the seal, in a hand that tore the paper: ‘It has a child's voice. I have read this four times looking for the part where this is something other than what it fucking is. It isn't there. It was never going to be there.’" },
+    { x: 44, y: 13, title: "The Spire Warning", text: "Beyond the black ridge stands a glass tower. The old moon-road crosses the lake and keeps east. Those who followed it came back describing a sleeping thing. The ones who stayed and listened longer came back describing a crowd." },
+    { x: 52, y: 16, title: "A Pilgrim's Correction", text: "The first Spire is empty. Its keeper went east past the old ward. The pale-stone road is surest; the southern ash road has fewer eyes on it, if that matters to you. It mattered to me." },
+    { x: 64, y: 54, title: "Charred Surveyor's Page", text: "No fragments remain in the ash country — collected long ago, the ledger says, though it does not say by whom or on whose authority. At this junction the south road reaches Moonlit Coast; east past Moonfall Crossing lies the Cinderwild. Each frontier holds two. Both roads run on to the Starfall Moors, where the last pair went." },
+    { x: 78, y: 55, title: "Moonfall Crossing", text: "East into the Cinderwild. North back toward the Spire. Nine fragments answer the ward: three in the Old Lands, two in each frontier — Cinderwild, Moonlit Coast, Starfall Moors. Nine is not a natural number for a ward. Somebody asked for nine." },
+    { x: 76, y: 22, title: "Offering Ledger", text: "Before entering Moonfall Reach, travellers left offerings at the fork north of the ash road. The last party took the eastern path. The ledger records their offering and their names, and then a second entry striking the names out, in a different hand, dated the same day." },
+    { x: 79, y: 14, title: "The Last Ward", text: "Nine Anima Shards shall quiet the dreamer. No fewer. The ward does not point the way. It only remembers what was taken, which is the one thing everybody involved would rather it did not do." },
+    { x: 96, y: 56, title: "East Road Marker", text: "The Cinderwild lies east: ash storms, broken shrines, no easy return. A tall stone circle at its heart, if the scouts were being honest." },
+    { x: 62, y: 69, title: "South Road Marker", text: "Moonlit Coast lies south. Follow the salt wind to lands the old maps forgot, or were made to forget. A pale beacon burns where its roads meet." },
   ];
   const shards: Vec[] = [
     { x: px(18), y: px(12) },
@@ -355,25 +355,25 @@ function generateFrontierMap(regionId: string): MapData {
     else if (d < 9 && tiles[idx(x, y)] !== T.PATH) tiles[idx(x, y)] = T.ROCK;
   }
   for (const exit of config.exits) for (let y = exit.y - 2; y <= exit.y + 2; y++) for (let x = exit.x - 2; x <= exit.x + 2; x++) road(x, y);
-  const signs: SignData[] = config.exits.map((exit) => ({ x: exit.x, y: exit.y, title: "Road of Wayfarers", text: `The road leads toward ${exit.label}. It is marked only by old wheel-ruts and the stories of those who returned.` }));
+  const signs: SignData[] = config.exits.map((exit) => ({ x: exit.x, y: exit.y, title: "Road of Wayfarers", text: `The road leads toward ${exit.label}. Old wheel-ruts, mostly. They run deeper going east than coming back, which tells you what the traffic was and which direction it was carrying.` }));
   const surveys: Record<string, string> = {
-    cinderwild: "This is the Cinder Circle. A broken shrine stands at the end of the northeast track; a shard and a courier's vessel lie there. The southeast track ends at a ruined watchpost, where a warden guards another shard. The longer road southeast reaches the Starfall Moors.",
-    "moonlit-coast": "At this pale circle, the southwest track leads to the salt graves and a fragment. The northeast track ends at the keeper's beacon, where a warden watches a second fragment. Follow the eastern road to reach the Starfall Moors.",
-    "starfall-moors": "The fallen observatory lies just northwest of this wayfire, inside the stone ring; a fragment rests among its records. The road east slopes slightly south to the astronomer's guardian and the other fragment. The northwest road returns to Cinderwild, the southwest to Moonlit Coast.",
+    cinderwild: "This is the Cinder Circle. The northeast track ends at a broken shrine — a fragment there, and a vessel that was never delivered. The southeast track ends at a ruined watchpost, where a warden still holds a second fragment and has forgotten why it is holding anything. The long road southeast reaches the Starfall Moors.",
+    "moonlit-coast": "At this pale circle: southwest to the salt graves and a fragment; northeast to the keeper's beacon, where a warden watches the second. The graves are the older road and much the better lit, which is not an accident. The eastern road reaches the Starfall Moors.",
+    "starfall-moors": "The fallen observatory lies northwest of this wayfire, inside the stone ring; a fragment sits among its records. The road east, sloping slightly south, ends at the astronomer's guardian and the last fragment. The northwest road returns to the Cinderwild, the southwest to Moonlit Coast.",
   };
   signs.push({ x: 50, y: 39, title: `${config.name} Survey`, text: surveys[regionId] });
   const records: Record<string, SignData[]> = {
     cinderwild: [
-      { x: 72, y: 20, title: "The Broken Shrine", fact: "courier-memory", text: "A courier's shell shelters a small vessel. ‘I gave my light so the child could dream. Let Orithel decide nothing without hearing it.’ The vessel is light enough to carry. I copy its memory into my journal." },
-      { x: 84, y: 53, title: "The Ruined Watchpost", text: "The southern watch fell defending a fragment. The warden still circles its empty post. Beyond these fields, the southeastern road descends into the Starfall Moors." },
+      { x: 72, y: 20, title: "The Broken Shrine", fact: "courier-memory", text: "A courier's shell, curled around a vessel the size of a fist. She got this far and could not finish, so she spent herself keeping it warm instead — nine hundred years of her, for this. The thing inside is still awake. It has been awake the entire time. It asks, very politely, whether it is going to be allowed to stop. I copy every word into my journal because I do not trust myself to carry it accurately." },
+      { x: 84, y: 53, title: "The Ruined Watchpost", text: "The southern watch fell defending a fragment, and the warden still walks its circuit around an empty post. It does not know the post is empty. Beyond these fields the southeastern road descends into the Starfall Moors." },
     ],
     "moonlit-coast": [
-      { x: 24, y: 48, title: "The Salt Graves", fact: "salt-graves", text: "No bodies. Only names, scraped away. The evacuation ledger says the last boat left half empty. Every missing passenger bears the same mark: infection. Another account survives at the beacon northeast of the pale circle." },
-      { x: 78, y: 18, title: "The Keeper's Beacon", fact: "salt-beacon", text: "‘They chose to stay with the sick. I could not tell their families. I struck their names from the rolls and let the sea take the blame.’ The keeper signed each page. Orithel would know how to preserve this testimony." },
+      { x: 24, y: 48, title: "The Salt Graves", fact: "salt-graves", text: "No bodies. Only names, scraped down to the stone. The evacuation ledger says the last boat left half empty, and every passenger who did not board carries the same mark in the margin — the intake mark, though the ledger does not call it that. RECONCILED — 41. TRANSFERRED TO COLLECTION — 39. And underneath, in the same clerk's unhurried hand, a note that the remainder, being already struck from the rolls, were not counted out, and that whatever the collectors did with them on the road was not a matter the harbour was obliged to record, a person who does not exist being incapable of complaint. Another account survives at the beacon northeast of the pale circle." },
+      { x: 78, y: 18, title: "The Keeper's Beacon", fact: "salt-beacon", text: "‘I chose. Someone had to choose and I was the one standing there. Forty went on that boat who would not have gone otherwise. I know exactly what that cost and I have never once pretended the arithmetic was clean.’ He is reasonable for eleven pages, and signed every one of them. By the ninth I had started nodding along, and that frightened me worse than the graves did. Orithel would know what to do with this." },
     ],
     "starfall-moors": [
-      { x: 47, y: 35, title: "The Fallen Observatory", fact: "dawn-record", text: "‘One dawn, forever.’ The lens caught the astronomer's mind instead of the sun. His guardian waits at the end of the eastern track, just south of east from the wayfire. Break the shell and bring its last light to Orithel." },
-      { x: 78, y: 42, title: "The Astronomer's Watch", text: "The guardian's casing bears the observatory seal. A living dawn burns inside. It will not abandon its vigil while the shell endures." },
+      { x: 47, y: 35, title: "The Fallen Observatory", fact: "dawn-record", text: "‘One dawn, forever’ is what the plaque says, and what the funding said. The working notes say something else. The lens was an intake prototype and he tested it on himself, deliberately, to demonstrate the process was survivable at scale. He wrote down the moment he understood that it was not. He kept writing for a considerable time after. His guardian waits at the end of the eastern track, just south of east from the wayfire." },
+      { x: 78, y: 42, title: "The Astronomer's Watch", text: "The guardian's casing carries the observatory seal, stamped into the metal the way equipment is stamped. Something is burning inside it and has not been permitted to stop burning. It will not leave the road while the shell holds." },
     ],
   };
   signs.push(...records[regionId]);
