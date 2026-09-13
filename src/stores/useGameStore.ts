@@ -33,7 +33,7 @@ const initialHud: HudData = {
   maxStamina: 100,
   shards: 0,
   totalShards: 9,
-  objective: "Recover the Anima Shards  (0/9)",
+  objective: "Read the roads. Record what was taken.",
   message: "",
   messageId: 0,
   prompt: "",
