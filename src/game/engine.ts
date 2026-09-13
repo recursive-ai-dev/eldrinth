@@ -20,9 +20,9 @@ import {
   type ProjectileState,
   type WorldSnapshot,
 } from "./core/WorldState";
-import { createRegionRepository, type RegionRepository } from "./regions";
 import type { EndingId } from "./core/SceneStack";
-import { shardBleedEntry, shardPickupMessage } from "./escalation";
+import { createRegionRepository, type RegionRepository } from "./regions";
+import { shardBleedEntry, shardPickupMessage, wardDialogue } from "./escalation";
 import { QUESTS, learnFact, canResolve, questKnown, questJournal, resolveQuest } from "./quests";
 import { AISystem } from "./systems/AISystem";
 import { CombatSystem } from "./systems/CombatSystem";
@@ -130,12 +130,6 @@ const ORITHEL_LINES = [
   "Go, wayfarer. The old light has been very patient. So have I.",
 ];
 
-const WARD_LINES = [
-  "There you are. Nine. You have no idea how rarely it runs this cleanly, and I would like you to hear me say so.",
-  "I will take them now. The Unbound has been very loud for a very long time, and it will be a kindness to everyone — itself most of all — when it stops.",
-  "You have been extraordinary. I want you to understand that I mean that. I have said it before, and I have always meant it.",
-];
-
 /* ----------------------------- the game ----------------------------- */
 export class Game {
   canvas: HTMLCanvasElement;
@@ -188,6 +182,8 @@ export class Game {
   dialogueLines: string[] = [];
   dialogueSpeaker = "";
   dialogueColor = "#bff7ff";
+  /** Choices to attach once the player reaches the final line of the dialogue currently opening. */
+  pendingChoices: { id: string; label: string }[] | null = null;
 
   shakeMag = 0;
   lastShakeX = 0;
@@ -716,10 +712,7 @@ export class Game {
       p.dying -= dt;
       if (p.dying <= 0 && !this.ended) {
         if (this.world.checkpoint) this.respawnAtCheckpoint();
-        else {
-          this.ended = true;
-          this.cb.onEnd("spent");
-        }
+        else this.endRun("spent");
       }
       return;
     }
@@ -1080,12 +1073,9 @@ export class Game {
   }
 
   private openWardChoice() {
-    this.openDialogue(WARD_LINES.slice(), "Orithel, the Architect", "#9ff7e6");
-    this.dialogue!.choices = [
-      { id: "ending:surrender", label: "Give him the nine." },
-      { id: "ending:refuse", label: "No." },
-    ];
-    this.cb.onDialogue({ ...this.dialogue! });
+    const { lines, choices } = wardDialogue();
+    this.pendingChoices = choices;
+    this.openDialogue(lines, "Orithel, the Architect", "#9ff7e6");
   }
 
   chooseDialogue(id: string) {
@@ -1093,18 +1083,21 @@ export class Game {
     this.input.clear();
     if (id === "leave") {
       this.dialogue = null;
+      this.pendingChoices = null;
       this.cb.onDialogue(null);
       return;
     }
     if (id === "topics") { this.openWatcherTopics(); return; }
     if (id === "ending:surrender") {
       this.dialogue = null;
+      this.pendingChoices = null;
       this.cb.onDialogue(null);
       this.spawnBoss();
       return;
     }
     if (id === "ending:refuse") {
       this.dialogue = null;
+      this.pendingChoices = null;
       this.cb.onDialogue(null);
       this.endRun("refusal");
       return;
@@ -1153,10 +1146,21 @@ export class Game {
   }
 
   openDialogue(lines: string[], speaker: string, color: string) {
+    // Consume any choices staged for THIS dialogue (set by the caller just before
+    // this call). A single-line dialogue attaches them immediately, matching the
+    // previous behaviour for every existing choices-bearing caller. A multi-line
+    // dialogue defers them back into pendingChoices until advanceDialogue reaches
+    // the final line, so the lines carrying the actual content are reachable.
+    const stagedChoices = this.pendingChoices;
+    this.pendingChoices = null;
     this.dialogueLines = lines;
     this.dialogueSpeaker = speaker;
     this.dialogueColor = color;
     this.dialogue = { speaker, text: lines[0], index: 0, total: lines.length, color };
+    if (stagedChoices) {
+      if (lines.length - 1 === 0) this.dialogue.choices = stagedChoices;
+      else this.pendingChoices = stagedChoices;
+    }
     this.input.clear();
     this.cb.onDialogue(this.dialogue);
     this.pushHud();
@@ -1169,6 +1173,7 @@ export class Game {
     this.dialogue.index++;
     if (this.dialogue.index >= this.dialogueLines.length) {
       this.dialogue = null;
+      this.pendingChoices = null;
       this.cb.onDialogue(null);
       this.pushHud();
     } else {
@@ -1176,6 +1181,10 @@ export class Game {
         ...this.dialogue,
         text: this.dialogueLines[this.dialogue.index],
       };
+      if (this.pendingChoices && this.dialogue.index === this.dialogueLines.length - 1) {
+        this.dialogue.choices = this.pendingChoices;
+        this.pendingChoices = null;
+      }
       this.cb.onDialogue(this.dialogue);
     }
   }
