@@ -97,7 +97,7 @@ export interface ItemState {
 }
 
 export interface WorldSnapshot {
-  version: 1 | 2;
+  version: 1 | 2 | 3;
   regionId: string;
   simulationTime: number;
   tick: number;
@@ -166,7 +166,7 @@ export class WorldState {
   snapshot(): WorldSnapshot {
     if (!this.player) throw new Error("Cannot save an uninitialized world.");
     return {
-      version: 2,
+      version: 3,
       regionId: this.regionId,
       simulationTime: this.simulationTime,
       tick: this.tick,
@@ -192,8 +192,9 @@ export class WorldState {
   }
 
   restore(snapshot: WorldSnapshot) {
-    if (snapshot.version !== 1 && snapshot.version !== 2) throw new Error(`Unsupported world snapshot version: ${snapshot.version}`);
+    if (snapshot.version !== 1 && snapshot.version !== 2 && snapshot.version !== 3) throw new Error(`Unsupported world snapshot version: ${snapshot.version}`);
     const legacySave = snapshot.version === 1;
+    const preRewriteSave = snapshot.version <= 2;
     this.regionId = snapshot.regionId;
     this.simulationTime = snapshot.simulationTime;
     this.tick = snapshot.tick;
@@ -211,6 +212,13 @@ export class WorldState {
     this.randomState = snapshot.randomState;
     this.difficulty = snapshot.difficulty ?? "standard";
     this.journal = snapshot.journal?.map((entry) => ({ ...entry })) ?? [];
+    // Pre-rewrite saves (v2 and earlier) carry sign-copied and Orithel-briefing
+    // entries written against the old canon, and nothing ever re-resolves them.
+    // Personal notes (the player's own hand) and shard-bleed entries (new,
+    // post-rewrite content) are kept; every other narrative entry is dropped.
+    if (preRewriteSave) {
+      this.journal = this.journal.filter((entry) => entry.id.startsWith("personal:") || entry.id.startsWith("bleed:"));
+    }
     this.quests = structuredClone(snapshot.quests ?? { facts: [], resolutions: {} });
     this.regions = structuredClone(snapshot.regions ?? {});
     this.checkpoint = snapshot.checkpoint ? { ...snapshot.checkpoint } : null;
