@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyHarvestCost, cumulativeHarvestCost, shardBleedEntry, shardCostSuffix, shardHarvestCost, shardPickupMessage, WARD_LINES, wardDialogue, wardUnlockMessage } from "./escalation";
+import { applyHarvestCost, cumulativeHarvestCost, fortressWardenEntry, shardBleedEntry, shardCostSuffix, shardHarvestCost, shardPickupMessage, WARD_LINES, wardDialogue, wardUnlockMessage } from "./escalation";
 
 describe("shard escalation", () => {
   it("reports a plain count for the early shards", () => {
@@ -119,5 +119,19 @@ describe("harvest cost", () => {
     const message = wardUnlockMessage(9);
     expect(message.endsWith("Maximum health −3.")).toBe(true);
     expect(message).not.toContain("  ");
+  });
+});
+
+describe("fortress warden", () => {
+  it("records what the Broken Shrine's warden was", () => {
+    const entry = fortressWardenEntry("fortress.cinderwild-shrine");
+    expect(entry).not.toBeNull();
+    expect(entry?.id).toBe("warden:fortress.cinderwild-shrine");
+    expect(entry?.text).toContain("courier");
+  });
+
+  it("writes nothing for a region with no warden", () => {
+    expect(fortressWardenEntry("overworld")).toBeNull();
+    expect(fortressWardenEntry("cinderwild")).toBeNull();
   });
 });
