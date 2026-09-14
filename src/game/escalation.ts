@@ -24,6 +24,13 @@ export function shardHarvestCost(count: number): number {
   return SHARD_HARVEST_COST[count] ?? 0;
 }
 
+/** The total maximum-health cost paid across the first `shards` harvests. */
+export function cumulativeHarvestCost(shards: number): number {
+  let total = 0;
+  for (let n = 1; n <= shards; n++) total += shardHarvestCost(n);
+  return total;
+}
+
 /** The price, stated in the register the quest resolutions already use. */
 export function shardCostSuffix(count: number): string {
   const cost = shardHarvestCost(count);
@@ -42,6 +49,11 @@ export function applyHarvestCost(maxHp: number, hp: number, count: number): { ma
 
 export function shardPickupMessage(count: number, total: number): string {
   return `Anima Shard recovered (${count}/${total}).${SHARD_NOTES[count] ?? ""}${shardCostSuffix(count)}`;
+}
+
+/** Orithel's line when the ninth shard unlocks the ward, price included. */
+export function wardUnlockMessage(count: number): string {
+  return `The ward gives. Nine. It was always going to be nine, and now I know who picked the number.${shardCostSuffix(count)}`;
 }
 
 /** Entries the player did not write, in the courier's hand, from the sixth shard on. */
