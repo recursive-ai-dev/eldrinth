@@ -45,6 +45,8 @@ export interface TileDefinition {
   trigger?: string;
   /** Drawn after actors so they can pass behind a tall asset. */
   tall?: boolean;
+  /** Health cost per application for standing on this tile. */
+  harm?: number;
 }
 
 const BLOCKING: TileDefinition = { shape: "solid" };
@@ -71,6 +73,7 @@ export const TILE_DEFINITIONS: Readonly<Record<number, TileDefinition>> = {
   [T.SLOPE_UP_LEFT]: { shape: "slopeUpLeft" },
   [T.SLOPE_UP_RIGHT]: { shape: "slopeUpRight" },
   [T.TRIGGER]: { shape: "trigger", trigger: "tile" },
+  [T.EMBERS]: { shape: "none", harm: 1 },
 };
 
 export function tileDefinition(tile: number): TileDefinition {

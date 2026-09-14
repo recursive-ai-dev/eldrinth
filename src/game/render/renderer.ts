@@ -25,6 +25,7 @@ export const TILE_SPRITE_KEY: Record<number, string> = {
   [T.SLOPE_UP_LEFT]: "tile.slope_up_left",
   [T.SLOPE_UP_RIGHT]: "tile.slope_up_right",
   [T.TRIGGER]: "tile.trigger",
+  [T.EMBERS]: "tile.embers",
 };
 
 export const ENTITY_SPRITE_KEY: Record<string, string> = {
