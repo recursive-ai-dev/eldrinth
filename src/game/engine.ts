@@ -22,7 +22,7 @@ import {
 } from "./core/WorldState";
 import type { EndingId } from "./core/SceneStack";
 import { createRegionRepository, type RegionRepository } from "./regions";
-import { shardBleedEntry, shardPickupMessage, wardDialogue } from "./escalation";
+import { applyHarvestCost, shardBleedEntry, shardCostSuffix, shardPickupMessage, wardDialogue } from "./escalation";
 import { QUESTS, learnFact, canResolve, questKnown, questJournal, resolveQuest } from "./quests";
 import { AISystem } from "./systems/AISystem";
 import { CombatSystem } from "./systems/CombatSystem";
@@ -33,7 +33,7 @@ import { MovementSystem } from "./systems/MovementSystem";
 /* ----------------------------- constants ----------------------------- */
 // Player constants
 const PLAYER_RADIUS = 11;
-const PLAYER_START_HP = 6;
+const PLAYER_START_HP = 18;
 const PLAYER_MAX_STAMINA = 100;
 const PLAYER_DASH_STAMINA_COST = 35;
 const PLAYER_STAMINA_REGEN = 28;
@@ -869,8 +869,9 @@ export class Game {
         it.taken = true;
         if (it.type === "shard") {
           this.shards++;
-          p.maxHp++;
-          p.hp = Math.min(p.maxHp, p.hp + 2);
+          const harvested = applyHarvestCost(p.maxHp, p.hp, this.shards);
+          p.maxHp = harvested.maxHp;
+          p.hp = harvested.hp;
           this.shardsBurst(it.x, it.y, "#46f0d8", 18);
           this.addText(it.x, it.y, "ANIMA SHARD", "#5ff7df", 16);
           const bleed = shardBleedEntry(this.shards);
@@ -881,7 +882,7 @@ export class Game {
           if (this.shards >= this.totalShards) {
             this.wardUnlocked = true;
             this.syncMovementSystem();
-            this.msg("The ward gives. Nine. It was always going to be nine, and now I know who picked the number.");
+            this.msg(`The ward gives. Nine. It was always going to be nine, and now I know who picked the number.${shardCostSuffix(this.shards)}`);
             this.burst(it.x, it.y, "#46f0d8", 30);
             this.ring(this.map.bossCenter.x, this.map.bossCenter.y, "#46f0d8");
           } else {
