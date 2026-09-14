@@ -17,6 +17,7 @@ interface GameState {
   setHud: (hud: HudData) => void;
   setDialogue: (dialogue: DialogueData | null) => void;
   setJournal: (journal: JournalEntry[]) => void;
+  setInterior: (inside: boolean) => void;
 
   // Derived
   startGame: () => void;
@@ -42,7 +43,7 @@ const initialHud: HudData = {
   bossHp: 0,
 };
 
-const initialState: Omit<GameState, "setPaused" | "setHud" | "setDialogue" | "setJournal" | "startGame" | "endGame" | "togglePause" | "reset"> = {
+const initialState: Omit<GameState, "setPaused" | "setHud" | "setDialogue" | "setJournal" | "setInterior" | "startGame" | "endGame" | "togglePause" | "reset"> = {
   scenes: ["title"],
   sessionId: 0,
   hud: initialHud,
@@ -65,6 +66,13 @@ export const useGameStore = create<GameState>((set) => ({
 
   setDialogue: (dialogue) => set({ dialogue }),
   setJournal: (journal) => set({ journal }),
+
+  setInterior: (inside: boolean) => set((state) => {
+    const scenes = [...state.scenes];
+    const root = inside ? "interior" : "overworld";
+    if (scenes[0] === "overworld" || scenes[0] === "interior") scenes[0] = root;
+    return { scenes };
+  }),
 
   startGame: () => {
     set((state) => ({

@@ -106,4 +106,5 @@ export interface GameCallbacks {
   onPause: (paused: boolean) => void;
   onEnd: (ending: EndingId) => void;
   onJournal: (entries: JournalEntry[]) => void;
+  onInterior: (inside: boolean) => void;
 }

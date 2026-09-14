@@ -30,6 +30,7 @@ export default function GameCanvas({
       onPause: (p) => cbRef.current.onPause(p),
       onEnd: (ending) => cbRef.current.onEnd(ending),
       onJournal: (entries) => cbRef.current.onJournal(entries),
+      onInterior: (inside) => cbRef.current.onInterior(inside),
     };
     const game = new Game(canvas, proxy, undefined, { difficulty });
     // Acquire the saved region before restoring its local entities. This keeps
