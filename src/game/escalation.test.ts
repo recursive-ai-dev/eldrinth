@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyHarvestCost, shardBleedEntry, shardCostSuffix, shardHarvestCost, shardPickupMessage, WARD_LINES, wardDialogue } from "./escalation";
+import { applyHarvestCost, cumulativeHarvestCost, shardBleedEntry, shardCostSuffix, shardHarvestCost, shardPickupMessage, WARD_LINES, wardDialogue, wardUnlockMessage } from "./escalation";
 
 describe("shard escalation", () => {
   it("reports a plain count for the early shards", () => {
@@ -106,5 +106,18 @@ describe("harvest cost", () => {
   it("appends the price to every costed pickup message", () => {
     expect(shardPickupMessage(3, 9)).toBe("Anima Shard recovered (3/9). It was warm. Maximum health −1.");
     expect(shardPickupMessage(6, 9)).toContain("Maximum health −2.");
+  });
+
+  it("sums the cumulative cost across a full run", () => {
+    expect(cumulativeHarvestCost(0)).toBe(0);
+    expect(cumulativeHarvestCost(3)).toBe(1);
+    expect(cumulativeHarvestCost(6)).toBe(5);
+    expect(cumulativeHarvestCost(9)).toBe(13);
+  });
+
+  it("composes the ward-unlock message with the ninth shard's price, no doubled spaces", () => {
+    const message = wardUnlockMessage(9);
+    expect(message.endsWith("Maximum health −3.")).toBe(true);
+    expect(message).not.toContain("  ");
   });
 });
