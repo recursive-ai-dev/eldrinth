@@ -4,7 +4,7 @@ Eldrinth will be a compact action RPG built around self-directed discovery. The 
 
 ## Milestone 1 — A journey worth following (implemented)
 
-The first complete playable arc now has four connected regions: the Old Lands, Cinderwild, Moonlit Coast, and Starfall Moors. Nine shards are placed across those lands, and road signs provide directional, landmark-based information for finding them.
+The first complete playable arc now has four connected regions: the Old Lands, Cinderwild, Moonlit Coast, and Starfall Moors. Nine shards are placed across those lands, and road signs provide directional, landmark-based information for finding them. Taking a shard is no longer a reward: each one now costs the pilgrim permanent maximum health on a rising curve, free for the first two and steeper from the sixth on, so the run's felt cost lands with the same weight as the story's. Character growth instead comes from the investigations and the relics they yield, not from the shards themselves.
 
 Three investigations run alongside the main pilgrimage, and each one is an account of institutional violence read straight off the paperwork:
 
