@@ -18,7 +18,7 @@ Discoveries can be made in any order. Once enough evidence is brought back to Or
 
 Add small, authored activity sites to each region: a hazardous crossing, a combat arena, a hidden refuge, and one optional encounter with a unique rule. Each site should offer a clue, material, or relationship rather than generic loot.
 
-The first of these has landed: the Cinderwild's loose shard now sits inside the Broken Shrine, an enterable fortress reached through a gate rather than picked up in the open field. It is a separate, dark interior with no wayfire to rest at, ember tiles that cost health to cross, and a warden guarding the shard chamber; dying inside resets the fortress's enemies and shard rather than the run itself. The remaining eight regional shards still need their own sites in the same spirit — a hazardous crossing, a combat arena, a hidden refuge, each distinct rather than a reskin of this one.
+All nine shards now sit inside their own enterable fortresses rather than in open-field clearings. Each fortress has a distinct 26×19 authored layout, its own gate and return route, no wayfire to rest at, darkness, ember hazards, a warden, and a journal record of what was guarding the vessel. Dying inside resets that fortress's enemies and shard rather than the run itself.
 
 Build a light equipment layer around meaningful tradeoffs: two active tools and three relic slots, with effects that change play patterns such as projectile-deflecting dashes, a slower heavy strike, or a lantern that reveals concealed messages. Expand enemy telegraphs and give each region one elite behavior that changes how the player uses space.
 

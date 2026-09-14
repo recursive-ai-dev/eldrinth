@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { applyHarvestCost, cumulativeHarvestCost, fortressWardenEntry, shardBleedEntry, shardCostSuffix, shardHarvestCost, shardPickupMessage, WARD_LINES, wardDialogue, wardUnlockMessage } from "./escalation";
+import { applyHarvestCost, cumulativeHarvestCost, fortressWardenEntry, shardBleedEntry, shardCostSuffix, shardHarvestCost, shardPickupMessage, wardenFact, WARD_LINES, wardDialogue, wardUnlockMessage } from "./escalation";
+import { FORTRESS_LAYOUTS } from "./fortressLayouts";
 
 describe("shard escalation", () => {
   it("reports a plain count for the early shards", () => {
@@ -123,15 +124,23 @@ describe("harvest cost", () => {
 });
 
 describe("fortress warden", () => {
-  it("records what the Broken Shrine's warden was", () => {
-    const entry = fortressWardenEntry("fortress.cinderwild-shrine");
-    expect(entry).not.toBeNull();
-    expect(entry?.id).toBe("warden:fortress.cinderwild-shrine");
-    expect(entry?.text).toContain("courier");
+  it("records what guarded every shard", () => {
+    for (const regionId of Object.keys(FORTRESS_LAYOUTS)) {
+      const entry = fortressWardenEntry(regionId);
+      expect(entry).not.toBeNull();
+      expect(entry?.id).toBe(`warden:${regionId}`);
+      expect(entry?.title).toBe("What kept the shard");
+      expect(entry?.text.length).toBeGreaterThan(80);
+    }
   });
 
   it("writes nothing for a region with no warden", () => {
     expect(fortressWardenEntry("overworld")).toBeNull();
     expect(fortressWardenEntry("cinderwild")).toBeNull();
+  });
+
+  it("preserves the astronomer's established investigation fact after moving it indoors", () => {
+    expect(wardenFact("fortress.starfall-watch")).toBe("warden:starfall-moors");
+    expect(wardenFact("fortress.cinderwild-watchpost")).toBe("warden:fortress.cinderwild-watchpost");
   });
 });

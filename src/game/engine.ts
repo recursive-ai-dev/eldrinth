@@ -22,7 +22,7 @@ import {
 } from "./core/WorldState";
 import type { EndingId } from "./core/SceneStack";
 import { createRegionRepository, type RegionRepository } from "./regions";
-import { applyHarvestCost, fortressWardenEntry, shardBleedEntry, shardPickupMessage, wardDialogue, wardUnlockMessage } from "./escalation";
+import { applyHarvestCost, fortressWardenEntry, shardBleedEntry, shardPickupMessage, wardDialogue, wardenFact, wardUnlockMessage } from "./escalation";
 import { hazardDamageAt } from "./hazard";
 import { QUESTS, learnFact, canResolve, questKnown, questJournal, resolveQuest } from "./quests";
 import { AISystem } from "./systems/AISystem";
@@ -858,7 +858,7 @@ export class Game {
     if (e.type !== "boss" && this.world.nextRandom() < 0.28)
       this.items.push({ x: e.x, y: e.y, type: "potion", t: 0, taken: false });
     if (e.elite) {
-      if (learnFact(this.world.quests, `warden:${this.world.regionId}`)) this.publishJournal();
+      if (learnFact(this.world.quests, wardenFact(this.world.regionId))) this.publishJournal();
       this.items.push({ x: e.x + 12, y: e.y, type: "potion", t: 0, taken: false });
       this.items.push({ x: e.x - 12, y: e.y, type: "potion", t: 0, taken: false });
       this.addText(e.x, e.y - 32, "WARDEN FALLEN", "#ffd36b", 15);

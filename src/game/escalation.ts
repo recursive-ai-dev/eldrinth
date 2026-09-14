@@ -99,10 +99,27 @@ export function wardDialogue(): { lines: string[]; choices: DialogueChoice[] } {
 /** What was actually guarding the shard, recorded after the shell stops moving. */
 const FORTRESS_WARDEN_TEXT: Record<string, string> = {
   "fortress.cinderwild-shrine": "The thing in the shrine wore the courier's shape the way a coat wears a hook. It fought me the whole way down and it was never going to win, and it knew that, and it fought anyway. Whatever is in the vessel has been listening to it defend this room for nine hundred years.",
+  "fortress.old-lands-archive": "The archive keeper was made to remember every name the collectors crossed out. It had arranged the pages around the shard in the order they disappeared. It did not attack until I touched the last page.",
+  "fortress.old-lands-reliquary": "The glass showed me the reliquary's keeper before it showed me myself. It had been watching the door in every reflection at once. When the shell broke, all of them looked relieved.",
+  "fortress.old-lands-vault": "The vault warden had Ilyarael's seal pressed into its mouth. Someone had used it to authorize the transfers, then left it here to guard the record of what that authorization bought.",
+  "fortress.cinderwild-watchpost": "The warden at the watchpost had walked the same square of floor until its feet had worn the stone pale. It was still waiting for relief. Nobody had told it that the watch had ended before the people it was watching over were taken.",
+  "fortress.moonlit-salt-graves": "The graves' keeper recited the names as it fought. It stopped at forty-one, then began again. The missing thirty-nine were not forgotten; they had been filed somewhere I could not reach.",
+  "fortress.moonlit-beacon": "The beacon keeper had kept its lamp lit with pieces of itself. It said that was the bargain, as if a bargain made under a gun becomes clean when you say the word carefully enough.",
+  "fortress.starfall-observatory": "The observatory's warden had written equations into its own casing with a nail. The last line was only a number repeated until the metal gave out. I think it was counting how long it had remained awake.",
+  "fortress.starfall-watch": "The guardian's shell was empty except for the astronomer, who had built it to prove the intake was survivable. It defended the shard with the urgency of a man trying to make his own experiment come out differently.",
 };
+
+/** A fortress can preserve an existing investigation fact after moving a warden indoors. */
+const FORTRESS_WARDEN_FACTS: Record<string, string> = {
+  "fortress.starfall-watch": "warden:starfall-moors",
+};
+
+export function wardenFact(regionId: string): string {
+  return FORTRESS_WARDEN_FACTS[regionId] ?? `warden:${regionId}`;
+}
 
 export function fortressWardenEntry(regionId: string): JournalEntry | null {
   const text = FORTRESS_WARDEN_TEXT[regionId];
   if (!text) return null;
-  return { id: `warden:${regionId}`, title: "What kept the shrine", text, source: "Firsthand discovery" };
+  return { id: `warden:${regionId}`, title: "What kept the shard", text, source: "Firsthand discovery" };
 }
