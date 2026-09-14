@@ -670,11 +670,39 @@ export function renderGame(g: RenderState) {
   drawParticles(g, ctx);
   drawTexts(g, ctx);
   g.tileRenderer.drawOverlay(ctx, g.cam, g.viewW, g.viewH);
+  drawDarkness(g, ctx);
   ctx.restore();
 
   drawLighting(g);
   // There is deliberately no quest compass. Roads, notes, and landmarks are
   // the navigation system.
+}
+
+const PLAYER_LIGHT_RADIUS = 96;
+const BRAZIER_LIGHT_RADIUS = 176;
+
+function drawDarkness(g: RenderState, ctx: CanvasRenderingContext2D) {
+  if (!g.map.dark) return;
+  ctx.save();
+  ctx.globalCompositeOperation = "source-over";
+  ctx.fillStyle = "rgba(2,3,6,0.93)";
+  ctx.fillRect(g.cam.x, g.cam.y, g.viewW, g.viewH);
+
+  // Punch the lit areas back out of the darkness we just laid down.
+  ctx.globalCompositeOperation = "destination-out";
+  const punch = (x: number, y: number, radius: number) => {
+    const hole = ctx.createRadialGradient(x, y, radius * 0.15, x, y, radius);
+    hole.addColorStop(0, "rgba(0,0,0,1)");
+    hole.addColorStop(0.65, "rgba(0,0,0,0.55)");
+    hole.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = hole;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  punch(g.player.x, g.player.y, PLAYER_LIGHT_RADIUS);
+  for (const light of g.map.lights) punch(light.x, light.y, BRAZIER_LIGHT_RADIUS);
+  ctx.restore();
 }
 
 function drawWardBarrier(g: RenderState, ctx: CanvasRenderingContext2D) {
