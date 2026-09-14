@@ -30,9 +30,13 @@ A shard makes the player stronger and heals them. Both go away. **A shard
 grants nothing.** It costs permanent maximum health, on a rising curve.
 
 All character growth now comes from the three investigations and the four
-wayfire relics — the optional, story-bearing content. A player who engages
-with the atrocity arrives at the Spire able to fight; a player who
-speedruns the pickups arrives hollowed out. Neither path is blocked.
+wayfire relics — the optional, story-bearing content. Harvesting itself is
+not elective: the ward gates on all nine shards (`MovementSystem` blocks
+ward tiles until `wardUnlocked`, which is set only once the ninth shard is
+taken), so every player pays the full 13-point cost. The only real choice
+is whether to do the investigations and claim the relics that offset it —
+a player who engages with that optional content arrives at the Spire able
+to fight; a player who skips it arrives hollowed out.
 
 ## 2. The curve
 
@@ -47,10 +51,22 @@ Total cost: **13**.
 additive and untouched, so Story difficulty still starts `+2` (20) and
 Standard and Brutal start at 18.
 
-**Endpoints.** A player who takes nine shards and does nothing optional
-reaches the Spire at **5** max HP — just under the 6 the game currently
-ships with and is beatable at. With all three investigations (`+2` and
-`+3` health) and the `emberheart` relic (`+2`), they arrive at **12**.
+**Endpoints.** The ward gates on all nine shards (`MovementSystem` blocks
+ward tiles until `wardUnlocked`, set only once the ninth is taken), so
+under the old rules every player reached the boss at the same floor:
+`PLAYER_START_HP` (6) + nine harvests at `+1` each = **15** max HP,
+minimum. The comparison that matters is therefore 15 → 5, not 6 → 5. A
+player who takes nine shards and does nothing optional now reaches the
+Spire at **5** max HP. With all three investigations (`+2` and `+3`
+health) and the `emberheart` relic (`+2`), they arrive at **12**.
+
+Boss and enemy tuning (`BOSS_HP`, `BOSS_DAMAGE`, `PLAYER_ATTACK_DAMAGE`,
+`DIFFICULTY_TUNING`, and every enemy damage constant) are deliberately
+left unchanged by this spec. That means the finale becomes attritional for
+a bare run that skipped the optional content — arriving at 5 instead of
+the old guaranteed 15 is a real difficulty increase at the encounter that
+matters most. Whether to retune the fight for that is an open decision,
+explicitly out of scope here (§9).
 
 **Why this shape, and not a flat tax.** The narrative spec's §6 escalation
 schedule is already implemented in the shard messages and the journal
@@ -133,19 +149,23 @@ The journal bleed at shards 6, 7 and 8 is unchanged.
 
 ## 7. Saves
 
-The snapshot is at `version: 3` as of the narrative rewrite. **No migration,
-and no version bump.**
+**Revised.** This section originally argued for no migration and no version
+bump, on the theory that an untouched carried save would be "strictly
+generous" relative to a fresh run. That was wrong: the old rule banked
+`+1` max health per shard *already taken*, while the new rule bills per
+shard *still remaining*. Left untouched, a carried save pays the new costs
+against its old, lower `maxHp` and gets floored at 1 — permanent one-shot
+death against a boss that deals more than that — rather than treated
+generously. The same root cause made the floor non-commutative, rewarding
+players who harvested before resolving quests.
 
-The rule change applies going forward: an in-progress save keeps whatever
-`maxHp` it holds and pays the new cost on its next harvest. The alternative
-— recomputing `maxHp` from shard count — cannot work, because quest and
-relic rewards are added into the same `maxHp` field and are not tracked
-separately, so a recompute would silently delete rewards the player earned.
-
-The consequence is accepted and stated plainly: a save made before this
-change will have a higher `maxHp` than a fresh run at the same shard count.
-That is a strictly generous inconsistency affecting only saves in flight
-across one update of a pre-release game.
+The snapshot is now `version: 4`. Restoring a `version <= 3` snapshot
+applies a delta migration: `maxHp += 12 - shards - cumulativeHarvestCost(shards)`,
+then `hp` is clamped to the new `maxHp`. This lands every shard count
+exactly on the fresh-rules target (0 shards → 18, 3 → 17, 6 → 13, 9 → 5)
+without recomputing `maxHp` from scratch, so quest and relic bonuses —
+folded into the same field and not tracked separately — survive untouched
+as the separate addend they always were.
 
 ## 8. Testing
 
@@ -156,8 +176,9 @@ across one update of a pre-release game.
   clamps `hp` to the new maximum, and never drops `maxHp` below 1.
 - `shardPickupMessage` — messages for shards 3–9 state the cost; messages
   for 1–2 do not; every message still carries its `(n/9)` count.
-- The existing save round-trip test continues to pass unchanged, which is
-  the check that §7's no-migration decision did not disturb serialisation.
+- `WorldState.test.ts` — a `version <= 3` snapshot restores with `maxHp`
+  adjusted onto the §7 migration target and `hp` clamped to it, while
+  `quests.resolutions` and `journal` survive untouched.
 - Full suite green (124 at time of writing), `tsc --noEmit` clean, and a
   headless playthrough confirming the bar renders, drops on a costed
   harvest, and does not wrap at 400px width.
