@@ -1,5 +1,6 @@
 import type { DialogueData, Difficulty, Dir, EnemyType, ItemType, JournalEntry, MapData } from "../types";
 import type { QuestProgress } from "../quests";
+import { cumulativeHarvestCost } from "../escalation";
 
 export interface RegionSnapshot {
   enemies: EnemyState[];
@@ -97,7 +98,7 @@ export interface ItemState {
 }
 
 export interface WorldSnapshot {
-  version: 1 | 2 | 3;
+  version: 1 | 2 | 3 | 4;
   regionId: string;
   simulationTime: number;
   tick: number;
@@ -166,7 +167,7 @@ export class WorldState {
   snapshot(): WorldSnapshot {
     if (!this.player) throw new Error("Cannot save an uninitialized world.");
     return {
-      version: 3,
+      version: 4,
       regionId: this.regionId,
       simulationTime: this.simulationTime,
       tick: this.tick,
@@ -192,9 +193,17 @@ export class WorldState {
   }
 
   restore(snapshot: WorldSnapshot) {
-    if (snapshot.version !== 1 && snapshot.version !== 2 && snapshot.version !== 3) throw new Error(`Unsupported world snapshot version: ${snapshot.version}`);
+    if (snapshot.version !== 1 && snapshot.version !== 2 && snapshot.version !== 3 && snapshot.version !== 4) throw new Error(`Unsupported world snapshot version: ${snapshot.version}`);
     const legacySave = snapshot.version === 1;
     const preRewriteSave = snapshot.version <= 2;
+    // Pre-inversion saves (v3 and earlier) banked +1 maxHp per shard already
+    // taken; the new rule bills per shard still remaining. Left alone, a
+    // carried save's maxHp would be floored at 1 by the new harvest costs
+    // instead of landing on the fresh-rules target. This delta lands every
+    // shard count exactly on that target without touching quest/relic
+    // bonuses, which are folded into the same maxHp field as a separate,
+    // untracked addend.
+    const needsHarvestCostMigration = snapshot.version <= 3;
     this.regionId = snapshot.regionId;
     this.simulationTime = snapshot.simulationTime;
     this.tick = snapshot.tick;
@@ -222,6 +231,10 @@ export class WorldState {
     this.quests = structuredClone(snapshot.quests ?? { facts: [], resolutions: {} });
     this.regions = structuredClone(snapshot.regions ?? {});
     this.checkpoint = snapshot.checkpoint ? { ...snapshot.checkpoint } : null;
+    if (needsHarvestCostMigration) {
+      this.player.maxHp += 12 - snapshot.shards - cumulativeHarvestCost(snapshot.shards);
+      this.player.hp = Math.min(this.player.hp, this.player.maxHp);
+    }
     if (legacySave) this.migrateLegacyPopulation();
     this.boss = snapshot.bossId === null ? null : this.enemies.find((enemy) => enemy.id === snapshot.bossId) ?? null;
     this.dialogue = null;

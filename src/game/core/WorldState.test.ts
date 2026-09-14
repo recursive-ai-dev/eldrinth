@@ -58,7 +58,9 @@ describe("WorldState snapshots", () => {
     restored.restore(legacy);
 
     expect(restored.enemies.length).toBeLessThan(20);
-    expect(restored.player.maxHp).toBe(8);
+    // v1 save: harvest-cost migration (0 shards, maxHp 6 -> 18) composes with
+    // the legacy Story +2 population migration (18 -> 20).
+    expect(restored.player.maxHp).toBe(20);
     expect(restored.enemies[0].speed).toBeCloseTo(45.88);
   });
 
@@ -110,5 +112,49 @@ describe("WorldState snapshots", () => {
     expect(restored.journal.map((entry) => entry.id)).toEqual(["personal:40:0", "bleed:6"]);
     expect(restored.quests.facts).toEqual(["courier-orders", "spire"]);
     expect(restored.quests.resolutions.courier).toBe("end");
+  });
+
+  it("migrates a pre-inversion (v3) save's carried maxHp onto the fresh-rules target, clamping hp", () => {
+    const world = new WorldState();
+    world.player = {
+      x: 1, y: 2, r: 3, hp: 9, maxHp: 12, stamina: 7, maxStamina: 8,
+      staminaRegenDelay: 0, dir: "down", speed: 1, attackTimer: 0, attackCd: 0,
+      attackDur: 0, attacking: false, swingHit: new Set(), swingDmg: 1,
+      invuln: 0, dashTimer: 0, dashCd: 0, dashDir: "down", dashing: false,
+      walkT: 0, hurtFlash: 0, kx: 0, ky: 0, dying: 0, relics: [], dashCostDiscount: 0, attackBonus: 0,
+    };
+    world.shards = 6;
+    world.quests = { facts: ["courier-orders"], resolutions: { courier: "end" } };
+    world.journal = [{ id: "personal:1:0", title: "My observations", text: "mine", source: "Camp" }];
+    const v3 = { ...world.snapshot(), version: 3 as const };
+
+    const restored = new WorldState();
+    restored.restore(v3);
+
+    // shards=6: old maxHp 12 -> 12 + 12 - 6 - cumulativeHarvestCost(6)=5 -> 13, the fresh-rules target.
+    expect(restored.player.maxHp).toBe(13);
+    expect(restored.player.hp).toBe(9);
+    expect(restored.quests.resolutions.courier).toBe("end");
+    expect(restored.journal.map((entry) => entry.id)).toEqual(["personal:1:0"]);
+  });
+
+  it("clamps hp down when the harvest-cost migration drops maxHp below current hp", () => {
+    const world = new WorldState();
+    world.player = {
+      x: 1, y: 2, r: 3, hp: 15, maxHp: 15, stamina: 7, maxStamina: 8,
+      staminaRegenDelay: 0, dir: "down", speed: 1, attackTimer: 0, attackCd: 0,
+      attackDur: 0, attacking: false, swingHit: new Set(), swingDmg: 1,
+      invuln: 0, dashTimer: 0, dashCd: 0, dashDir: "down", dashing: false,
+      walkT: 0, hurtFlash: 0, kx: 0, ky: 0, dying: 0, relics: [], dashCostDiscount: 0, attackBonus: 0,
+    };
+    world.shards = 9;
+    const v3 = { ...world.snapshot(), version: 3 as const };
+
+    const restored = new WorldState();
+    restored.restore(v3);
+
+    // shards=9: 15 + 12 - 9 - 13 = 5, and hp clamps down from 15 to match.
+    expect(restored.player.maxHp).toBe(5);
+    expect(restored.player.hp).toBe(5);
   });
 });
