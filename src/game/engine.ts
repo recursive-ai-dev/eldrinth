@@ -22,7 +22,7 @@ import {
 } from "./core/WorldState";
 import type { EndingId } from "./core/SceneStack";
 import { createRegionRepository, type RegionRepository } from "./regions";
-import { applyHarvestCost, shardBleedEntry, shardPickupMessage, wardDialogue, wardUnlockMessage } from "./escalation";
+import { applyHarvestCost, fortressWardenEntry, shardBleedEntry, shardPickupMessage, wardDialogue, wardUnlockMessage } from "./escalation";
 import { hazardDamageAt } from "./hazard";
 import { QUESTS, learnFact, canResolve, questKnown, questJournal, resolveQuest } from "./quests";
 import { AISystem } from "./systems/AISystem";
@@ -863,6 +863,14 @@ export class Game {
       this.items.push({ x: e.x - 12, y: e.y, type: "potion", t: 0, taken: false });
       this.addText(e.x, e.y - 32, "WARDEN FALLEN", "#ffd36b", 15);
       this.msg("The region's warden has fallen. A wayfire answers in the distance.");
+      if (this.world.regionId.startsWith("fortress.")) {
+        const entry = fortressWardenEntry(this.world.regionId);
+        if (entry && !this.world.journal.some((existing) => existing.id === entry.id)) {
+          this.world.journal.push(entry);
+          this.publishJournal();
+          this.msg("A note has been copied into your journal. Press L to read it.");
+        }
+      }
     }
   }
 

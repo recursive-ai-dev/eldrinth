@@ -95,3 +95,14 @@ export function wardDialogue(): { lines: string[]; choices: DialogueChoice[] } {
     ],
   };
 }
+
+/** What was actually guarding the shard, recorded after the shell stops moving. */
+const FORTRESS_WARDEN_TEXT: Record<string, string> = {
+  "fortress.cinderwild-shrine": "The thing in the shrine wore the courier's shape the way a coat wears a hook. It fought me the whole way down and it was never going to win, and it knew that, and it fought anyway. Whatever is in the vessel has been listening to it defend this room for nine hundred years.",
+};
+
+export function fortressWardenEntry(regionId: string): JournalEntry | null {
+  const text = FORTRESS_WARDEN_TEXT[regionId];
+  if (!text) return null;
+  return { id: `warden:${regionId}`, title: "What kept the shrine", text, source: "Firsthand discovery" };
+}
