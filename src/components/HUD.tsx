@@ -1,37 +1,24 @@
 import type { HudData } from "@/game/types";
 
-function Heart({ filled }: { filled: boolean }) {
-  return (
-    <svg viewBox="0 0 24 24" className="h-6 w-6 drop-shadow">
-      <path
-        d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
-        fill={filled ? "#e24747" : "transparent"}
-        stroke={filled ? "#ff7a7a" : "#5a3340"}
-        strokeWidth="1.5"
-      />
-      {filled && (
-        <path
-          d="M8 7.5c0-1 .8-1.8 1.8-1.8"
-          stroke="rgba(255,255,255,0.5)"
-          strokeWidth="1.2"
-          strokeLinecap="round"
-          fill="none"
-        />
-      )}
-    </svg>
-  );
-}
-
 export default function HUD({ hud }: { hud: HudData }) {
-  const hearts = Array.from({ length: hud.maxHp });
   return (
     <div className="pointer-events-none absolute inset-0 z-10 select-none">
       {/* Top-left: vitals */}
       <div className="absolute left-4 top-4 flex flex-col gap-2">
-        <div className="flex flex-wrap gap-1 rounded-lg border border-amber-200/15 bg-black/45 px-3 py-2 backdrop-blur-sm">
-          {hearts.map((_, i) => (
-            <Heart key={i} filled={i < hud.hp} />
-          ))}
+        <div className="w-44 rounded-lg border border-rose-300/20 bg-black/45 px-3 py-2 backdrop-blur-sm">
+          <div className="mb-1 flex items-center justify-between font-title text-[10px] uppercase tracking-[0.2em] text-rose-100/75">
+            <span>Life</span>
+            <span>
+              {Math.max(0, Math.ceil(hud.hp))}
+              <span className="text-rose-200/45"> / {hud.maxHp}</span>
+            </span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-rose-950/80">
+            <div
+              className="h-full bg-[#e24747] transition-[width] duration-100 ease-out"
+              style={{ width: `${hud.maxHp > 0 ? Math.round((Math.max(0, hud.hp) / hud.maxHp) * 100) : 0}%` }}
+            />
+          </div>
         </div>
         <div className="flex items-center gap-2 rounded-lg border border-teal-300/20 bg-black/45 px-3 py-1.5 backdrop-blur-sm">
           <span className="inline-block h-3 w-3 rotate-45 bg-teal-300 shadow-[0_0_8px_2px_rgba(70,240,216,0.7)]" />
