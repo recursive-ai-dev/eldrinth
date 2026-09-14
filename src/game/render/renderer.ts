@@ -670,10 +670,10 @@ export function renderGame(g: RenderState) {
   drawParticles(g, ctx);
   drawTexts(g, ctx);
   g.tileRenderer.drawOverlay(ctx, g.cam, g.viewW, g.viewH);
-  drawDarkness(g, ctx);
   ctx.restore();
 
   drawLighting(g);
+  drawDarkness(g, ctx);
   // There is deliberately no quest compass. Roads, notes, and landmarks are
   // the navigation system.
 }
@@ -686,9 +686,11 @@ function drawDarkness(g: RenderState, ctx: CanvasRenderingContext2D) {
   ctx.save();
   ctx.globalCompositeOperation = "source-over";
   ctx.fillStyle = "rgba(2,3,6,0.93)";
-  ctx.fillRect(g.cam.x, g.cam.y, g.viewW, g.viewH);
+  ctx.fillRect(0, 0, g.viewW, g.viewH);
 
-  // Punch the lit areas back out of the darkness we just laid down.
+  // Punch the lit areas back out of the darkness we just laid down. Convert
+  // world positions to screen space the same way drawLighting does, so both
+  // passes share one coordinate convention and stay shake/rounding-safe.
   ctx.globalCompositeOperation = "destination-out";
   const punch = (x: number, y: number, radius: number) => {
     const hole = ctx.createRadialGradient(x, y, radius * 0.15, x, y, radius);
@@ -700,8 +702,12 @@ function drawDarkness(g: RenderState, ctx: CanvasRenderingContext2D) {
     ctx.arc(x, y, radius, 0, Math.PI * 2);
     ctx.fill();
   };
-  punch(g.player.x, g.player.y, PLAYER_LIGHT_RADIUS);
-  for (const light of g.map.lights) punch(light.x, light.y, BRAZIER_LIGHT_RADIUS);
+  const px = g.player.x - g.cam.x + g.lastShakeX;
+  const py = g.player.y - g.cam.y + g.lastShakeY;
+  punch(px, py, PLAYER_LIGHT_RADIUS);
+  for (const light of g.map.lights) {
+    punch(light.x - g.cam.x + g.lastShakeX, light.y - g.cam.y + g.lastShakeY, BRAZIER_LIGHT_RADIUS);
+  }
   ctx.restore();
 }
 
@@ -1337,13 +1343,20 @@ function drawLighting(g: RenderState) {
   const px = p.x - g.cam.x + g.lastShakeX;
   const py = p.y - g.cam.y + g.lastShakeY;
   const R = Math.max(g.viewW, g.viewH) * 0.62;
-  const gr = ctx.createRadialGradient(px, py, 0, px, py, R);
-  gr.addColorStop(0, "rgba(6,8,16,0)");
-  gr.addColorStop(0.42, "rgba(7,9,18,0.1)");
-  gr.addColorStop(0.72, "rgba(4,6,14,0.55)");
-  gr.addColorStop(1, "rgba(2,3,9,0.9)");
-  ctx.fillStyle = gr;
-  ctx.fillRect(0, 0, g.viewW, g.viewH);
+  // On dark maps drawDarkness supplies the ambient occlusion; the vignette
+  // here would just re-darken the holes it punches, so skip it. The warm
+  // torch-glow pass below is additive ("lighter") and only brightens, so it
+  // cannot fight drawDarkness and stays on to give the player's own light a
+  // warm tint in a fortress too.
+  if (!g.map.dark) {
+    const gr = ctx.createRadialGradient(px, py, 0, px, py, R);
+    gr.addColorStop(0, "rgba(6,8,16,0)");
+    gr.addColorStop(0.42, "rgba(7,9,18,0.1)");
+    gr.addColorStop(0.72, "rgba(4,6,14,0.55)");
+    gr.addColorStop(1, "rgba(2,3,9,0.9)");
+    ctx.fillStyle = gr;
+    ctx.fillRect(0, 0, g.viewW, g.viewH);
+  }
   ctx.globalCompositeOperation = "lighter";
   const tg = ctx.createRadialGradient(px, py, 0, px, py, R * 0.32);
   tg.addColorStop(0, "rgba(255,180,90,0.1)");
