@@ -10,8 +10,38 @@ const SHARD_NOTES: Record<number, string> = {
   8: " One left. I have done this before.",
 };
 
+/**
+ * What each shard costs in permanent maximum health. Free for the first two
+ * so the HUD agrees with the prose that nothing is wrong yet; billing starts
+ * where the investigations land and doubles at six, where the journal bleed
+ * already begins. Thirteen across a full run.
+ */
+const SHARD_HARVEST_COST: Record<number, number> = {
+  3: 1, 4: 1, 5: 1, 6: 2, 7: 2, 8: 3, 9: 3,
+};
+
+export function shardHarvestCost(count: number): number {
+  return SHARD_HARVEST_COST[count] ?? 0;
+}
+
+/** The price, stated in the register the quest resolutions already use. */
+export function shardCostSuffix(count: number): string {
+  const cost = shardHarvestCost(count);
+  return cost > 0 ? ` Maximum health −${cost}.` : "";
+}
+
+/**
+ * The whole stat mutation of a harvest, in one pure place: spend the cost,
+ * never fall below one, and pull current health down to the new ceiling
+ * without healing a wounded player.
+ */
+export function applyHarvestCost(maxHp: number, hp: number, count: number): { maxHp: number; hp: number } {
+  const nextMax = Math.max(1, maxHp - shardHarvestCost(count));
+  return { maxHp: nextMax, hp: Math.min(hp, nextMax) };
+}
+
 export function shardPickupMessage(count: number, total: number): string {
-  return `Anima Shard recovered (${count}/${total}).${SHARD_NOTES[count] ?? ""}`;
+  return `Anima Shard recovered (${count}/${total}).${SHARD_NOTES[count] ?? ""}${shardCostSuffix(count)}`;
 }
 
 /** Entries the player did not write, in the courier's hand, from the sixth shard on. */
