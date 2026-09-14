@@ -1,5 +1,7 @@
 import { MAP_W, MAP_H, TILE, T } from "./constants";
 import type { MapData, Vec, EnemySpawn, SignData, RegionExit, CampfireData } from "./types";
+import { parseFortressLayout } from "./fortress";
+import { BROKEN_SHRINE } from "./fortressLayouts";
 
 function mulberry32(seed: number) {
   let a = seed >>> 0;
@@ -43,6 +45,7 @@ function smoothNoise(rng: () => number, scale: number): Float32Array {
 }
 
 export function generateMap(regionId = "overworld"): MapData {
+  if (regionId.startsWith("fortress.")) return generateFortressMap(regionId);
   if (regionId !== "overworld") return generateFrontierMap(regionId);
   const rng = mulberry32(0x9e3779b1);
   const tiles = new Uint8Array(MAP_W * MAP_H);
@@ -296,6 +299,9 @@ export function generateMap(regionId = "overworld"): MapData {
       { x: 62, y: 69, targetRegion: "moonlit-coast", destination: { x: px(50), y: px(7) }, label: "Moonlit Coast" },
     ],
     campfires: [{ x: px(33), y: px(31), name: "Ilyarael's Last Ember", relic: "emberheart" }],
+    dark: false,
+    resetOnDeath: false,
+    lights: [],
   };
 }
 
@@ -307,7 +313,8 @@ function generateFrontierMap(regionId: string): MapData {
       exits: [
         { x: 3, y: 38, targetRegion: "overworld", destination: { x: px(94), y: px(56) }, label: "The Old Lands" },
         { x: 88, y: 66, targetRegion: "starfall-moors", destination: { x: px(12), y: px(8) }, label: "Starfall Moors" },
-      ], shardTiles: [[72, 20], [84, 53]], relic: "ashstep",
+        { x: 72, y: 20, targetRegion: "fortress.cinderwild-shrine", destination: { x: px(9), y: px(1) }, label: "The Broken Shrine" },
+      ], shardTiles: [[84, 53]], relic: "ashstep",
     },
     "moonlit-coast": {
       name: "Moonlit Coast", seed: 0xbadc0de, water: true,
@@ -396,7 +403,7 @@ function generateFrontierMap(regionId: string): MapData {
     const i = enemySpawns.length;
     enemySpawns.push({ x, y, type: i % 5 === 0 ? "adept" : i % 3 === 0 ? "sentinel" : "wraith" });
   }
-  const [eliteX, eliteY] = config.shardTiles[1];
+  const [eliteX, eliteY] = config.shardTiles[config.shardTiles.length - 1];
   enemySpawns.push({ x: eliteX + 2, y: eliteY + 2, type: regionId === "cinderwild" ? "sentinel" : "adept", elite: true });
   return {
     regionName: config.name, width: MAP_W, height: MAP_H, tiles, wardTiles: [],
@@ -404,5 +411,49 @@ function generateFrontierMap(regionId: string): MapData {
     shards: config.shardTiles.map(([x, y]) => ({ x: px(x), y: px(y) })), enemySpawns,
     bossCenter: { x: px(50), y: px(36) }, exits: config.exits,
     campfires: [{ x: px(50), y: px(36), name: `${config.name} Wayfire`, relic: config.relic }],
+    dark: false,
+    resetOnDeath: false,
+    lights: [],
+  };
+}
+
+const FORTRESS_LAYOUTS: Record<string, { name: string; rows: string[]; returnTo: { region: string; destination: Vec } }> = {
+  "fortress.cinderwild-shrine": {
+    name: "The Broken Shrine",
+    rows: BROKEN_SHRINE,
+    returnTo: { region: "cinderwild", destination: { x: px(72), y: px(21) } },
+  },
+};
+
+function generateFortressMap(regionId: string): MapData {
+  const config = FORTRESS_LAYOUTS[regionId];
+  if (!config) throw new Error(`Unknown fortress: ${regionId}`);
+  const layout = parseFortressLayout(config.rows);
+  const enemySpawns: EnemySpawn[] = layout.enemies.map(({ x, y }) => ({ x, y, type: "wraith" as const }));
+  if (layout.warden) enemySpawns.push({ x: layout.warden.x, y: layout.warden.y, type: "sentinel", elite: true });
+
+  return {
+    regionName: config.name,
+    width: layout.width,
+    height: layout.height,
+    tiles: layout.tiles,
+    wardTiles: [],
+    spawn: { x: px(layout.door.x), y: px(layout.door.y + 1) },
+    npc: { x: -9999, y: -9999 },
+    signs: [],
+    shards: [{ x: px(layout.shard.x), y: px(layout.shard.y) }],
+    enemySpawns,
+    bossCenter: { x: px(layout.shard.x), y: px(layout.shard.y) },
+    exits: [{
+      x: layout.door.x,
+      y: layout.door.y,
+      targetRegion: config.returnTo.region,
+      destination: config.returnTo.destination,
+      label: "the Cinderwild",
+    }],
+    campfires: [],
+    dark: true,
+    resetOnDeath: true,
+    lights: layout.braziers.map(({ x, y }) => ({ x: px(x), y: px(y) })),
   };
 }

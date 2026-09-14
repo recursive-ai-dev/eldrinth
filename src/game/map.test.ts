@@ -7,8 +7,11 @@ describe("the landmark-led journey", () => {
     const cinderwild = generateMap("cinderwild");
     const coast = generateMap("moonlit-coast");
     const moors = generateMap("starfall-moors");
+    const brokenShrine = generateMap("fortress.cinderwild-shrine");
 
-    expect([overworld, cinderwild, coast, moors].reduce((total, map) => total + map.shards.length, 0)).toBe(9);
+    // One of the Cinderwild's two shards now sits inside the Broken Shrine fortress
+    // rather than loose on the frontier map, so it's counted via that region instead.
+    expect([overworld, cinderwild, coast, moors, brokenShrine].reduce((total, map) => total + map.shards.length, 0)).toBe(9);
     expect(overworld.enemySpawns).toHaveLength(13);
     expect([cinderwild, coast, moors].every((map) => map.enemySpawns.length === 7)).toBe(true);
     expect(overworld.exits.map((exit) => exit.targetRegion).sort()).toEqual(["cinderwild", "moonlit-coast"]);
