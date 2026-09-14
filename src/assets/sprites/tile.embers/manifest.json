@@ -1,0 +1,16 @@
+{
+  "autotile": false,
+  "cellH": 32,
+  "cellW": 32,
+  "frames": 4,
+  "kind": "tile",
+  "masks": 1,
+  "pixelHashes": [
+    "921576a831f0f968153f00615903f665",
+    "596e47fe5153f59cfb0411d7c7264328",
+    "3e81ca1c8f149aaa32a546f81aa21420",
+    "5d5082f203a8c01f20e6ba66037e03be"
+  ],
+  "static": true,
+  "variants": 4
+}

@@ -58,6 +58,7 @@ CATALOG = {
     "tile.slope_up_left":  {"kind": "tile", "seed": "eldrinth-tile-slope-up-left",  "tile_kind": "dirt", "palette": "rusted_stone", "feature": "slope_left"},
     "tile.slope_up_right": {"kind": "tile", "seed": "eldrinth-tile-slope-up-right", "tile_kind": "dirt", "palette": "rusted_stone", "feature": "slope_right"},
     "tile.trigger":        {"kind": "tile", "seed": "eldrinth-tile-trigger",        "tile_kind": "cobble", "palette": "grim_steel", "feature": "sigil"},
+    "tile.embers":         {"kind": "tile", "seed": "eldrinth-tile-embers",         "tile_kind": "dirt",  "palette": "cult_blood", "feature": "crystal"},
 }
 
 TILE_KEY_BY_T_NAME = {
@@ -68,7 +69,7 @@ TILE_KEY_BY_T_NAME = {
     "BONES": "tile.bones", "TALLGRASS": "tile.tallgrass",
     "SPIREFLOOR": "tile.spirefloor", "SAND": "tile.sand", "LEDGE": "tile.ledge",
     "SLOPE_UP_LEFT": "tile.slope_up_left", "SLOPE_UP_RIGHT": "tile.slope_up_right",
-    "TRIGGER": "tile.trigger",
+    "TRIGGER": "tile.trigger", "EMBERS": "tile.embers",
 }
 
 ENEMY_KEY_BY_TYPE = {
