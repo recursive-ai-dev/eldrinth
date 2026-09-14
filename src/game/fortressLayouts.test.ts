@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { parseFortressLayout, shardIsReachable, unreachableSpawns } from "./fortress";
-import { BROKEN_SHRINE } from "./fortressLayouts";
+import { FORTRESS_LAYOUTS } from "./fortressLayouts";
 
 describe("shipped fortress layouts", () => {
-  const layouts = { BROKEN_SHRINE };
+  const layouts = FORTRESS_LAYOUTS;
+
+  it("ships nine distinct shard interiors", () => {
+    expect(Object.keys(layouts)).toHaveLength(9);
+    expect(new Set(Object.values(layouts).map((rows) => rows.join("\\n"))).size).toBe(9);
+  });
 
   for (const [name, rows] of Object.entries(layouts)) {
     it(`${name} parses and is at least 25x19`, () => {

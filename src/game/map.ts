@@ -1,7 +1,7 @@
 import { MAP_W, MAP_H, TILE, T } from "./constants";
 import type { MapData, Vec, EnemySpawn, SignData, RegionExit, CampfireData } from "./types";
 import { parseFortressLayout } from "./fortress";
-import { BROKEN_SHRINE } from "./fortressLayouts";
+import { FORTRESS_LAYOUTS } from "./fortressLayouts";
 
 function mulberry32(seed: number) {
   let a = seed >>> 0;
@@ -16,6 +16,26 @@ function mulberry32(seed: number) {
 const idx = (x: number, y: number) => y * MAP_W + x;
 const inB = (x: number, y: number) => x >= 0 && y >= 0 && x < MAP_W && y < MAP_H;
 const px = (t: number) => t * TILE + TILE / 2;
+
+type FortressId = keyof typeof FORTRESS_LAYOUTS;
+
+const FORTRESS_REGIONS = {
+  "fortress.cinderwild-shrine": { name: "The Broken Shrine", returnTo: { region: "cinderwild", destination: { x: px(72), y: px(21) }, label: "the Cinderwild" } },
+  "fortress.old-lands-archive": { name: "The Weeping Archive", returnTo: { region: "overworld", destination: { x: px(18), y: px(13) }, label: "the Old Lands" } },
+  "fortress.old-lands-reliquary": { name: "The Glass Reliquary", returnTo: { region: "overworld", destination: { x: px(50), y: px(10) }, label: "the Old Lands" } },
+  "fortress.old-lands-vault": { name: "Ilyarael's Sealed Vault", returnTo: { region: "overworld", destination: { x: px(40), y: px(35) }, label: "the Old Lands" } },
+  "fortress.cinderwild-watchpost": { name: "The Ruined Watchpost", returnTo: { region: "cinderwild", destination: { x: px(84), y: px(54) }, label: "the Cinderwild" } },
+  "fortress.moonlit-salt-graves": { name: "The Salt Graves", returnTo: { region: "moonlit-coast", destination: { x: px(24), y: px(49) }, label: "the Moonlit Coast" } },
+  "fortress.moonlit-beacon": { name: "The Keeper's Beacon", returnTo: { region: "moonlit-coast", destination: { x: px(78), y: px(19) }, label: "the Moonlit Coast" } },
+  "fortress.starfall-observatory": { name: "The Fallen Observatory", returnTo: { region: "starfall-moors", destination: { x: px(47), y: px(36) }, label: "the Starfall Moors" } },
+  "fortress.starfall-watch": { name: "The Astronomer's Watch", returnTo: { region: "starfall-moors", destination: { x: px(78), y: px(43) }, label: "the Starfall Moors" } },
+} satisfies Record<FortressId, { name: string; returnTo: { region: string; destination: Vec; label: string } }>;
+
+/** A frontier gate always arrives one tile inside the destination door. */
+function fortressExit(x: number, y: number, targetRegion: FortressId, label: string): RegionExit {
+  const { door } = parseFortressLayout(FORTRESS_LAYOUTS[targetRegion]);
+  return { x, y, targetRegion, destination: { x: px(door.x), y: px(door.y + 1) }, label };
+}
 
 // Smooth value-noise for organic patches of terrain.
 function smoothNoise(rng: () => number, scale: number): Float32Array {
@@ -236,6 +256,13 @@ export function generateMap(regionId = "overworld"): MapData {
       if (tiles[idx(x, y)] === T.TREE || tiles[idx(x, y)] === T.ROCK) tiles[idx(x, y)] = T.GRASS;
 
   // ----- Entities / points of interest -----
+  const exits: RegionExit[] = [
+    { x: 96, y: 56, targetRegion: "cinderwild", destination: { x: px(7), y: px(38) }, label: "Cinderwild" },
+    { x: 62, y: 69, targetRegion: "moonlit-coast", destination: { x: px(50), y: px(7) }, label: "Moonlit Coast" },
+    fortressExit(18, 12, "fortress.old-lands-archive", "The Weeping Archive"),
+    fortressExit(50, 9, "fortress.old-lands-reliquary", "The Glass Reliquary"),
+    fortressExit(40, 34, "fortress.old-lands-vault", "Ilyarael's Sealed Vault"),
+  ];
   const signs: SignData[] = [
     {
       x: 13,
@@ -247,7 +274,7 @@ export function generateMap(regionId = "overworld"): MapData {
       x: 33,
       y: 35,
       title: "Inscription at Ilyarael",
-      text: "Here stood Ilyarael. Orithel keeps the hall through this northern doorway. A scout left three sightings before she stopped reporting: north along the western forest track; north of the mountain pass beyond the lake; and east of this approach, beneath an adept's watch.",
+      text: "Here stood Ilyarael. Orithel keeps the hall through this northern doorway. A scout marked three sealed doors before she stopped reporting: north along the western forest track; north of the mountain pass beyond the lake; and east of this approach, below the hall's broken seal.",
     },
     { x: 35, y: 41, title: "The Courier's Orders", fact: "courier-orders", text: "Deliver the vessel to the collector at the broken shrine northeast of the Cinderwild's central circle. Do not open it. Do not listen to it. Beneath the seal, in a hand that tore the paper: ‘It has a child's voice. I have read this four times looking for the part where this is something other than what it fucking is. It isn't there. It was never going to be there.’" },
     { x: 44, y: 13, title: "The Spire Warning", text: "Beyond the black ridge stands a glass tower. The old moon-road crosses the lake and keeps east. Those who followed it came back describing a sleeping thing. The ones who stayed and listened longer came back describing a crowd." },
@@ -256,14 +283,15 @@ export function generateMap(regionId = "overworld"): MapData {
     { x: 78, y: 55, title: "Moonfall Crossing", text: "East into the Cinderwild. North back toward the Spire. Nine fragments answer the ward: three in the Old Lands, two in each frontier — Cinderwild, Moonlit Coast, Starfall Moors. Nine is not a natural number for a ward. Somebody asked for nine." },
     { x: 76, y: 22, title: "Offering Ledger", text: "Before entering Moonfall Reach, travellers left offerings at the fork north of the ash road. The last party took the eastern path. The ledger records their offering and their names, and then a second entry striking the names out, in a different hand, dated the same day." },
     { x: 79, y: 14, title: "The Last Ward", text: "Nine Anima Shards shall quiet the dreamer. No fewer. The ward does not point the way. It only remembers what was taken, which is the one thing everybody involved would rather it did not do." },
+    { x: 18, y: 12, title: "The Weeping Archive", text: "The forest track ends at a door of black timber. The records inside have been sealed against weather, fire, and the people they were written about." },
+    { x: 50, y: 9, title: "The Glass Reliquary", text: "The first Spire is empty above ground. Its lower door reflects you badly, as if someone else has been asked to stand where you are." },
+    { x: 40, y: 34, title: "Ilyarael's Sealed Vault", text: "The hall has another door below its east approach. The old elven seal is broken from the inside." },
     { x: 96, y: 56, title: "East Road Marker", text: "The Cinderwild lies east: ash storms, broken shrines, no easy return. A tall stone circle at its heart, if the scouts were being honest." },
     { x: 62, y: 69, title: "South Road Marker", text: "Moonlit Coast lies south. Follow the salt wind to lands the old maps forgot, or were made to forget. A pale beacon burns where its roads meet." },
   ];
-  const shards: Vec[] = [
-    { x: px(18), y: px(12) },
-    { x: px(50), y: px(9) },
-    { x: px(40), y: px(34) },
-  ];
+  // Shards are deliberately absent from the overworld. Each landmark is a
+  // commitment point into the interior that contains its own shard.
+  const shards: Vec[] = [];
   const enemySpawns: EnemySpawn[] = [
     { x: 16, y: 18, type: "wraith" },
     { x: 22, y: 7, type: "wraith" },
@@ -279,7 +307,6 @@ export function generateMap(regionId = "overworld"): MapData {
     // Moonfall Reach has room to approach the final road deliberately.
     { x: 76, y: 19, type: "wraith" },
     { x: 93, y: 18, type: "adept" },
-    { x: 40, y: 34, type: "adept", elite: true },
   ];
 
   return {
@@ -294,10 +321,7 @@ export function generateMap(regionId = "overworld"): MapData {
     shards,
     enemySpawns,
     bossCenter: { x: px(trueSpireX), y: px(trueSpireY) },
-    exits: [
-      { x: 96, y: 56, targetRegion: "cinderwild", destination: { x: px(7), y: px(38) }, label: "Cinderwild" },
-      { x: 62, y: 69, targetRegion: "moonlit-coast", destination: { x: px(50), y: px(7) }, label: "Moonlit Coast" },
-    ],
+    exits,
     campfires: [{ x: px(33), y: px(31), name: "Ilyarael's Last Ember", relic: "emberheart" }],
     dark: false,
     resetOnDeath: false,
@@ -307,28 +331,33 @@ export function generateMap(regionId = "overworld"): MapData {
 
 /** Three large, seeded frontiers make the journey a world rather than one field. */
 function generateFrontierMap(regionId: string): MapData {
-  const configs: Record<string, { name: string; seed: number; water: boolean; exits: RegionExit[]; shardTiles: [number, number][]; relic: CampfireData["relic"] }> = {
+  const configs: Record<string, { name: string; seed: number; water: boolean; exits: RegionExit[]; siteTiles: [number, number][]; relic: CampfireData["relic"] }> = {
     "cinderwild": {
       name: "The Cinderwild", seed: 0xc1d3a, water: false,
       exits: [
         { x: 3, y: 38, targetRegion: "overworld", destination: { x: px(94), y: px(56) }, label: "The Old Lands" },
         { x: 88, y: 66, targetRegion: "starfall-moors", destination: { x: px(12), y: px(8) }, label: "Starfall Moors" },
-        { x: 72, y: 20, targetRegion: "fortress.cinderwild-shrine", destination: { x: px(9), y: px(1) }, label: "The Broken Shrine" },
-      ], shardTiles: [[84, 53]], relic: "ashstep",
+        fortressExit(72, 20, "fortress.cinderwild-shrine", "The Broken Shrine"),
+        fortressExit(84, 53, "fortress.cinderwild-watchpost", "The Ruined Watchpost"),
+      ], siteTiles: [[72, 20], [84, 53]], relic: "ashstep",
     },
     "moonlit-coast": {
       name: "Moonlit Coast", seed: 0xbadc0de, water: true,
       exits: [
         { x: 50, y: 3, targetRegion: "overworld", destination: { x: px(62), y: px(67) }, label: "The Old Lands" },
         { x: 91, y: 50, targetRegion: "starfall-moors", destination: { x: px(12), y: px(58) }, label: "Starfall Moors" },
-      ], shardTiles: [[24, 48], [78, 18]], relic: "tidewell",
+        fortressExit(24, 48, "fortress.moonlit-salt-graves", "The Salt Graves"),
+        fortressExit(78, 18, "fortress.moonlit-beacon", "The Keeper's Beacon"),
+      ], siteTiles: [[24, 48], [78, 18]], relic: "tidewell",
     },
     "starfall-moors": {
       name: "The Starfall Moors", seed: 0x57a2fa11, water: false,
       exits: [
         { x: 8, y: 8, targetRegion: "cinderwild", destination: { x: px(86), y: px(64) }, label: "The Cinderwild" },
         { x: 8, y: 58, targetRegion: "moonlit-coast", destination: { x: px(89), y: px(50) }, label: "Moonlit Coast" },
-      ], shardTiles: [[47, 35], [78, 42]], relic: "starblade",
+        fortressExit(47, 35, "fortress.starfall-observatory", "The Fallen Observatory"),
+        fortressExit(78, 42, "fortress.starfall-watch", "The Astronomer's Watch"),
+      ], siteTiles: [[47, 35], [78, 42]], relic: "starblade",
     },
   };
   const config = configs[regionId];
@@ -354,7 +383,7 @@ function generateFrontierMap(regionId: string): MapData {
   };
   const hub: [number, number] = [50, 36];
   for (const exit of config.exits) line(exit.x, exit.y, hub[0], hub[1]);
-  for (const [x, y] of config.shardTiles) line(hub[0], hub[1], x, y);
+  for (const [x, y] of config.siteTiles) line(hub[0], hub[1], x, y);
   // Landmark circle gives each map a discoverable centre and a combat clearing.
   for (let y = 27; y <= 45; y++) for (let x = 40; x <= 60; x++) {
     const d = Math.hypot(x - hub[0], y - hub[1]);
@@ -384,8 +413,8 @@ function generateFrontierMap(regionId: string): MapData {
     ],
   };
   signs.push(...records[regionId]);
-  // Authored, walkable landmark clearings preserve the roads to every clue.
-  for (const [x, y] of config.shardTiles) {
+  // Authored, walkable gateway clearings preserve the roads to every interior.
+  for (const [x, y] of config.siteTiles) {
     for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) tiles[idx(x + dx, y + dy)] = config.water ? T.SAND : T.RFLOOR;
     tiles[idx(x - 3, y - 3)] = config.water ? T.GRAVE : T.RWALL;
     tiles[idx(x + 3, y - 3)] = config.water ? T.GRAVE : T.RWALL;
@@ -398,17 +427,15 @@ function generateFrontierMap(regionId: string): MapData {
     const x = 8 + Math.floor(rng() * 84), y = 7 + Math.floor(rng() * 58);
     if (!openGround(tiles[idx(x, y)])) continue;
     if (Math.hypot(x - hub[0], y - hub[1]) < 12) continue;
-    if (config.shardTiles.some(([sx, sy]) => Math.hypot(x - sx, y - sy) < 7)) continue;
+    if (config.siteTiles.some(([sx, sy]) => Math.hypot(x - sx, y - sy) < 7)) continue;
     if (enemySpawns.some((spawn) => Math.hypot(x - spawn.x, y - spawn.y) < 16)) continue;
     const i = enemySpawns.length;
     enemySpawns.push({ x, y, type: i % 5 === 0 ? "adept" : i % 3 === 0 ? "sentinel" : "wraith" });
   }
-  const [eliteX, eliteY] = config.shardTiles[config.shardTiles.length - 1];
-  enemySpawns.push({ x: eliteX + 2, y: eliteY + 2, type: regionId === "cinderwild" ? "sentinel" : "adept", elite: true });
   return {
     regionName: config.name, width: MAP_W, height: MAP_H, tiles, wardTiles: [],
     spawn: { x: px(50), y: px(36) }, npc: { x: -9999, y: -9999 }, signs,
-    shards: config.shardTiles.map(([x, y]) => ({ x: px(x), y: px(y) })), enemySpawns,
+    shards: [], enemySpawns,
     bossCenter: { x: px(50), y: px(36) }, exits: config.exits,
     campfires: [{ x: px(50), y: px(36), name: `${config.name} Wayfire`, relic: config.relic }],
     dark: false,
@@ -417,18 +444,12 @@ function generateFrontierMap(regionId: string): MapData {
   };
 }
 
-const FORTRESS_LAYOUTS: Record<string, { name: string; rows: string[]; returnTo: { region: string; destination: Vec } }> = {
-  "fortress.cinderwild-shrine": {
-    name: "The Broken Shrine",
-    rows: BROKEN_SHRINE,
-    returnTo: { region: "cinderwild", destination: { x: px(72), y: px(21) } },
-  },
-};
-
 function generateFortressMap(regionId: string): MapData {
-  const config = FORTRESS_LAYOUTS[regionId];
-  if (!config) throw new Error(`Unknown fortress: ${regionId}`);
-  const layout = parseFortressLayout(config.rows);
+  const fortressId = regionId as FortressId;
+  const config = FORTRESS_REGIONS[fortressId];
+  const rows = FORTRESS_LAYOUTS[fortressId];
+  if (!config || !rows) throw new Error(`Unknown fortress: ${regionId}`);
+  const layout = parseFortressLayout(rows);
   const enemySpawns: EnemySpawn[] = layout.enemies.map(({ x, y }) => ({ x, y, type: "wraith" as const }));
   if (layout.warden) enemySpawns.push({ x: layout.warden.x, y: layout.warden.y, type: "sentinel", elite: true });
 
@@ -449,7 +470,7 @@ function generateFortressMap(regionId: string): MapData {
       y: layout.door.y,
       targetRegion: config.returnTo.region,
       destination: config.returnTo.destination,
-      label: "the Cinderwild",
+      label: config.returnTo.label,
     }],
     campfires: [],
     dark: true,
