@@ -27,6 +27,7 @@ export const T = {
   SLOPE_UP_LEFT: 17,
   SLOPE_UP_RIGHT: 18,
   TRIGGER: 19,
+  EMBERS: 20,
 } as const;
 
 export type TileType = (typeof T)[keyof typeof T];
