@@ -155,6 +155,8 @@ export class Game {
   private regionAbort = new AbortController();
   /** Dynamic inhabitants are retained per region, while static terrain stays cached by RegionRepository. */
   private changingRegion = false;
+  /** Set when the player dies somewhere whose half-cleared state must not persist. */
+  private discardCurrentRegion = false;
   private regionGateCooldown = 0;
   journalOpen = false;
   private initPromise: Promise<void> | null = null;
@@ -354,6 +356,11 @@ export class Game {
   }
 
   private rememberRegion() {
+    if (this.discardCurrentRegion) {
+      delete this.world.regions[this.world.regionId];
+      this.discardCurrentRegion = false;
+      return;
+    }
     this.world.regions[this.world.regionId] = { enemies: this.enemies, items: this.items, bossId: this.boss?.id ?? null, bossSpawned: this.bossSpawned };
   }
 
@@ -367,6 +374,7 @@ export class Game {
       this.rememberRegion();
       this.regions.release(previousId);
       this.world.regionId = region.id;
+      this.cb.onInterior(region.id.startsWith("fortress."));
       this.map = region.map;
       this.mapPxW = this.map.width * TILE;
       this.mapPxH = this.map.height * TILE;
@@ -711,7 +719,10 @@ export class Game {
     if (p.dying > 0) {
       p.dying -= dt;
       if (p.dying <= 0 && !this.ended) {
-        if (this.world.checkpoint) this.respawnAtCheckpoint();
+        if (this.world.checkpoint) {
+          if (this.map.resetOnDeath) this.discardCurrentRegion = true;
+          this.respawnAtCheckpoint();
+        }
         else this.endRun("spent");
       }
       return;
@@ -1261,6 +1272,7 @@ export class Game {
       p.y = point.y;
       this.centerCam();
       this.msg(`The wayfire draws you back: ${point.name}.`);
+      this.discardCurrentRegion = false;
       return;
     }
     void this.changeRegion({ x: 0, y: 0, targetRegion: point.regionId, destination: { x: point.x, y: point.y }, label: point.name });

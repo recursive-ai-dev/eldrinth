@@ -25,7 +25,7 @@ export default function App() {
   const journal = useGameStore(selectJournal);
   const sessionId = useGameStore(selectSessionId);
   const ending = useGameStore(selectEnding);
-  const { startGame, endGame, setPaused, setHud, setDialogue, setJournal } = useGameStore();
+  const { startGame, endGame, setPaused, setHud, setDialogue, setJournal, setInterior } = useGameStore();
   const [journalOpen, setJournalOpen] = useState(false);
   const [checkpoint, setCheckpoint] = useState<WorldSnapshot | null>(null);
   const [slots, setSlots] = useState<SaveSlot[]>([]);
@@ -105,9 +105,10 @@ export default function App() {
     onPause: (paused) => setPaused(paused),
     onEnd: (result) => { setCheckpoint(null); endGame(result); },
     onJournal: (entries) => setJournal(entries),
+    onInterior: (inside) => setInterior(inside),
   };
 
-  const showGame = screen === "overworld" || screen === "pause";
+  const showGame = screen === "overworld" || screen === "interior" || screen === "pause";
 
   return (
     <div className="no-select relative h-screen w-screen overflow-hidden bg-black font-serif text-amber-50">
