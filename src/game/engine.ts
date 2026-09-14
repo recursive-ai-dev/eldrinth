@@ -22,7 +22,7 @@ import {
 } from "./core/WorldState";
 import type { EndingId } from "./core/SceneStack";
 import { createRegionRepository, type RegionRepository } from "./regions";
-import { applyHarvestCost, shardBleedEntry, shardCostSuffix, shardPickupMessage, wardDialogue } from "./escalation";
+import { applyHarvestCost, shardBleedEntry, shardPickupMessage, wardDialogue, wardUnlockMessage } from "./escalation";
 import { QUESTS, learnFact, canResolve, questKnown, questJournal, resolveQuest } from "./quests";
 import { AISystem } from "./systems/AISystem";
 import { CombatSystem } from "./systems/CombatSystem";
@@ -882,7 +882,7 @@ export class Game {
           if (this.shards >= this.totalShards) {
             this.wardUnlocked = true;
             this.syncMovementSystem();
-            this.msg(`The ward gives. Nine. It was always going to be nine, and now I know who picked the number.${shardCostSuffix(this.shards)}`);
+            this.msg(wardUnlockMessage(this.shards));
             this.burst(it.x, it.y, "#46f0d8", 30);
             this.ring(this.map.bossCenter.x, this.map.bossCenter.y, "#46f0d8");
           } else {
