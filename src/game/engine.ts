@@ -23,6 +23,7 @@ import {
 import type { EndingId } from "./core/SceneStack";
 import { createRegionRepository, type RegionRepository } from "./regions";
 import { applyHarvestCost, shardBleedEntry, shardPickupMessage, wardDialogue, wardUnlockMessage } from "./escalation";
+import { hazardDamageAt } from "./hazard";
 import { QUESTS, learnFact, canResolve, questKnown, questJournal, resolveQuest } from "./quests";
 import { AISystem } from "./systems/AISystem";
 import { CombatSystem } from "./systems/CombatSystem";
@@ -774,6 +775,18 @@ export class Game {
       if (p.attackTimer <= 0) {
         p.attacking = false;
         p.swingHit.clear();
+      }
+    }
+
+    const standingOn = this.movement.tileAtPx(p.x, p.y);
+    if (standingOn >= 0) {
+      const harm = hazardDamageAt(this.map.tiles[standingOn], p.invuln);
+      if (harm > 0) {
+        p.hp -= harm;
+        p.invuln = DIFFICULTY_TUNING[this.world.difficulty].hitInvulnerability;
+        p.hurtFlash = 0.35;
+        this.addText(p.x, p.y, `-${harm}`, "#ff8a5c", 13);
+        if (p.hp <= 0) p.dying = PLAYER_INVULN_HIT;
       }
     }
 
