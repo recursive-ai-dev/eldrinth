@@ -66,6 +66,12 @@ export interface MapData {
   bossCenter: Vec;
   exits: RegionExit[];
   campfires: CampfireData[];
+  /** Interiors render under a darkness overlay punched by light sources. */
+  dark: boolean;
+  /** Dying here discards the region's retained inhabitants. */
+  resetOnDeath: boolean;
+  /** Light sources that are not rest points. Pixel coordinates. */
+  lights: Vec[];
 }
 
 export interface HudData {
