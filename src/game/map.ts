@@ -61,6 +61,42 @@ const TOWN_LAYOUTS: Record<string, string[]> = {
     "#..................#",
     "####################",
   ],
+  "cinder-haven": [
+    "####################",
+    "#..................#",
+    "#..HH...N.....HH...#",
+    "#..HH.........HH...#",
+    "#..................#",
+    "D.......##.........#",
+    "#.......##....N....#",
+    "#..................#",
+    "#..................#",
+    "####################",
+  ],
+  "oarsmans-bight": [
+    "####################",
+    "#..................#",
+    "#..HH.........HH...#",
+    "#..HH...N.....HH...#",
+    "#..................#",
+    "D.......##.........#",
+    "#.......##....N....#",
+    "#..................#",
+    "#..................#",
+    "####################",
+  ],
+  "crater-watch": [
+    "####################",
+    "#..................#",
+    "#..HH...N.....HH...#",
+    "#..HH.........HH...#",
+    "#..................#",
+    "D.......##.........#",
+    "#.......##....N....#",
+    "#..................#",
+    "#..................#",
+    "####################",
+  ],
 };
 
 interface ParsedTown {
@@ -662,6 +698,13 @@ function generateFrontierMap(regionId: string): MapData {
       siteTiles: [number, number, FortressTheme][];
       relic: CampfireData["relic"];
       intermediateWaypoints: [number, number, number, number][];
+      townConfig?: {
+        id: string;
+        x: number;
+        y: number;
+        npcs: { id: string; name: string; color: string; role: TownData["npcs"][number]["role"] }[];
+        spurRoad: [number, number, number, number][];
+      };
     }
   > = {
     cinderwild: {
@@ -688,6 +731,19 @@ function generateFrontierMap(regionId: string): MapData {
         [114, 68, 142, 78],
         [114, 68, 154, 104],
       ],
+      townConfig: {
+        id: "cinder-haven",
+        x: 50,
+        y: 70,
+        npcs: [
+          { id: "town:cinderwild:kilnmaster", name: "Kiln-Master Vance", color: "#ff8c52", role: "lore" },
+          { id: "town:cinderwild:healer", name: "Cinder-Nurse Greta", color: "#f0a882", role: "healer" },
+        ],
+        spurRoad: [
+          [80, 56, 50, 56],
+          [50, 56, 50, 75],
+        ],
+      },
     },
     "moonlit-coast": {
       name: "Moonlit Coast",
@@ -713,6 +769,19 @@ function generateFrontierMap(regionId: string): MapData {
         [80, 56, 118, 66],
         [118, 66, 154, 76],
       ],
+      townConfig: {
+        id: "oarsmans-bight",
+        x: 86,
+        y: 72,
+        npcs: [
+          { id: "town:moonlit:dredger", name: "Mistress Morveth", color: "#7ec4cf", role: "lore" },
+          { id: "town:moonlit:healer", name: "Sister Lyra", color: "#9fe6d9", role: "healer" },
+        ],
+        spurRoad: [
+          [80, 56, 86, 56],
+          [86, 56, 86, 77],
+        ],
+      },
     },
     "starfall-moors": {
       name: "The Starfall Moors",
@@ -739,6 +808,19 @@ function generateFrontierMap(regionId: string): MapData {
         [80, 56, 112, 58],
         [112, 58, 142, 62],
       ],
+      townConfig: {
+        id: "crater-watch",
+        x: 74,
+        y: 72,
+        npcs: [
+          { id: "town:starfall:stargazer", name: "Reeve Toran", color: "#d6b4fc", role: "lore" },
+          { id: "town:starfall:healer", name: "Hermit Cassian", color: "#b39ddb", role: "healer" },
+        ],
+        spurRoad: [
+          [80, 56, 74, 56],
+          [74, 56, 74, 77],
+        ],
+      },
     },
   };
 
@@ -935,6 +1017,22 @@ function generateFrontierMap(regionId: string): MapData {
   };
   signs.push(...records[regionId]);
 
+  const towns: TownData[] = [];
+  if (config.townConfig) {
+    for (const [x0, y0, x1, y1] of config.townConfig.spurRoad) {
+      line(x0, y0, x1, y1);
+    }
+    const town = stampTown(
+      tiles,
+      config.townConfig.id,
+      config.townConfig.x,
+      config.townConfig.y,
+      config.townConfig.npcs,
+    );
+    towns.push(town);
+    if (town.sign) signs.push(town.sign);
+  }
+
   // Exactly 10 enemies: 2 fortress approach sentinels + 8 wilderness patrols
   const enemySpawns: EnemySpawn[] = [
     { x: config.siteTiles[0][0] - 2, y: config.siteTiles[0][1] + 4, type: "sentinel" },
@@ -950,6 +1048,7 @@ function generateFrontierMap(regionId: string): MapData {
     if (!openGround(tiles[idx(x, y)])) continue;
     if (Math.hypot(x - hub[0], y - hub[1]) < 16) continue;
     if (config.siteTiles.some(([sx, sy]) => Math.hypot(x - sx, y - sy) < 10)) continue;
+    if (towns.some((t) => Math.hypot(x * TILE + TILE / 2 - t.x, y * TILE + TILE / 2 - t.y) < t.safeRadius + 32)) continue;
     if (enemySpawns.some((spawn) => Math.hypot(x - spawn.x, y - spawn.y) < 18)) continue;
     const i = enemySpawns.length;
     enemySpawns.push({ x, y, type: i % 4 === 0 ? "adept" : i % 3 === 0 ? "sentinel" : "wraith" });
@@ -972,7 +1071,7 @@ function generateFrontierMap(regionId: string): MapData {
     dark: false,
     resetOnDeath: false,
     lights: [],
-    towns: [],
+    towns,
   };
 }
 

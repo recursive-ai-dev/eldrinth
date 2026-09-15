@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyHarvestCost, cumulativeHarvestCost, fortressWardenEntry, shardBleedEntry, shardCostSuffix, shardHarvestCost, shardPickupMessage, wardenFact, WARD_LINES, wardDialogue, wardUnlockMessage } from "./escalation";
+import { applyHarvestCost, cumulativeHarvestCost, fortressShardIntakeEntry, fortressWardenEntry, shardBleedEntry, shardCostSuffix, shardHarvestCost, shardPickupMessage, wardenFact, WARD_LINES, wardDialogue, wardUnlockMessage } from "./escalation";
 import { FORTRESS_LAYOUTS } from "./fortressLayouts";
 
 describe("shard escalation", () => {
@@ -143,4 +143,21 @@ describe("fortress warden", () => {
     expect(wardenFact("fortress.starfall-watch")).toBe("warden:starfall-moors");
     expect(wardenFact("fortress.cinderwild-watchpost")).toBe("warden:fortress.cinderwild-watchpost");
   });
+
+  it("records an intake docket for every fortress shard", () => {
+    for (const regionId of Object.keys(FORTRESS_LAYOUTS)) {
+      const entry = fortressShardIntakeEntry(regionId);
+      expect(entry).not.toBeNull();
+      expect(entry?.id.startsWith("intake:")).toBe(true);
+      expect(entry?.title).toContain("Intake Docket");
+      expect(entry?.source).toBe("Intake Core Recovery");
+      expect(entry?.text.length).toBeGreaterThan(80);
+    }
+  });
+
+  it("returns null intake docket for non-fortress regions", () => {
+    expect(fortressShardIntakeEntry("overworld")).toBeNull();
+    expect(fortressShardIntakeEntry("cinderwild")).toBeNull();
+  });
 });
+
