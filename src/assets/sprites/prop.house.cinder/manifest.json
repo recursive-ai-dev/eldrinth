@@ -1,0 +1,13 @@
+{
+  "autotile": false,
+  "cellH": 96,
+  "cellW": 96,
+  "frames": 1,
+  "kind": "settlement",
+  "masks": 1,
+  "pixelHashes": [
+    "b8789372a1bf9c0252f4ce6be493c612"
+  ],
+  "static": true,
+  "variants": 1
+}

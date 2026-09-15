@@ -12,7 +12,7 @@ import type {
   NpcPortrait,
 } from "./types";
 import { clamp, DIRV } from "./math";
-import { preloadGameSprites, renderGame, TileChunkRenderer } from "./render/renderer";
+import { CAMERA_ZOOM, preloadGameSprites, renderGame, TileChunkRenderer } from "./render/renderer";
 import { FixedStepLoop } from "./core/FixedStepLoop";
 import {
   WorldState,
@@ -698,8 +698,8 @@ export class Game {
       : p.x > centerX + deadzoneX ? p.x - deadzoneX - this.viewW / 2 : this.cam.x;
     const desiredY = p.y < centerY - deadzoneY ? p.y + deadzoneY - this.viewH / 2
       : p.y > centerY + deadzoneY ? p.y - deadzoneY - this.viewH / 2 : this.cam.y;
-    const tx = clamp(desiredX, 0, Math.max(0, this.mapPxW - this.viewW));
-    const ty = clamp(desiredY, 0, Math.max(0, this.mapPxH - this.viewH));
+    const tx = clamp(desiredX, this.cameraMinX(), this.cameraMaxX());
+    const ty = clamp(desiredY, this.cameraMinY(), this.cameraMaxY());
     const f = 1 - Math.exp(-8 * dt);
     this.cam.x += (tx - this.cam.x) * f;
     this.cam.y += (ty - this.cam.y) * f;
@@ -1612,17 +1612,31 @@ export class Game {
     this.dpr = Math.min(2, window.devicePixelRatio || 1);
     this.canvas.width = Math.floor(this.cssW * this.dpr);
     this.canvas.height = Math.floor(this.cssH * this.dpr);
-    this.viewW = this.cssW;
-    this.viewH = this.cssH;
+    // Camera math works in world pixels. Rendering those pixels at 1.2× means
+    // the visible world is 1 / 1.2 of the CSS canvas in each direction.
+    this.viewW = this.cssW / CAMERA_ZOOM;
+    this.viewH = this.cssH / CAMERA_ZOOM;
     if (this.initialized) {
-      this.cam.x = clamp(this.cam.x, 0, Math.max(0, this.mapPxW - this.viewW));
-      this.cam.y = clamp(this.cam.y, 0, Math.max(0, this.mapPxH - this.viewH));
+      this.clampCamera();
       this.tileRenderer.warm(this.cam, this.viewW, this.viewH);
     }
   }
+  /** Keep a smaller interior centred too, instead of pinning it to top-left. */
+  private clampCamera() {
+    this.cam.x = clamp(this.cam.x, this.cameraMinX(), this.cameraMaxX());
+    this.cam.y = clamp(this.cam.y, this.cameraMinY(), this.cameraMaxY());
+  }
+  // A half-viewport overscan keeps a player at a frontier spawn exactly
+  // centred, including in a small interior. The canvas background supplies a
+  // deliberate, unobtrusive margin beyond map edges when necessary.
+  private cameraMinX() { return -this.viewW / 2; }
+  private cameraMaxX() { return this.mapPxW - this.viewW / 2; }
+  private cameraMinY() { return -this.viewH / 2; }
+  private cameraMaxY() { return this.mapPxH - this.viewH / 2; }
   centerCam() {
-    this.cam.x = clamp(this.player.x - this.viewW / 2, 0, Math.max(0, this.mapPxW - this.viewW));
-    this.cam.y = clamp(this.player.y - this.viewH / 2, 0, Math.max(0, this.mapPxH - this.viewH));
+    this.cam.x = this.player.x - this.viewW / 2;
+    this.cam.y = this.player.y - this.viewH / 2;
+    this.clampCamera();
   }
 
   objectiveTarget(): { x: number; y: number; kind: "shard" | "boss" } | null {

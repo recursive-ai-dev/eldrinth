@@ -12,7 +12,7 @@ export interface ActionMeta {
 }
 
 export interface SpriteManifest {
-  kind: "human" | "creature" | "item" | "tile" | "prop";
+  kind: "human" | "creature" | "item" | "tile" | "prop" | "settlement";
   cellW: number;
   cellH: number;
   directions?: string[];

@@ -91,6 +91,13 @@ const TOWN_PLACEMENTS = {
   "crater-watch": { regionId: "starfall-moors", x: 74, y: 72 },
 } as const;
 
+const TOWN_THEMES: Record<string, TownBuildingData["theme"]> = {
+  "ilyarael-township": "oldstone",
+  "cinder-haven": "cinder",
+  "oarsmans-bight": "coastal",
+  "crater-watch": "moor",
+};
+
 /** Hand-authored settlement layouts. A, B, and C are enterable building doors. */
 const TOWN_LAYOUTS: Record<string, string[]> = {
   "ilyarael-township": [
@@ -188,7 +195,10 @@ function stampTown(
       const ty = worldY + y;
       if (!inB(tx, ty)) continue;
       const i = idx(tx, ty);
-      if (glyph === "#" || glyph === "H") tiles[i] = T.RWALL;
+      if (glyph === "#") tiles[i] = T.RWALL;
+      // A cottage prop supplies the facade. This solid footprint preserves the
+      // three-by-three house collision without drawing a repeated stone cube.
+      else if (glyph === "H") tiles[i] = T.HOUSE_WALL;
       else if (glyph === "." || glyph === "D" || glyph === "A" || glyph === "B" || glyph === "C") tiles[i] = T.RFLOOR;
     }
   }
@@ -212,6 +222,7 @@ function stampTown(
         name: townBuildingName(townId, index),
         x: worldX + door.x,
         y: worldY + door.y,
+        theme: TOWN_THEMES[townId],
         interiorId: `interior.${townId}.${suffix}`,
         resident,
       };
@@ -334,7 +345,7 @@ function parseTownInterior(id: string, rows: string[]): ParsedTownInterior {
     for (let x = 0; x < width; x++) {
       const glyph = row[x];
       if (!"#.DNL=~".includes(glyph)) throw new Error(`Unknown interior glyph "${glyph}" at ${x},${y} in ${id}`);
-      tiles[y * width + x] = glyph === "#" ? T.RWALL : glyph === "=" ? T.SPIREFLOOR : glyph === "~" ? T.SAND : glyph === "L" ? T.CRYSTAL : T.RFLOOR;
+      tiles[y * width + x] = glyph === "#" ? T.INTERIOR_WALL : glyph === "=" ? T.SPIREFLOOR : glyph === "~" ? T.SAND : glyph === "L" ? T.CRYSTAL : T.INTERIOR_FLOOR;
       if (glyph === "D") doors.push({ x, y });
       if (glyph === "N") npcs.push({ x, y });
       if (glyph === "L") lights.push({ x: px(x), y: px(y) });
@@ -395,7 +406,9 @@ function generateTownInteriorMap(regionId: string): MapData {
     }],
     campfires: [],
     towns: [],
-    dark: true,
+    // Houses are intentionally readable sanctuaries; their lamps still add
+    // warmth, but a darkness mask should not hide the room the player entered.
+    dark: false,
     resetOnDeath: false,
     lights: layout.lights,
   };

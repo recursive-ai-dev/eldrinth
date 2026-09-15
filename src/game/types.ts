@@ -100,6 +100,8 @@ export interface TownBuildingData {
   /** Door tile on the exterior map. */
   x: number;
   y: number;
+  /** The material family used by this building's exterior and room dressing. */
+  theme: "oldstone" | "cinder" | "coastal" | "moor";
   /** Region id for the building's interior. */
   interiorId: string;
   /** The resident found inside. */

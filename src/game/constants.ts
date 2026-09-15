@@ -27,6 +27,11 @@ export const T = {
   SLOPE_UP_RIGHT: 18,
   TRIGGER: 19,
   EMBERS: 20,
+  /** Invisible collision footprint rendered by a settlement cottage prop. */
+  HOUSE_WALL: 21,
+  /** Town-only material set; keeps domestic rooms distinct from fortress ruins. */
+  INTERIOR_FLOOR: 22,
+  INTERIOR_WALL: 23,
 } as const;
 
 export type TileType = (typeof T)[keyof typeof T];
@@ -73,6 +78,9 @@ export const TILE_DEFINITIONS: Readonly<Record<number, TileDefinition>> = {
   [T.SLOPE_UP_RIGHT]: { shape: "slopeUpRight" },
   [T.TRIGGER]: { shape: "trigger", trigger: "tile" },
   [T.EMBERS]: { shape: "none", harm: 1 },
+  [T.HOUSE_WALL]: BLOCKING,
+  [T.INTERIOR_FLOOR]: PASSABLE,
+  [T.INTERIOR_WALL]: BLOCKING,
 };
 
 export function tileDefinition(tile: number): TileDefinition {

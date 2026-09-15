@@ -37,6 +37,13 @@ CATALOG = {
         "kind": "prop", "seed": "eldrinth-prop-sign-01", "prop_type": "sign",
         "palette": "rusted_stone",
     },
+    # Town buildings are complete three-by-three-tile props. Their map tiles
+    # still provide collision and interaction points; this layer supplies the
+    # roofline, lit windows, and a door the player can actually read.
+    "prop.house.oldstone": {"kind": "settlement", "seed": "eldrinth-house-oldstone", "theme": "oldstone", "part": "cottage", "size": [96, 96]},
+    "prop.house.cinder":    {"kind": "settlement", "seed": "eldrinth-house-cinder",    "theme": "cinder",    "part": "cottage", "size": [96, 96]},
+    "prop.house.coastal":   {"kind": "settlement", "seed": "eldrinth-house-coastal",   "theme": "coastal",   "part": "cottage", "size": [96, 96]},
+    "prop.house.moor":      {"kind": "settlement", "seed": "eldrinth-house-moor",      "theme": "moor",      "part": "cottage", "size": [96, 96]},
 
     "tile.grass":          {"kind": "tile", "seed": "eldrinth-tile-grass",          "tile_kind": "grass", "palette": "sickly_green", "autotile": True},
     "tile.dgrass":         {"kind": "tile", "seed": "eldrinth-tile-dgrass",         "tile_kind": "moss",  "palette": "sickly_green", "feature": "darken"},
@@ -59,6 +66,8 @@ CATALOG = {
     "tile.slope_up_right": {"kind": "tile", "seed": "eldrinth-tile-slope-up-right", "tile_kind": "dirt", "palette": "rusted_stone", "feature": "slope_right"},
     "tile.trigger":        {"kind": "tile", "seed": "eldrinth-tile-trigger",        "tile_kind": "cobble", "palette": "grim_steel", "feature": "sigil"},
     "tile.embers":         {"kind": "tile", "seed": "eldrinth-tile-embers",         "tile_kind": "dirt",  "palette": "cult_blood", "feature": "crystal"},
+    "tile.interior_floor": {"kind": "settlement", "seed": "eldrinth-interior-floor", "theme": "oldstone", "part": "interior_floor"},
+    "tile.interior_wall":  {"kind": "settlement", "seed": "eldrinth-interior-wall",  "theme": "oldstone", "part": "interior_wall"},
 }
 
 TILE_KEY_BY_T_NAME = {
@@ -69,7 +78,8 @@ TILE_KEY_BY_T_NAME = {
     "BONES": "tile.bones", "TALLGRASS": "tile.tallgrass",
     "SPIREFLOOR": "tile.spirefloor", "SAND": "tile.sand", "LEDGE": "tile.ledge",
     "SLOPE_UP_LEFT": "tile.slope_up_left", "SLOPE_UP_RIGHT": "tile.slope_up_right",
-    "TRIGGER": "tile.trigger", "EMBERS": "tile.embers",
+    "TRIGGER": "tile.trigger", "EMBERS": "tile.embers", "HOUSE_WALL": "tile.rfloor",
+    "INTERIOR_FLOOR": "tile.interior_floor", "INTERIOR_WALL": "tile.interior_wall",
 }
 
 ENEMY_KEY_BY_TYPE = {

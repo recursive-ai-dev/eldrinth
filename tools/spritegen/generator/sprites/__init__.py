@@ -11,6 +11,7 @@ from .item import ItemSpriteGenerator
 from .tile import TileSpriteGenerator
 from .dungeon import DungeonSpriteGenerator
 from .prop import PropSpriteGenerator
+from .settlement import SettlementSpriteGenerator
 
 # Registration makes the CLI / web / registry lookups work.
 register(HumanSpriteGenerator)
@@ -19,6 +20,7 @@ register(ItemSpriteGenerator)
 register(TileSpriteGenerator)
 register(DungeonSpriteGenerator)
 register(PropSpriteGenerator)
+register(SettlementSpriteGenerator)
 
 __all__ = [
     "Sprite",
@@ -33,4 +35,5 @@ __all__ = [
     "TileSpriteGenerator",
     "DungeonSpriteGenerator",
     "PropSpriteGenerator",
+    "SettlementSpriteGenerator",
 ]
