@@ -52,6 +52,18 @@ export const QUESTS: QuestDefinition[] = [
       { id: "temper", label: "Temper the dawn into my blade. (+1 damage)", text: "Orithel folds him into the edge of my blade and remarks that the man would have appreciated the efficiency. He is probably right about that. It is not a defence. Blade damage +1.", reward: { stat: "blade", amount: 1 } },
     ],
   },
+  {
+    id: "pilgrim", title: "The Shape of the Pilgrim",
+    lead: "Barris has watched seven travellers arrive with my face, my scars, and no memory of the road behind them. He asks me to speak with Scribe Althea in Ilyarael, then carry her comparison to the mirrors of the Glass Reliquary north of the lake. He does not ask me to bring him an answer. He says answers are usually where people start lying.",
+    evidence: [
+      { fact: "pilgrim-ledger", title: "The courier cohort mark", text: "Althea lays the old courier rolls beside my wrist. The intake glyph beneath my skin is not a family crest or a sentence mark. It is a batch designation: COURIER PATTERN, RETURNABLE VESSEL. The line beneath it has been copied and crossed out so many times the parchment has gone soft as cloth." },
+      { fact: "pilgrim-reflection", title: "A face repeated in glass", text: "Theon saw the pattern the instant the reliquary opened. Every mirror had held a version of me at a different age, each wearing the same intake mark and each looking toward a door it could not remember entering. Whatever built the vessels did not preserve the Courier. It preserved a route through her." },
+    ],
+    choices: [
+      { id: "name", label: "Name the pattern. (+10 stamina)", text: "I tell Barris what the record says. He does not call me a copy. He calls me the person standing in front of him, then makes me repeat it until I believe him enough to breathe. Maximum stamina +10.", reward: { stat: "stamina", amount: 10 } },
+      { id: "weapon", label: "Use the pattern. (Dash cost −4)", text: "Barris shows me how to move like someone the old wards expect to see: shoulder low, steps measured, no hesitation at a threshold. It is useful. That does not make it mine. Dash stamina cost −4, to a minimum of 10.", reward: { stat: "dash", amount: 4 } },
+    ],
+  },
 ];
 
 export function learnFact(progress: QuestProgress, fact: string): boolean {

@@ -8,6 +8,8 @@ import type {
   GameCallbacks,
   DialogueData,
   RegionExit,
+  NpcData,
+  NpcPortrait,
 } from "./types";
 import { clamp, DIRV } from "./math";
 import { preloadGameSprites, renderGame, TileChunkRenderer } from "./render/renderer";
@@ -93,6 +95,18 @@ const DIFFICULTY_TUNING = {
 // Interaction distances
 const INTERACT_NPC_DISTANCE = 48;
 const INTERACT_SIGN_DISTANCE = 44;
+
+const ORITHEL_PORTRAIT: NpcPortrait = {
+  id: "orithel-the-last-watcher",
+  description: "A composed elder elf rendered in pale teal light, with a severe gold-and-ivory collar, long white hair floating as if underwater, and a fractured Spire halo behind him.",
+};
+
+const NPC_ROLE_LABEL: Record<NpcData["role"], string> = {
+  lore: "LOREKEEPER · TESTIMONY",
+  healer: "HEALER · SANCTUARY SERVICE",
+  scout: "SCOUT · ROUTE & RUMOUR",
+  merchant: "TRADER · PROVISIONS",
+};
 
 export interface Particle {
   x: number;
@@ -920,6 +934,11 @@ export class Game {
               this.world.journal.push(intake);
               this.publishJournal();
             }
+            // The reliquary's mirrors are one half of Barris's investigation.
+            // Record the discovery even if the player meets him only later.
+            if (this.world.regionId === "fortress.old-lands-reliquary" && learnFact(this.world.quests, "pilgrim-reflection")) {
+              this.publishJournal();
+            }
           }
           if (this.shards >= this.totalShards) {
             this.wardUnlocked = true;
@@ -1113,7 +1132,7 @@ export class Game {
 
   private openWatcherTopics() {
     const resolved = Object.keys(this.world.quests.resolutions).length;
-    this.openDialogue([resolved ? `You have brought ${resolved === 1 ? "one account" : `${resolved} accounts`} back into this hall, and the record is the better for it. What else should we settle?` : "The roads keep better records than I do. Ask about whatever troubles you, bring back what you find, and we will decide together what it meant."], "Orithel, the Last Watcher", "#9ff7e6");
+    this.openDialogue([resolved ? `You have brought ${resolved === 1 ? "one account" : `${resolved} accounts`} back into this hall, and the record is the better for it. What else should we settle?` : "The roads keep better records than I do. Ask about whatever troubles you, bring back what you find, and we will decide together what it meant."], "Orithel, the Last Watcher", "#9ff7e6", ORITHEL_PORTRAIT, "THE LAST WATCHER · INVESTIGATIONS");
     this.dialogue!.choices = [
       { id: "spire", label: "The Unbound and the nine shards" },
       ...QUESTS.map((quest) => ({ id: `quest:${quest.id}`, label: `${quest.title}${this.world.quests.resolutions[quest.id] ? " · remembered" : canResolve(this.world.quests, quest) ? " · discuss discoveries" : ""}` })),
@@ -1125,7 +1144,7 @@ export class Game {
   private openWardChoice() {
     const { lines, choices } = wardDialogue();
     this.pendingChoices = choices;
-    this.openDialogue(lines, "Orithel, the Architect", "#9ff7e6");
+    this.openDialogue(lines, "Orithel, the Architect", "#9ff7e6", ORITHEL_PORTRAIT, "THE ARCHITECT · FINAL AUDIENCE");
   }
 
   chooseDialogue(id: string) {
@@ -1157,7 +1176,7 @@ export class Game {
         this.world.journal.push({ id: "orithel:spire", title: "The Unbound Spire", text: ORITHEL_LINES.slice(3, 7).join(" "), source: "Orithel · Ilyarael" });
         this.publishJournal();
       }
-      this.openDialogue(ORITHEL_LINES.slice(), "Orithel, the Last Watcher", "#9ff7e6");
+      this.openDialogue(ORITHEL_LINES.slice(), "Orithel, the Last Watcher", "#9ff7e6", ORITHEL_PORTRAIT, "THE LAST WATCHER · TESTIMONY");
       return;
     }
     if (id.startsWith("quest:")) {
@@ -1170,7 +1189,7 @@ export class Game {
       const text = resolution?.text ?? (canResolve(this.world.quests, quest)
         ? `${evidence.map((entry) => entry.text).join(" ")} What do you ask of me?`
         : `${quest.lead}${questKnown(this.world.quests, quest) && evidence.length ? ` You have learned this: ${evidence.map((entry) => entry.text).join(" ")}` : ""}`);
-      this.openDialogue([text], "Orithel · " + quest.title, "#9ff7e6");
+      this.openDialogue([text], "Orithel · " + quest.title, "#9ff7e6", ORITHEL_PORTRAIT, "THE LAST WATCHER · INVESTIGATION");
       this.dialogue!.choices = [
         ...(canResolve(this.world.quests, quest) ? quest.choices.map((choice) => ({ id: `resolve:${quest.id}:${choice.id}`, label: choice.label })) : []),
         { id: "topics", label: "Ask about something else" },
@@ -1191,11 +1210,11 @@ export class Game {
       if (stat === "dash") p.dashCostDiscount += amount;
     }
     this.publishJournal();
-    this.openDialogue([choice.text], "Orithel, the Last Watcher", "#9ff7e6");
+    this.openDialogue([choice.text], "Orithel, the Last Watcher", "#9ff7e6", ORITHEL_PORTRAIT, "THE LAST WATCHER · DECISION");
     this.msg("Your decision has been recorded in the journal.");
   }
 
-  openDialogue(lines: string[], speaker: string, color: string) {
+  openDialogue(lines: string[], speaker: string, color: string, portrait?: NpcPortrait, roleLabel?: string) {
     // Consume any choices staged for THIS dialogue (set by the caller just before
     // this call). A single-line dialogue attaches them immediately, matching the
     // previous behaviour for every existing choices-bearing caller. A multi-line
@@ -1206,7 +1225,7 @@ export class Game {
     this.dialogueLines = lines;
     this.dialogueSpeaker = speaker;
     this.dialogueColor = color;
-    this.dialogue = { speaker, text: lines[0], index: 0, total: lines.length, color };
+    this.dialogue = { speaker, text: lines[0], index: 0, total: lines.length, color, portrait, roleLabel };
     if (stagedChoices) {
       if (lines.length - 1 === 0) this.dialogue.choices = stagedChoices;
       else this.pendingChoices = stagedChoices;
@@ -1268,14 +1287,18 @@ export class Game {
     }
   }
 
-  private speakWithTownNpc(npc: import("./types").NpcData) {
+  private openNpcDialogue(npc: NpcData, lines: string[]) {
+    this.openDialogue(lines, npc.name, npc.color, npc.portrait, NPC_ROLE_LABEL[npc.role]);
+  }
+
+  private speakWithTownNpc(npc: NpcData) {
     const used = this.usedTownServices.has(npc.id);
     if (npc.role === "healer") {
       const healerLines: Record<string, { heal: string[]; exhausted: string }> = {
         "town:ilyarael:healer": {
           heal: [
-            "Close your eyes. I will borrow the hollow spaces between your ribs and fill them with what little light is left here.",
-            "Your wounds close. For now, the town's grace holds.",
+            "Lay your palms upon the stones. The wound is only memory trying to take form. Let me have it.",
+            "Your wounds close. Mirene carries the ache away beneath her bandages.",
           ],
           exhausted: "I have done what I can for you this visit. The road will do the rest.",
         },
@@ -1306,14 +1329,62 @@ export class Game {
         exhausted: "I have done what I can for you this visit. The road will do the rest.",
       };
       if (used) {
-        this.openDialogue([lines.exhausted], npc.name, npc.color);
+        this.openNpcDialogue(npc, [lines.exhausted]);
       } else {
         this.usedTownServices.add(npc.id);
         this.player.hp = this.player.maxHp;
         this.burst(npc.x, npc.y, npc.color, 14);
-        this.openDialogue(lines.heal, npc.name, npc.color);
+        this.openNpcDialogue(npc, lines.heal);
       }
-    } else if (npc.role === "lore") {
+      return;
+    }
+
+    if (npc.role === "scout") {
+      const entry = this.townScoutEntry(npc.id);
+      const questId = this.scoutQuestId(npc.id);
+      if (!used) {
+        this.usedTownServices.add(npc.id);
+        const started = questId ? learnFact(this.world.quests, `lead:${questId}`) : false;
+        if (entry && !this.world.journal.some((existing) => entry.id === existing.id)) this.world.journal.push(entry);
+        if (entry || started) this.publishJournal();
+        const quest = questId ? QUESTS.find((candidate) => candidate.id === questId) : null;
+        this.openNpcDialogue(npc, [
+          entry?.text ?? "I have marked the safest road I know.",
+          quest && started
+            ? `I have added “${quest.title}” to your journal. The decision is yours when you have both accounts.`
+            : "I have copied the route into your journal. Press L before you leave the sanctuary.",
+        ]);
+      } else {
+        const lines: Record<string, { default: string; withShards: string; resolved?: string }> = {
+          "town:ilyarael:smith": {
+            default: "The road remembers a weight by the way the grass stays down. Yours never does. That is worth noticing.",
+            withShards: "Every shard you lift changes the way you stand. Do not let the Engine decide the shape of you before you do.",
+            resolved: "You chose what to call yourself. Good. Names are tools, but they should fit the hand that carries them.",
+          },
+          "town:cinderwild:outrunner": {
+            default: "The shrine road runs hot after noon. Take the high side of the ravine; the ash slides only once before it takes you.",
+            withShards: "You have that core-light under your ribs now. The ravines notice heat. Keep moving.",
+            resolved: "Whatever you chose for the child, do not let anyone tell you it was an easy choice. Easy is a word people use when they were not there.",
+          },
+          "town:moonlit:blind-oar": {
+            default: "Hear the water before you trust the ground. The sandbars hum when the tide is carrying a body beneath them.",
+            withShards: "The shards make a sound like an oarlock in rough weather. You are carrying a hard crossing with you.",
+            resolved: "The names have somewhere to live now. That is not the same as justice, but it is not nothing.",
+          },
+          "town:starfall:drift-child": {
+            default: "The observatory is north-west. The loud shell waits east. They are both listening for you, but only one is curious.",
+            withShards: "The voices around you are closer together now. I cannot hear where one ends. Please do not make them louder.",
+            resolved: "The dawn you chose is still in the air around you. It knows you made a choice. It is trying to be glad.",
+          },
+        };
+        const config = lines[npc.id];
+        const resolved = questId && Boolean(this.world.quests.resolutions[questId]);
+        this.openNpcDialogue(npc, [resolved && config?.resolved ? config.resolved : this.shards > 0 ? config?.withShards ?? "The road has changed around you." : config?.default ?? "The road has been hard. Rest while you can."]);
+      }
+      return;
+    }
+
+    if (npc.role === "lore") {
       if (used) {
         const reactiveLines: Record<string, { default: string; withShards: string }> = {
           "town:ilyarael:scrivener": {
@@ -1334,35 +1405,31 @@ export class Game {
           },
         };
         const config = reactiveLines[npc.id];
-        const text = config
-          ? (this.shards > 0 ? config.withShards : config.default)
-          : "The records do not change because you keep asking. Go and make a new one.";
-        this.openDialogue([text], npc.name, npc.color);
+        this.openNpcDialogue(npc, [this.shards > 0 ? config?.withShards ?? "The road is changing you." : config?.default ?? "The records do not change because you keep asking."]);
       } else {
         this.usedTownServices.add(npc.id);
         const entry = this.townLoreEntry(npc.id);
-        if (entry) {
-          if (!this.world.journal.some((existing) => entry.id === existing.id)) {
-            this.world.journal.push(entry);
-            this.publishJournal();
-          }
-          this.openDialogue([entry.text, "I have copied this into your journal. Press L to read it again."], npc.name, npc.color);
-        } else {
-          this.openDialogue(["I have nothing new for you."], npc.name, npc.color);
-        }
+        const fact = npc.id === "town:ilyarael:scrivener" ? "pilgrim-ledger" : null;
+        const learned = fact ? learnFact(this.world.quests, fact) : false;
+        if (entry && !this.world.journal.some((existing) => entry.id === existing.id)) this.world.journal.push(entry);
+        if (entry || learned) this.publishJournal();
+        this.openNpcDialogue(npc, entry
+          ? [entry.text, "I have copied this testimony into your journal. Press L to read it again."]
+          : ["I have nothing new for you."]);
       }
-    } else {
-      this.openDialogue(["The road has been hard. Rest while you can."], npc.name, npc.color);
+      return;
     }
+
+    this.openNpcDialogue(npc, ["The road has been hard. Rest while you can."]);
   }
 
   private townLoreEntry(npcId: string): import("./types").JournalEntry | null {
     const entries: Record<string, import("./types").JournalEntry> = {
       "town:ilyarael:scrivener": {
         id: "town:ilyarael:scrivener",
-        title: "The Scrivener's Mark",
-        text: "The Weeping Archive lies north along the western forest track. Its door is black timber, and the records inside have been sealed against weather, fire, and the people they were written about. A wraith circles the threshold. It was a clerk once, or so the locals say.",
-        source: "The Scrivener · Ilyarael Township",
+        title: "The First Courier's Mark",
+        text: "The glyph beneath your skin is not a blessing, Althea says. It is the intake mark of the original courier cohort: runners built to survive the Spire's radiant pressure for a few more steps than anyone else. The council called each body returnable. Althea's ancestors copied the word into the margins until the ink tore the paper. She has compared your mark to the old rolls. It matches exactly.",
+        source: "Scribe Althea · Ilyarael Township",
       },
       "town:cinderwild:kilnmaster": {
         id: "town:cinderwild:kilnmaster",
@@ -1381,6 +1448,47 @@ export class Game {
         title: "The Lens of Orren",
         text: "Master Orren built the great glass at the observatory not to study the stars, but to capture their light and compress it into living minds. He believed the human spirit could be hardened into diamond if you heated it fast enough. When the funding ran out, he clamped himself into the apparatus to prove it was painless. He has been screaming inside that iron casing for nine hundred years.",
         source: "Reeve Toran · Crater Watch",
+      },
+    };
+    return entries[npcId] ?? null;
+  }
+
+  private scoutQuestId(npcId: string): string | null {
+    const quests: Record<string, string> = {
+      "town:ilyarael:smith": "pilgrim",
+      "town:cinderwild:outrunner": "courier",
+      "town:moonlit:blind-oar": "salt",
+      "town:starfall:drift-child": "dawn",
+    };
+    return quests[npcId] ?? null;
+  }
+
+  /** Scouts write practical routes, while lorekeepers preserve testimony. Both are journal-worthy. */
+  private townScoutEntry(npcId: string): import("./types").JournalEntry | null {
+    const entries: Record<string, import("./types").JournalEntry> = {
+      "town:ilyarael:smith": {
+        id: "town:ilyarael:smith",
+        title: "Barris's Comparison",
+        text: "Barris has met seven wayfarers bearing my scars. He remembers because each one used the same hand to test a blade, as if the body knew the motion before the person inside it did. He directs me to Scribe Althea for the courier rolls, then north across the lake to the Glass Reliquary. “The mirrors in there know more faces than I do,” he says. “Ask one who you are. Then decide whether you like the answer.”",
+        source: "Barris the Smith · Ilyarael Township",
+      },
+      "town:cinderwild:outrunner": {
+        id: "town:cinderwild:outrunner",
+        title: "Elodie's Ravine Route",
+        text: "From the Cinder Circle, Elodie marks the northeast road to the Broken Shrine. Take the upper side of the ember cracks, she says; the lower shelf has no ground beneath its ash. Her great-grandmother was a courier who refused the northern run. A sealed vessel went to the shrine anyway, and Elodie wants to know whether its runner ever chose anything for herself.",
+        source: "Elodie the Outrunner · Cinder Haven",
+      },
+      "town:moonlit:blind-oar": {
+        id: "town:moonlit:blind-oar",
+        title: "Kieran's Tide Route",
+        text: "Kieran hears the old harbour in the tide. From the pale circle, he marks the southwest path to the Salt Graves and the northeast path to the Keeper's Beacon. “Read both,” he says. “The sea will give you one kind of truth. A man defending his arithmetic gives you another.” He asks that the erased names be carried somewhere they cannot be struck out again.",
+        source: "Kieran the Blind Oar · Oarsman's Bight",
+      },
+      "town:starfall:drift-child": {
+        id: "town:starfall:drift-child",
+        title: "Mina's Listening Route",
+        text: "Mina presses her tuning fork to the ground. Its north-west tine sings toward the Fallen Observatory; its east tine answers the Astronomer's Watch. She says one place contains a promise Orren made to himself, and the other contains what that promise became. “Read the first before you break the second,” she says. “Otherwise he will only be a monster to you.”",
+        source: "Mina the Drift-Child · Crater Watch",
       },
     };
     return entries[npcId] ?? null;

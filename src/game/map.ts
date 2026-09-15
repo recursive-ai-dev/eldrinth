@@ -1,5 +1,5 @@
 import { MAP_W, MAP_H, TILE, T } from "./constants";
-import type { MapData, Vec, EnemySpawn, SignData, RegionExit, CampfireData, TownData } from "./types";
+import type { MapData, Vec, EnemySpawn, SignData, RegionExit, CampfireData, TownData, NpcData } from "./types";
 import { parseFortressLayout } from "./fortress";
 import { FORTRESS_LAYOUTS } from "./fortressLayouts";
 
@@ -47,6 +47,19 @@ function fortressExit(x: number, y: number, targetRegion: FortressId, label: str
   const { door } = parseFortressLayout(FORTRESS_LAYOUTS[targetRegion]);
   return { x, y, targetRegion, destination: { x: px(door.x), y: px(door.y + 1) }, label };
 }
+
+/** A stable portrait slot stays with its NPC, rather than with a dialogue line. */
+function townNpc(
+  id: string,
+  name: string,
+  color: string,
+  role: NpcData["role"],
+  portraitId: string,
+  portraitDescription: string,
+): Omit<NpcData, "x" | "y"> {
+  return { id, name, color, role, portrait: { id: portraitId, description: portraitDescription } };
+}
+
 /** Hand-authored settlement layouts. Glyphs: # wall, . floor, D door, H house block, N NPC spot. */
 const TOWN_LAYOUTS: Record<string, string[]> = {
   "ilyarael-township": [
@@ -57,7 +70,7 @@ const TOWN_LAYOUTS: Record<string, string[]> = {
     "#..................#",
     "#.......##.........#",
     "D.......##....N....#",
-    "#..................#",
+    "#...........N......#",
     "#..................#",
     "####################",
   ],
@@ -69,7 +82,7 @@ const TOWN_LAYOUTS: Record<string, string[]> = {
     "#..................#",
     "D.......##.........#",
     "#.......##....N....#",
-    "#..................#",
+    "#...........N......#",
     "#..................#",
     "####################",
   ],
@@ -81,7 +94,7 @@ const TOWN_LAYOUTS: Record<string, string[]> = {
     "#..................#",
     "D.......##.........#",
     "#.......##....N....#",
-    "#..................#",
+    "#...........N......#",
     "#..................#",
     "####################",
   ],
@@ -93,7 +106,7 @@ const TOWN_LAYOUTS: Record<string, string[]> = {
     "#..................#",
     "D.......##.........#",
     "#.......##....N....#",
-    "#..................#",
+    "#...........N......#",
     "#..................#",
     "####################",
   ],
@@ -133,7 +146,7 @@ function stampTown(
   townId: string,
   worldX: number,
   worldY: number,
-  npcs: { id: string; name: string; color: string; role: TownData["npcs"][number]["role"] }[],
+  npcs: Omit<NpcData, "x" | "y">[],
 ): TownData {
   const layout = parseTownLayout(townId, TOWN_LAYOUTS[townId]);
   for (let y = 0; y < layout.height; y++) {
@@ -484,8 +497,9 @@ export function generateMap(regionId = "overworld"): MapData {
   // ----- Ilyarael Township: a safe settlement on the southern road -----
   const towns: TownData[] = [
     stampTown(tiles, "ilyarael-township", 68, 92, [
-      { id: "town:ilyarael:scrivener", name: "The Scrivener", color: "#c9a86c", role: "lore" },
-      { id: "town:ilyarael:healer", name: "Hollow Sister", color: "#8fcca8", role: "healer" },
+      townNpc("town:ilyarael:scrivener", "Scribe Althea", "#c9a86c", "lore", "scribe-althea", "A sharp-eyed archivist in an ochre hood, with silver hair pinned by a quill and ink-dark fingertips; a cracked ledger held close to her chest."),
+      townNpc("town:ilyarael:healer", "Hollow Sister Mirene", "#8fcca8", "healer", "sister-mirene", "A solemn woman in a sea-green veil, her hands wrapped in linen and faintly lit from within; black-glass prayer beads at her throat."),
+      townNpc("town:ilyarael:smith", "Barris the Smith", "#d4a373", "scout", "barris-the-smith", "A broad, scarred scavenger in a soot-stiff leather apron, with a cropped iron-grey beard, a broken sword over one shoulder, and a smith's hammer at his belt."),
     ]),
   ];
 
@@ -702,7 +716,7 @@ function generateFrontierMap(regionId: string): MapData {
         id: string;
         x: number;
         y: number;
-        npcs: { id: string; name: string; color: string; role: TownData["npcs"][number]["role"] }[];
+        npcs: Omit<NpcData, "x" | "y">[];
         spurRoad: [number, number, number, number][];
       };
     }
@@ -736,8 +750,9 @@ function generateFrontierMap(regionId: string): MapData {
         x: 50,
         y: 70,
         npcs: [
-          { id: "town:cinderwild:kilnmaster", name: "Kiln-Master Vance", color: "#ff8c52", role: "lore" },
-          { id: "town:cinderwild:healer", name: "Cinder-Nurse Greta", color: "#f0a882", role: "healer" },
+          townNpc("town:cinderwild:kilnmaster", "Kiln-Master Vance", "#ff8c52", "lore", "kiln-master-vance", "An elderly kiln tender with a copper half-mask, ember-orange goggles, and a charcoal cloak dusted in pale ash; he carries a tally hook like a cane."),
+          townNpc("town:cinderwild:healer", "Cinder-Nurse Greta", "#f0a882", "healer", "cinder-nurse-greta", "A practical nurse with cropped dark curls beneath a singed linen cap, a rust-red coat, and sulfur-stained gloves; a blue glass water flask at her hip."),
+          townNpc("town:cinderwild:outrunner", "Elodie the Outrunner", "#e0b084", "scout", "elodie-outrunner", "A wiry young outrunner in an ash-grey scarf and patched red climbing coat, with one shaved temple, a charcoal map case, and a hooked ravine staff."),
         ],
         spurRoad: [
           [80, 56, 50, 56],
@@ -774,8 +789,9 @@ function generateFrontierMap(regionId: string): MapData {
         x: 86,
         y: 72,
         npcs: [
-          { id: "town:moonlit:dredger", name: "Mistress Morveth", color: "#7ec4cf", role: "lore" },
-          { id: "town:moonlit:healer", name: "Sister Lyra", color: "#9fe6d9", role: "healer" },
+          townNpc("town:moonlit:dredger", "Mistress Morveth", "#7ec4cf", "lore", "mistress-morveth", "An older dredger in an oilskin mantle the colour of storm water, with braided white hair, brass dive goggles, and name-tags sewn into every sleeve."),
+          townNpc("town:moonlit:healer", "Sister Lyra of the Brine", "#9fe6d9", "healer", "sister-lyra", "A calm healer in layered kelp-green robes, with a shaved head, pearl ear cuffs, and a satchel of glass salve jars glowing through wet netting."),
+          townNpc("town:moonlit:blind-oar", "Kieran the Blind Oar", "#a2c8e0", "scout", "kieran-blind-oar", "A weathered ferryman in a salt-bleached blue coat, eyes clouded by glare, with a long carved oar used as a walking staff and a rope coil across his chest."),
         ],
         spurRoad: [
           [80, 56, 86, 56],
@@ -813,8 +829,9 @@ function generateFrontierMap(regionId: string): MapData {
         x: 74,
         y: 72,
         npcs: [
-          { id: "town:starfall:stargazer", name: "Reeve Toran", color: "#d6b4fc", role: "lore" },
-          { id: "town:starfall:healer", name: "Hermit Cassian", color: "#b39ddb", role: "healer" },
+          townNpc("town:starfall:stargazer", "Reeve Toran", "#d6b4fc", "lore", "reeve-toran", "A gaunt stargazer in a violet wool mantle, with a brass monocle cracked across one eye, wind-tossed black hair, and a telescope lens cradled under one arm."),
+          townNpc("town:starfall:healer", "Hermit Cassian", "#b39ddb", "healer", "hermit-cassian", "A soft-spoken hermit in a plum-coloured hooded coat, with a close silver beard, moss tucked into his sleeves, and a meteorite bowl of glowing spring water."),
+          townNpc("town:starfall:drift-child", "Mina the Drift-Child", "#e2d0ff", "scout", "mina-drift-child", "A slight child in an oversized charcoal cloak sewn with meteor-glass beads, with pale braided hair, ink-dark eyes, and a tuning fork hanging from a cord."),
         ],
         spurRoad: [
           [80, 56, 74, 56],
