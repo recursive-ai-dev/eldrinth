@@ -20,7 +20,9 @@ Add small, authored activity sites to each region: a hazardous crossing, a comba
 
 All nine shards now sit inside their own enterable fortresses rather than in open-field clearings. Each fortress has a distinct 26×19 authored layout, its own gate and return route, no wayfire to rest at, darkness, ember hazards, a warden, and a journal record of what was guarding the vessel. Dying inside resets that fortress's enemies and shard rather than the run itself.
 
-Frontier and overworld maps are expanded to 160×112 tiles, making the expedition across the continent feel earned: each fortress commands an authored exterior facade, distinct regional hazards (ember-filled ravines, sea cliffs, celestial impact craters), and strategic perimeter guards, ensuring reaching a fortress gate is a memorable journey.
+Frontier and overworld maps are expanded to 200×140 tiles, making the expedition across the continent feel earned: each fortress commands an authored exterior facade, distinct regional hazards (ember-filled ravines, sea cliffs, celestial impact craters), and strategic perimeter guards, ensuring reaching a fortress gate is a memorable journey.
+
+Four regional settlements (Ilyarael Township, Cinder Haven, Oarsman's Bight, and Crater Watch) now offer refuge, healers, and oral histories. Every fortress shard has its own historical intake docket and trapped conscious persona recorded in the player's journal when harvested.
 
 Build a light equipment layer around meaningful tradeoffs: two active tools and three relic slots, with effects that change play patterns such as projectile-deflecting dashes, a slower heavy strike, or a lantern that reveals concealed messages. Expand enemy telegraphs and give each region one elite behavior that changes how the player uses space.
 

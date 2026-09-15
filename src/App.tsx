@@ -87,18 +87,19 @@ export default function App() {
     const toggleJournal = (event: KeyboardEvent) => {
       const target = event.target;
       if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || (target instanceof HTMLElement && target.isContentEditable)) return;
-      if (event.key.toLowerCase() === "l" && screen === "overworld" && !dialogue) {
+      if (event.key === "Escape" && journalOpen) {
         event.preventDefault();
-        setJournalOpen((open) => {
-          const next = !open;
-          gameRef.current?.setJournalOpen(next);
-          return next;
-        });
+        setJournalVisibility(false);
+        return;
+      }
+      if (event.key.toLowerCase() === "l" && (screen === "overworld" || screen === "interior") && !dialogue) {
+        event.preventDefault();
+        setJournalVisibility(!journalOpen);
       }
     };
     window.addEventListener("keydown", toggleJournal);
     return () => window.removeEventListener("keydown", toggleJournal);
-  }, [screen, dialogue]);
+  }, [screen, dialogue, journalOpen, setJournalVisibility]);
   const callbacks: GameCallbacks = {
     onHud: (hudData) => setHud(hudData),
     onDialogue: (dialogueData) => setDialogue(dialogueData),
