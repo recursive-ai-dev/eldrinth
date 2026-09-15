@@ -182,7 +182,7 @@ export interface RenderState {
 const CHUNK_TILES = 16;
 const CHUNK_PIXELS = CHUNK_TILES * TILE;
 const CHUNK_GUARD = 1;
-const MAX_CACHED_CHUNKS = 64;
+const MAX_CACHED_CHUNKS = 128;
 
 interface RenderChunk {
   ground: HTMLCanvasElement;

@@ -1,9 +1,9 @@
 export const TILE = 32;
-// The original prototype's 70 x 50 map was crossed in a few minutes.  The
-// wider frontier gives each landmark room to breathe and makes a full shard
-// run feel like a proper expedition.
-export const MAP_W = 100;
-export const MAP_H = 72;
+// The expanded 160 x 112 frontier gives each landmark substantial presence,
+// turns the journey between regions and fortresses into a real expedition,
+// and makes breaching each fortress gate feel earned and rewarding.
+export const MAP_W = 160;
+export const MAP_H = 112;
 
 // Tile type ids
 export const T = {
