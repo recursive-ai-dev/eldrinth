@@ -827,10 +827,8 @@ function drawSortedWorldObjects(g: RenderState, ctx: CanvasRenderingContext2D) {
     } });
   }
   for (const fire of g.map.campfires) objects.push({ y: fire.y, draw: () => drawCampfire(g, ctx, fire.x, fire.y) });
-  for (const town of g.map.towns) {
-    for (const npc of town.npcs) {
-      objects.push({ y: npc.y, draw: () => drawNpc(ctx, npc.x, npc.y, npc.color, npc.role) });
-    }
+  for (const npc of g.map.npcs) {
+    objects.push({ y: npc.y, draw: () => drawNpc(ctx, npc.x, npc.y, npc.color, npc.role) });
   }
   if (g.map.npc.x > 0 && g.map.npc.y > 0) {
     objects.push({ y: g.map.npc.y, draw: () => drawNpc(ctx, g.map.npc.x, g.map.npc.y, "#9ff7e6") });

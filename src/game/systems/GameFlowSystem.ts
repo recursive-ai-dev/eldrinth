@@ -24,7 +24,9 @@ export interface GameFlowState {
   map: {
     regionName: string;
     npc: { x: number; y: number };
-    towns: Array<{ x: number; y: number; npcs: Array<{ x: number; y: number; name: string; role: string }> }>;
+    npcs: Array<{ x: number; y: number; name: string; role: string }>;
+    towns: Array<{ x: number; y: number }>;
+    exits: Array<{ x: number; y: number; label: string; requiresInteraction?: boolean }>;
     signs: Array<{ x: number; y: number; text: string }>;
     campfires: Array<{ x: number; y: number }>;
   };
@@ -66,14 +68,14 @@ export class GameFlowSystem {
     const p = state.player;
     const npc = state.map.npc;
     if (state.map.campfires.some((fire) => Math.hypot(p.x - fire.x, p.y - fire.y) < 52)) return "Press E to rest at the wayfire";
+    const doorway = state.map.exits.find((exit) => exit.requiresInteraction && Math.hypot(p.x - (exit.x * TILE + TILE / 2), p.y - (exit.y * TILE + TILE / 2)) < 44);
+    if (doorway) return `Press E to enter ${doorway.label}`;
     if (Math.hypot(p.x - npc.x, p.y - npc.y) < 48) {
       return "Press E to speak with Orithel";
     }
-    for (const town of state.map.towns) {
-      for (const npc of town.npcs) {
-        if (Math.hypot(p.x - npc.x, p.y - npc.y) < 44) {
-          return `Press E to speak with ${npc.name}`;
-        }
+    for (const npc of state.map.npcs) {
+      if (Math.hypot(p.x - npc.x, p.y - npc.y) < 44) {
+        return `Press E to speak with ${npc.name}`;
       }
     }
     for (const s of state.map.signs) {

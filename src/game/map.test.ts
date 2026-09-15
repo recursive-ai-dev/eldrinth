@@ -57,7 +57,7 @@ describe("the landmark-led journey", () => {
     // Inter-region connections
     expect(
       overworld.exits
-        .filter((exit) => !exit.targetRegion.startsWith("fortress."))
+        .filter((exit) => !exit.targetRegion.startsWith("fortress.") && !exit.targetRegion.startsWith("interior."))
         .map((exit) => exit.targetRegion)
         .sort()
     ).toEqual(["cinderwild", "moonlit-coast"]);

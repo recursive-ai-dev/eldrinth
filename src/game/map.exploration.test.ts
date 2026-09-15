@@ -123,33 +123,26 @@ describe("expanded map exploration & reachability", () => {
 });
 
 describe("authored settlements", () => {
-  it("places Ilyarael Township with reachable townsfolk and a safe zone", () => {
+  it("places Ilyarael Township with reachable building doors and a safe zone", () => {
     const map = generateMap("overworld");
     expect(map.towns).toHaveLength(1);
 
     const town = map.towns[0];
     expect(town.id).toBe("ilyarael-township");
-    expect(town.npcs.map((npc) => npc.role).sort()).toEqual(["healer", "lore", "scout"]);
+    expect(town.buildings).toHaveLength(3);
+    expect(town.buildings.map((building) => building.resident.role).sort()).toEqual(["healer", "lore", "scout"]);
     expect(town.safeRadius).toBeGreaterThan(0);
     expect(town.sign).toBeDefined();
 
-    // Every townsperson stands on walkable floor.
-    for (const npc of town.npcs) {
-      const tx = Math.floor(npc.x / TILE);
-      const ty = Math.floor(npc.y / TILE);
-      expect(canWalk(map, tx, ty), `${npc.name} at (${tx}, ${ty}) must stand on walkable floor`).toBe(true);
+    // Every building has a reachable exterior door.
+    for (const building of town.buildings) {
+      expect(canWalk(map, building.x, building.y), `${building.name} door must be walkable`).toBe(true);
+      const spawnTile = { x: Math.floor(map.spawn.x / TILE), y: Math.floor(map.spawn.y / TILE) };
+      expect(findPathBFS(map, spawnTile, { x: building.x, y: building.y }), `Expected a walking route to ${building.name}`).toBe(true);
     }
 
     // The town square (safe-zone centre) is walkable.
     expect(canWalk(map, Math.floor(town.x / TILE), Math.floor(town.y / TILE))).toBe(true);
-
-    // The settlement is reachable on foot from the Old Lands spawn.
-    const spawnTile = { x: Math.floor(map.spawn.x / TILE), y: Math.floor(map.spawn.y / TILE) };
-    for (const npc of town.npcs) {
-      const target = { x: Math.floor(npc.x / TILE), y: Math.floor(npc.y / TILE) };
-      const reached = findPathBFS(map, spawnTile, target);
-      expect(reached, `Expected a walking route from spawn to ${npc.name}`).toBe(true);
-    }
 
     // The town advertises itself with a readable sign.
     const sign = town.sign!;
@@ -170,7 +163,31 @@ describe("authored settlements", () => {
     }
   });
 
-  it("places authored settlements in all frontier regions with reachable NPCs", () => {
+  it("gives every town building its own small authored interior and return route", () => {
+    const regions = ["overworld", "cinderwild", "moonlit-coast", "starfall-moors"];
+    for (const regionId of regions) {
+      const map = generateMap(regionId);
+      const town = map.towns[0];
+      for (const building of town.buildings) {
+        expect(map.exits.find((exit) => exit.targetRegion === building.interiorId)).toMatchObject({ requiresInteraction: true, label: building.name });
+        const interior = generateMap(building.interiorId);
+        expect(interior.regionName).toBe(building.name);
+        expect(interior.width * interior.height).toBeLessThan(150);
+        expect(interior.dark).toBe(true);
+        expect(interior.enemySpawns).toEqual([]);
+        expect(interior.npcs).toHaveLength(1);
+        expect(interior.npcs[0].id).toBe(building.resident.id);
+        const residentTile = { x: Math.floor(interior.npcs[0].x / TILE), y: Math.floor(interior.npcs[0].y / TILE) };
+        const spawnTile = { x: Math.floor(interior.spawn.x / TILE), y: Math.floor(interior.spawn.y / TILE) };
+        expect(findPathBFS(interior, spawnTile, residentTile), `${building.name} resident should be reachable`).toBe(true);
+        expect(interior.exits).toHaveLength(1);
+        expect(interior.exits[0].targetRegion).toBe(regionId);
+        expect(interior.exits[0].requiresInteraction).toBe(true);
+      }
+    }
+  });
+
+  it("places authored settlements in all frontier regions with reachable building doors", () => {
     const regions = [
       { id: "cinderwild", townId: "cinder-haven" },
       { id: "moonlit-coast", townId: "oarsmans-bight" },
@@ -182,25 +199,22 @@ describe("authored settlements", () => {
       expect(map.towns).toHaveLength(1);
       const town = map.towns[0];
       expect(town.id).toBe(townId);
-      expect(town.npcs.map((npc) => npc.role).sort()).toEqual(["healer", "lore", "scout"]);
+      expect(town.buildings.map((building) => building.resident.role).sort()).toEqual(["healer", "lore", "scout"]);
       expect(town.safeRadius).toBeGreaterThan(0);
       expect(town.sign).toBeDefined();
 
-      for (const npc of town.npcs) {
-        const tx = Math.floor(npc.x / TILE);
-        const ty = Math.floor(npc.y / TILE);
-        expect(canWalk(map, tx, ty), `${npc.name} at (${tx}, ${ty}) in ${id} must stand on walkable floor`).toBe(true);
+      for (const building of town.buildings) {
+        expect(canWalk(map, building.x, building.y), `${building.name} door in ${id} must be walkable`).toBe(true);
       }
 
       // Safe-zone center is walkable floor
       expect(canWalk(map, Math.floor(town.x / TILE), Math.floor(town.y / TILE))).toBe(true);
 
-      // Hub wayfire can reach the town NPCs
+      // Hub wayfire can reach every building door.
       const hub = { x: 80, y: 56 };
-      for (const npc of town.npcs) {
-        const target = { x: Math.floor(npc.x / TILE), y: Math.floor(npc.y / TILE) };
-        const reached = findPathBFS(map, hub, target);
-        expect(reached, `Expected walking route from hub to ${npc.name} in ${id}`).toBe(true);
+      for (const building of town.buildings) {
+        const reached = findPathBFS(map, hub, { x: building.x, y: building.y });
+        expect(reached, `Expected walking route from hub to ${building.name} in ${id}`).toBe(true);
       }
 
       // Town sign is walkable and advertised
@@ -212,7 +226,7 @@ describe("authored settlements", () => {
 
   it("gives every townsperson a unique, art-ready portrait placeholder", () => {
     const maps = ["overworld", "cinderwild", "moonlit-coast", "starfall-moors"].map(generateMap);
-    const npcs = maps.flatMap((map) => map.towns.flatMap((town) => town.npcs));
+    const npcs = maps.flatMap((map) => map.towns.flatMap((town) => town.buildings.map((building) => building.resident)));
 
     expect(npcs).toHaveLength(12);
     expect(npcs.every((npc) => npc.portrait?.id && npc.portrait.description.length > 30)).toBe(true);

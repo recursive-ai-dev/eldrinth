@@ -16,7 +16,7 @@ describe("GameFlowSystem HUD", () => {
       messageId: 0,
       prompt: "",
       dialogue: null,
-      map: { regionName: "Test", npc: { x: 0, y: 0 }, towns: [], signs: [], campfires: [] },
+      map: { regionName: "Test", npc: { x: 0, y: 0 }, npcs: [], towns: [], exits: [], signs: [], campfires: [] },
       items: [],
     });
 
@@ -38,7 +38,7 @@ describe("GameFlowSystem objectives", () => {
     messageId: 0,
     prompt: "",
     dialogue: null,
-    map: { regionName: "Test", npc: { x: 0, y: 0 }, towns: [], signs: [], campfires: [] },
+    map: { regionName: "Test", npc: { x: 0, y: 0 }, npcs: [], towns: [], exits: [], signs: [], campfires: [] },
     items: [],
   };
 
@@ -56,5 +56,19 @@ describe("GameFlowSystem objectives", () => {
     const flow = new GameFlowSystem();
     const state = { ...base, shards: 9, wardUnlocked: true, bossSpawned: true, boss: { alive: true, hp: 40, maxHp: 40 } };
     expect(flow.currentObjective(state)).toContain("screaming");
+  });
+
+  it("prompts at an interactive doorway instead of treating it as a walk-through gate", () => {
+    const flow = new GameFlowSystem();
+    const state = {
+      ...base,
+      player: { ...base.player, x: 48, y: 48 },
+      map: {
+        ...base.map,
+        npc: { x: -9999, y: -9999 },
+        exits: [{ x: 1, y: 1, label: "Althea's Ledger Room", requiresInteraction: true }],
+      },
+    };
+    expect(flow.updatePrompt(state)).toBe("Press E to enter Althea's Ledger Room");
   });
 });
