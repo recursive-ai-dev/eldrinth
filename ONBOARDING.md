@@ -47,9 +47,11 @@ Key gameplay facts (handy for new contributors):
 - HP starts at 18 (6 hearts). Each shard harvest reduces maximum health on a rising curve — free for the
   first two, then −1, −1, −1, −2, −2, −3, −3 — for a total cost of 13 across a full run. Character growth
   instead comes from investigations and the wayfire relics they yield.
-- The overworld is a fixed, procedurally generated 160×112 tile frontier. Each of the nine shards lives
+- The overworld is a fixed, procedurally generated 200×140 tile frontier. Each of the nine shards lives
   inside a separate 26×19 fortress with its own warden, no wayfire, and ember hazards; dying inside
   resets only that fortress.
+- Four authored sanctuary settlements (Ilyarael Township, Cinder Haven, Oarsman's Bight, and Crater Watch)
+  provide safe zones, regional lorekeepers, and healers.
 - Three investigations run alongside the pilgrimage; resolving them at Orithel grants permanent, saveable
   rewards (max health, stamina, blade damage, or dash cost reduction).
 
