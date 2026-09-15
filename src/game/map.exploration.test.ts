@@ -173,7 +173,7 @@ describe("authored settlements", () => {
         const interior = generateMap(building.interiorId);
         expect(interior.regionName).toBe(building.name);
         expect(interior.width * interior.height).toBeLessThan(150);
-        expect(interior.dark).toBe(true);
+        expect(interior.dark).toBe(false);
         expect(interior.enemySpawns).toEqual([]);
         expect(interior.npcs).toHaveLength(1);
         expect(interior.npcs[0].id).toBe(building.resident.id);

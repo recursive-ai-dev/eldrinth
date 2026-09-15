@@ -26,7 +26,17 @@ export const TILE_SPRITE_KEY: Record<number, string> = {
   [T.SLOPE_UP_RIGHT]: "tile.slope_up_right",
   [T.TRIGGER]: "tile.trigger",
   [T.EMBERS]: "tile.embers",
+  [T.HOUSE_WALL]: "tile.rfloor",
+  [T.INTERIOR_FLOOR]: "tile.interior_floor",
+  [T.INTERIOR_WALL]: "tile.interior_wall",
 };
+
+/**
+ * World-space scale for the exploration camera. Keep this shared with the
+ * engine's virtual viewport calculations: a zoomed renderer that still culls
+ * against the unzoomed viewport causes visible seams at chunk boundaries.
+ */
+export const CAMERA_ZOOM = 1.2;
 
 export const ENTITY_SPRITE_KEY: Record<string, string> = {
   player: "player",
@@ -38,6 +48,10 @@ export const ENTITY_SPRITE_KEY: Record<string, string> = {
   potion: "item.potion",
   campfire: "prop.campfire",
   sign: "prop.sign",
+  "house.oldstone": "prop.house.oldstone",
+  "house.cinder": "prop.house.cinder",
+  "house.coastal": "prop.house.coastal",
+  "house.moor": "prop.house.moor",
 };
 
 const tileAtlases = new Map<number, SpriteAtlas>();
@@ -128,6 +142,26 @@ function drawStaticSprite(
     frame.sx, frame.sy, frame.sw, frame.sh,
     Math.round(x) - half, Math.round(y) - half, size, size,
   );
+  ctx.imageSmoothingEnabled = smoothing;
+  return true;
+}
+
+/** Draw a static atlas frame at a map-aligned top-left coordinate. */
+function drawStaticSpriteBox(
+  ctx: CanvasRenderingContext2D,
+  key: string,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): boolean {
+  const atlas = entityAtlasFor(key);
+  if (!atlas.ready || !atlas.image) return false;
+  const frame = atlas.getStaticFrame();
+  if (!frame) return false;
+  const smoothing = ctx.imageSmoothingEnabled;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(atlas.image, frame.sx, frame.sy, frame.sw, frame.sh, x, y, width, height);
   ctx.imageSmoothingEnabled = smoothing;
   return true;
 }
@@ -662,8 +696,10 @@ export function renderGame(g: RenderState) {
   }
 
   ctx.save();
+  ctx.scale(CAMERA_ZOOM, CAMERA_ZOOM);
   ctx.translate(-Math.round(g.cam.x) + sx, -Math.round(g.cam.y) + sy);
   g.tileRenderer.drawGround(ctx, g.cam, g.viewW, g.viewH);
+  drawTownBuildings(g, ctx);
   drawWardBarrier(g, ctx);
   drawSortedWorldObjects(g, ctx);
   drawProjectiles(g, ctx);
@@ -678,6 +714,19 @@ export function renderGame(g: RenderState) {
   // the navigation system.
 }
 
+/** Complete cottage props replace the old repeated-wall settlement silhouettes. */
+function drawTownBuildings(g: RenderState, ctx: CanvasRenderingContext2D) {
+  for (const town of g.map.towns) {
+    for (const building of town.buildings) {
+      // Exterior layouts reserve a 3×3 footprint and place the door at its
+      // bottom centre. Anchor the 96px frontage from that known door tile.
+      const x = (building.x - 1) * TILE;
+      const y = (building.y - 2) * TILE;
+      drawStaticSpriteBox(ctx, `house.${building.theme}`, x, y, TILE * 3, TILE * 3);
+    }
+  }
+}
+
 const PLAYER_LIGHT_RADIUS = 96;
 const BRAZIER_LIGHT_RADIUS = 176;
 
@@ -686,7 +735,7 @@ function drawDarkness(g: RenderState, ctx: CanvasRenderingContext2D) {
   ctx.save();
   ctx.globalCompositeOperation = "source-over";
   ctx.fillStyle = "rgba(2,3,6,0.93)";
-  ctx.fillRect(0, 0, g.viewW, g.viewH);
+  ctx.fillRect(0, 0, g.cssW, g.cssH);
 
   // Punch the lit areas back out of the darkness we just laid down. Convert
   // world positions to screen space the same way drawLighting does, so both
@@ -702,11 +751,15 @@ function drawDarkness(g: RenderState, ctx: CanvasRenderingContext2D) {
     ctx.arc(x, y, radius, 0, Math.PI * 2);
     ctx.fill();
   };
-  const px = g.player.x - g.cam.x + g.lastShakeX;
-  const py = g.player.y - g.cam.y + g.lastShakeY;
-  punch(px, py, PLAYER_LIGHT_RADIUS);
+  const px = (g.player.x - g.cam.x + g.lastShakeX) * CAMERA_ZOOM;
+  const py = (g.player.y - g.cam.y + g.lastShakeY) * CAMERA_ZOOM;
+  punch(px, py, PLAYER_LIGHT_RADIUS * CAMERA_ZOOM);
   for (const light of g.map.lights) {
-    punch(light.x - g.cam.x + g.lastShakeX, light.y - g.cam.y + g.lastShakeY, BRAZIER_LIGHT_RADIUS);
+    punch(
+      (light.x - g.cam.x + g.lastShakeX) * CAMERA_ZOOM,
+      (light.y - g.cam.y + g.lastShakeY) * CAMERA_ZOOM,
+      BRAZIER_LIGHT_RADIUS * CAMERA_ZOOM,
+    );
   }
   ctx.restore();
 }
@@ -1395,9 +1448,9 @@ function drawTexts(g: RenderState, ctx: CanvasRenderingContext2D) {
 function drawLighting(g: RenderState) {
   const ctx = g.ctx;
   const p = g.player;
-  const px = p.x - g.cam.x + g.lastShakeX;
-  const py = p.y - g.cam.y + g.lastShakeY;
-  const R = Math.max(g.viewW, g.viewH) * 0.62;
+  const px = (p.x - g.cam.x + g.lastShakeX) * CAMERA_ZOOM;
+  const py = (p.y - g.cam.y + g.lastShakeY) * CAMERA_ZOOM;
+  const R = Math.max(g.viewW, g.viewH) * CAMERA_ZOOM * 0.62;
   // On dark maps drawDarkness supplies the ambient occlusion; the vignette
   // here would just re-darken the holes it punches, so skip it. The warm
   // torch-glow pass below is additive ("lighter") and only brightens, so it
@@ -1410,13 +1463,13 @@ function drawLighting(g: RenderState) {
     gr.addColorStop(0.72, "rgba(4,6,14,0.55)");
     gr.addColorStop(1, "rgba(2,3,9,0.9)");
     ctx.fillStyle = gr;
-    ctx.fillRect(0, 0, g.viewW, g.viewH);
+    ctx.fillRect(0, 0, g.cssW, g.cssH);
   }
   ctx.globalCompositeOperation = "lighter";
   const tg = ctx.createRadialGradient(px, py, 0, px, py, R * 0.32);
   tg.addColorStop(0, "rgba(255,180,90,0.1)");
   tg.addColorStop(1, "rgba(255,180,90,0)");
   ctx.fillStyle = tg;
-  ctx.fillRect(0, 0, g.viewW, g.viewH);
+  ctx.fillRect(0, 0, g.cssW, g.cssH);
   ctx.globalCompositeOperation = "source-over";
 }

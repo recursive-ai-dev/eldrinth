@@ -280,7 +280,7 @@ def gen_static(key: str, entry: dict) -> None:
         options["use_scale2x"] = True
     elif entry["kind"] == "prop":
         options["prop_type"] = entry.get("prop_type", "sign")
-    for name in ("palette", "category"):
+    for name in ("palette", "category", "theme", "part"):
         if name in entry:
             options[name] = entry[name]
 
@@ -288,9 +288,9 @@ def gen_static(key: str, entry: dict) -> None:
     # Static materials are interior tiles (mask 15). Mask 0 would emboss a
     # dark border around every cell and expose the grid at runtime.
     masks = range(16) if entry.get("autotile") else (15,)
-    variants = range(TILE_VARIANTS) if is_tile else range(1)
+    variants = range(entry.get("variants", TILE_VARIANTS if is_tile else 1))
     sprites = [
-        gen.generate(f"{entry['seed']}-v{variant}", mask=mask, **options)
+        gen.generate(f"{entry['seed']}-v{variant}", mask=mask, variant=variant, **options)
         for mask in masks
         for variant in variants
     ]
