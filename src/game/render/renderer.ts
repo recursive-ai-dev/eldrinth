@@ -827,6 +827,14 @@ function drawSortedWorldObjects(g: RenderState, ctx: CanvasRenderingContext2D) {
     } });
   }
   for (const fire of g.map.campfires) objects.push({ y: fire.y, draw: () => drawCampfire(g, ctx, fire.x, fire.y) });
+  for (const town of g.map.towns) {
+    for (const npc of town.npcs) {
+      objects.push({ y: npc.y, draw: () => drawNpc(ctx, npc.x, npc.y, npc.color) });
+    }
+  }
+  if (g.map.npc.x > 0 && g.map.npc.y > 0) {
+    objects.push({ y: g.map.npc.y, draw: () => drawNpc(ctx, g.map.npc.x, g.map.npc.y, "#9ff7e6") });
+  }
   for (const item of g.items) if (!item.taken) objects.push({ y: item.y, draw: () => drawItem(g, ctx, item) });
   for (const enemy of g.enemies) objects.push({ y: enemy.y, draw: () => drawEnemy(ctx, enemy) });
   objects.push({ y: g.player.y, draw: () => drawPlayer(g, ctx) });
@@ -872,6 +880,32 @@ function drawCampfire(g: RenderState, ctx: CanvasRenderingContext2D, x: number, 
   ctx.restore();
 }
 
+
+function drawNpc(ctx: CanvasRenderingContext2D, x: number, y: number, color: string) {
+  const ix = Math.round(x);
+  const iy = Math.round(y);
+  ctx.save();
+  ctx.fillStyle = "rgba(0,0,0,0.35)";
+  ctx.beginPath();
+  ctx.ellipse(ix, iy + 9, 8, 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.translate(ix, iy);
+  // Simple robed figure
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(0, -14);
+  ctx.quadraticCurveTo(-9, -6, -10, 6);
+  ctx.lineTo(-6, 14);
+  ctx.lineTo(6, 14);
+  ctx.lineTo(10, 6);
+  ctx.quadraticCurveTo(9, -6, 0, -14);
+  ctx.fill();
+  ctx.fillStyle = "#1a1c24";
+  ctx.beginPath();
+  ctx.arc(0, -16, 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
 
 function drawEnemy(ctx: CanvasRenderingContext2D, e: EnemyState) {
   if (e.telegraph) drawTelegraph(ctx, e);

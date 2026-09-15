@@ -13,10 +13,10 @@ describe("the landmark-led journey", () => {
     const fortressIds = Object.keys(FORTRESS_LAYOUTS);
     const fortressMaps = fortressIds.map(generateMap);
 
-    // Map dimensions are expanded to 160 x 112
-    expect(MAP_W).toBe(160);
-    expect(MAP_H).toBe(112);
-    expect(frontierMaps.every((map) => map.width === 160 && map.height === 112)).toBe(true);
+    // Map dimensions are expanded to 200 x 140
+    expect(MAP_W).toBe(200);
+    expect(MAP_H).toBe(140);
+    expect(frontierMaps.every((map) => map.width === 200 && map.height === 140)).toBe(true);
 
     // Shards live solely inside fortresses
     expect(fortressMaps).toHaveLength(9);

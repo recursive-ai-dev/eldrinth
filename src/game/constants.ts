@@ -1,9 +1,8 @@
 export const TILE = 32;
-// The expanded 160 x 112 frontier gives each landmark substantial presence,
-// turns the journey between regions and fortresses into a real expedition,
-// and makes breaching each fortress gate feel earned and rewarding.
-export const MAP_W = 160;
-export const MAP_H = 112;
+// The expanded 200 x 140 frontier leaves room for authored settlements and keeps
+// the journey between regions, towns, and fortresses feeling earned.
+export const MAP_W = 200;
+export const MAP_H = 140;
 
 // Tile type ids
 export const T = {

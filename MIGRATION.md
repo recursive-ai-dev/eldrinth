@@ -1,247 +1,155 @@
-To decouple the monolithic `engine.ts` (currently managing window listeners, map rendering, collision loops, AI, physics, rendering pipelines, and HUD callbacks), the engine will be decomposed into dedicated, single-responsibility subsystems under `src/game/`.
+# Engine Architecture
+
+> This document used to be the migration plan for splitting the monolithic `engine.ts`. That migration is
+> now complete. The sections below describe the resulting architecture as it currently exists.
+
+The monolithic `engine.ts` has been decomposed into dedicated, single-responsibility subsystems under
+`src/game/`. `engine.ts` itself remains the lifecycle coordinator: it owns the canvas, the `WorldState`,
+all subsystems, the region repository, and the callback bridge to React.
 
 ---
 
-### Target Directory Architecture
+## Directory structure
 
-```text
+```
 src/game/
 ├── core/
-│   ├── Game.ts             # Lightweight lifecycle coordinator & RAF loop
-│   ├── EventBus.ts         # Internal pub/sub for decoupling subsystems
-│   └── SpatialGrid.ts      # Spatial hash partition for O(1) collision lookups
+│   ├── FixedStepLoop.ts   # requestAnimationFrame + fixed 60 Hz simulation stepping
+│   ├── SceneStack.ts      # SceneId stack (title/overworld/interior/pause/ending)
+│   ├── SpatialGrid.ts     # Spatial hash for O(1) combat / collision queries
+│   └── WorldState.ts      # Mutable aggregate: player, enemies, projectiles, quests, journal, etc.
 ├── systems/
-│   ├── InputSystem.ts      # Window listeners, key mapping, input buffering
-│   ├── MovementSystem.ts   # Velocity, knockback, sub-step collision & sliding
-│   ├── CombatSystem.ts     # Hitbox queries, damage resolution, invulnerability
-│   ├── AISystem.ts         # Enemy behavioral steering, timers, and attacks
-│   ├── ParticleSystem.ts   # Object-pooled particle management & simulation
-│   └── CameraSystem.ts     # Deadzones, clamped world bounds, and screen shake
+│   ├── InputSystem.ts     # Window listeners, key mapping, action buffers
+│   ├── MovementSystem.ts  # Velocity, knockback, sub-step collision & sliding
+│   ├── CombatSystem.ts    # Hitbox queries, damage resolution, invulnerability
+│   ├── AISystem.ts        # Enemy behavioral steering, timers, and attack telegraphs
+│   ├── GameFlowSystem.ts  # Objectives, prompts, HUD assembly
+│   └── (Particle/camera logic is still inline in engine.ts / renderer.ts)
 ├── entities/
-│   ├── EntityManager.ts    # Entity collections, lifecycles, and depth sorting
-│   ├── Player.ts           # State machine & struct definition for the player
-│   └── Enemy.ts            # Enemy definitions, stats, and type configurations
-└── render/
-    └── renderer.ts         # Pure rendering pipeline (canvas context & draw passes)
-
+│   ├── components.ts      # Component definitions for the entity archetype system
+│   ├── archetypes.ts      # Player / enemy / projectile / item archetypes
+│   ├── EntityFactory.ts   # Spawn/despawn from archetypes + projectile pooling
+│   ├── EntityPool.ts      # Object pool for projectiles
+│   ├── EntityRegistry.ts  # Stable IDs, generation counters, tag/component queries
+│   └── index.ts           # Public exports
+├── render/
+│   ├── renderer.ts        # Canvas draw passes, lighting, particles, text
+│   ├── spriteAtlas.ts     # Vite asset discovery, image preload/cache
+│   └── spriteCatalog.ts   # Static catalogue of required sprites
+├── engine.ts              # Game class: orchestrator, callbacks, region transitions
+├── map.ts                 # Procedural overworld + fortress map generation
+├── fortress.ts            # Fortress layout parsing / validation
+├── fortressLayouts.ts     # Nine authored fortress interiors
+├── quests.ts              # Three investigations and their choices
+├── regions.ts             # Region cache + web-worker source
+├── escalation.ts          # Shard harvest costs, ward dialogue, warden entries
+├── hazard.ts              # Environmental damage
+├── slots.ts               # SQLite-in-WASM save slots
+├── constants.ts           # TILE size, MAP_W/H, tile catalogue, shape catalogue
+├── types.ts               # Shared interfaces
+└── math.ts                # Pure geometry / vector helpers
 ```
 
 ---
 
-### Subsystem Breakdown & Implementation Design
+## Subsystem responsibilities
 
-#### 1. Spatial Partitioning (`core/SpatialGrid.ts`)
+### `core/FixedStepLoop.ts`
 
-Currently, attacks and projectile collisions run nested $O(N)$ linear scans against all enemies.
+- Accumulates raw `dt` from `requestAnimationFrame`.
+- Runs a fixed 60 Hz simulation step while time is banked.
+- Calls `render()` every animation frame.
+- Clamps and handles tab-suspension recovery.
 
-* **Cell Grid:** A fixed grid based on tile size or bucket size (e.g., $64 \times 64$ pixels).
-* **Methods:**
-* `insert(entity: Collidable): void`
-* `update(entity: Collidable): void`
-* `queryCircle(x: number, y: number, radius: number): Collidable[]`
-* `queryRect(rect: Rect): Collidable[]`
+### `core/SceneStack.ts`
 
+- Small explicit stack of `SceneId`.
+- `push("pause")` overlays pause on top of the world; `pop()` resumes.
+- Root scene is either `"overworld"` or `"interior"` depending on whether the player is in a fortress.
 
-* **Lifecycle:** Cleared and populated at the start of each simulation frame or updated incrementally upon entity movement.
+### `core/WorldState.ts`
 
-#### 2. Input System (`systems/InputSystem.ts`)
+- The single mutable aggregate for a running session.
+- Holds `player`, `enemies`, `projectiles`, `items`, `journal`, `quests`, `checkpoint`, `shards`, etc.
+- Provides `snapshot()` and `restore()` for save/load.
+- Bumps `WorldSnapshot.version` when save format changes; `restore()` migrates older versions.
 
-Isolates DOM event listener lifecycles from gameplay code.
+### `core/SpatialGrid.ts`
 
-* **Responsibilities:**
-* Listens for `keydown`, `keyup`, and window `blur` events.
+- Fixed cell grid based on tile size.
+- `insert` / `clear` / `queryCircle` / `queryRect`.
+- Used by `CombatSystem` for attack-box and projectile lookups instead of $O(N)$ scans.
 
+### `systems/InputSystem.ts`
 
-* Maintains an active input bitmask or `Set<string>`.
+- Listens for `keydown`, `keyup`, and `blur`.
+- Maintains a `Set<string>` of pressed keys and action buffers for `attack`, `dash`, `interact`, `pause`.
+- Exposes `getMovementVector()`, `consumePressed(action)`, `clear()`.
+- Clean `destroy()` removes listeners on unmount.
 
+### `systems/MovementSystem.ts`
 
-* Exposes continuous directional vectors: `getMovementVector(): Vec`.
-* Provides action buffers for `attack`, `dash`, `interact`, and `pause` to prevent dropped frames.
+- Reads intended velocities from player input and AI output.
+- Performs axis-separated sub-step movement (≤2px) against the tile shape catalogue in `constants.ts`.
+- Handles wall sliding, one-way ledges, slopes, knockback decay, and dash motion.
 
+### `systems/CombatSystem.ts`
 
-* Clean teardown in `destroy()` to prevent memory leaks across React remounts.
+- Evaluates player attack frames and directional hitboxes.
+- Queries `SpatialGrid` for valid targets.
+- Applies damage, invulnerability, knockback, death handling, and projectile collisions.
+- Manages the `swingHit` set so each attack hits each enemy once.
 
+### `systems/AISystem.ts`
 
+- See `AI_SYSTEM.md`.
+- Runs wraith, sentinel, adept, and boss state machines.
+- Emits projectiles, summons, and damage callbacks through `AIContext`.
 
+### `systems/GameFlowSystem.ts`
 
-
-#### 3. Movement & Collision System (`systems/MovementSystem.ts`)
-
-Extracts the continuous collision detection and sliding logic currently implemented as sub-stepped loops in `engine.ts`.
-
-* **Responsibilities:**
-* Translates directional intent into pixel movement based on delta time ($dt$).
-
-
-* Queries map tile solidity (`map.solid` and `wardTiles`) via `tileAtPx`.
-
-
-* Runs decoupled axis-separated checks (`moveX`, `moveY`) using fixed 2px micro-steps for smooth wall sliding.
-
-
-* Integrates velocity decay for player knockback (`kx`, `ky`) and enemy knockback (`vx`, `vy`).
-
-
-
-
-
-#### 4. Combat & Hitbox System (`systems/CombatSystem.ts`)
-
-Decouples attack box creation, hurt-boxes, and damage applications.
-
-* **Responsibilities:**
-* Evaluates attack frames, directional hitboxes (`attackBox`), and cooldowns.
-
-
-* Queries the `SpatialGrid` for valid targets within attack sectors.
-* Dispatches hit outcomes: applies damage numbers to floating text, triggers screen shake, applies invulnerability frames (`invuln`), and emits particle events.
-
-
-* Processes pickup collection (`shards`, `potions`) and unlocks the boss ward when criteria are met.
-
-
-
-
-
-#### 5. AI System (`systems/AISystem.ts`)
-
-Replaces the `switch(type)` blocks in `updateEnemy` and `updateBoss` with dedicated behavior handlers.
-
-* **Architecture:**
-* An interface `EnemyBehavior` declaring `update(enemy: Enemy, context: AIContext, dt: number): void`.
-* Specific implementations:
-* `WraithBehavior`: Melee pursuit, orbital wander, vertical bobbing.
-
-
-* `SentinelBehavior`: Aggressive pursuit with higher detection radius.
-
-
-* `AdeptBehavior`: Distance kiting, strafing, and projectile firing cooldowns.
-
-
-* `BossBehavior`: Phased state machine managing lunges, radial projectile barrages, and add summoning.
-
-
-
-
-
-
-
-#### 6. Object-Pooled Particle System (`systems/ParticleSystem.ts`)
-
-Eliminates GC pressure from `Array.push` and `Array.splice` operations on `particles`, `projectiles`, and `texts`.
-
-* **Pre-allocated Pools:** Fixed-size pools (e.g., 500 particles, 100 projectiles, 50 text labels).
-* **Recycling:** Active and dead index swapping avoids runtime memory allocations during heavy boss bursts or death explosions.
-
-
-
-#### 7. Camera & Lighting System (`systems/CameraSystem.ts`)
-
-Extracts viewport framing and screenshake calculation.
-
-* **Responsibilities:**
-* Viewport clamping against map pixel dimensions ($MAP\_W \times TILE$, $MAP\_H \times TILE$).
-
-
-* Smooth target tracking using exponential decay lerping.
-
-
-* Decaying screenshake offset generation (`lastShakeX`, `lastShakeY`).
-
-
-* Renders atmospheric lighting masks and objective indicators via canvas passes.
-
-
-
-
+- Builds `HudData` from world state.
+- Computes current objective text ("Find the next shard", "Return to Orithel", etc.).
+- Detects nearby interactables (NPC, signs, campfires) and returns prompt strings.
 
 ---
 
-### Orchestration Refactoring (`core/Game.ts`)
+## Orchestration in `engine.ts`
 
-The root `Game` class becomes an orchestrator that owns instances of each subsystem and executes a clean pipeline:
+`Game.update()` runs the pipeline in this order every fixed tick:
 
-```typescript
-export class Game {
-  private input: InputSystem;
-  private movement: MovementSystem;
-  private combat: CombatSystem;
-  private ai: AISystem;
-  private particles: ParticleSystem;
-  private camera: CameraSystem;
-  private grid: SpatialGrid;
-  private entities: EntityManager;
+1. `input.update()` — consume buffered actions.
+2. `ai.updateEnemy(...)` for each living enemy — set intended velocities and telegraphs.
+3. `movement.update()` — integrate player and enemy physics.
+4. `grid.clear()` + `grid.insert(...)` — rebuild spatial index.
+5. `combat.update()` — resolve attacks, projectiles, contact damage, deaths.
+6. `flow.update()` — objectives, prompts, HUD push.
+7. Camera follow + screenshake decay.
+8. Region-transition / death / checkpoint bookkeeping.
 
-  constructor(canvas: HTMLCanvasElement, callbacks: GameCallbacks) {
-    // Instantiates subsystems and dependencies
-  }
-
-  public update(dt: number): void {
-    // 1. Process buffered inputs
-    this.input.update();
-
-    // 2. Execute AI steering & attack intentions
-    this.ai.update(this.entities, dt);
-
-    // 3. Update player & enemy physics/movement
-    this.movement.update(this.entities, dt);
-
-    // 4. Update spatial index
-    this.grid.rebuild(this.entities.getAllCollidables());
-
-    // 5. Evaluate combat interactions, hitboxes, & projectiles
-    this.combat.update(this.entities, this.grid, dt);
-
-    // 6. Step particles and floating text
-    this.particles.update(dt);
-
-    // 7. Update camera tracking & shake
-    this.camera.update(this.entities.player, dt);
-
-    // 8. Resolve state triggers (dialogue, win/lose, HUD sync)
-    this.checkGameEvents();
-  }
-
-  public render(): void {
-    Renderer.draw({
-      ctx: this.ctx,
-      camera: this.camera,
-      map: this.map,
-      staticCanvas: this.staticCanvas,
-      entities: this.entities,
-      particles: this.particles,
-    });
-  }
-}
-
-```
+`Game.render()` delegates to `renderGame()` in `renderer.ts` with the current camera and world state.
 
 ---
 
-### Step-by-Step Migration Plan
+## Adding a new subsystem
 
-1. **Phase 1A: Pure Math & Spatial Extraction**
-* Move geometry, vector, and collision helpers into `src/game/math.ts` and build `core/SpatialGrid.ts`.
-* Unit test boundary edge cases in `SpatialGrid`.
+1. Create `src/game/systems/YourSystem.ts` with a clear responsibility.
+2. Add an instance field to `Game` in `engine.ts`.
+3. Instantiate it in `Game.init()` with any dependencies.
+4. Call it from `Game.update()` in the appropriate pipeline position.
+5. Add unit tests in `src/game/systems/YourSystem.test.ts`.
+6. Update this document.
 
+---
 
-2. **Phase 1B: State & Entity Struct Decomposition**
-* Create `entities/Player.ts` and `entities/Enemy.ts`.
-* Extract state definitions out of `engine.ts` into discrete interfaces.
+## What is deliberately still in `engine.ts`
 
+- Canvas context setup, DPR handling, resize logic.
+- Region loading / caching / transitions via `RegionRepository`.
+- Dialogue state machine and callback dispatch (`onHud`, `onDialogue`, `onPause`, `onEnd`, `onJournal`, `onInterior`).
+- Checkpoint respawn, death handling, and ending triggers.
+- Boss burst / summon helpers that are too specific to generalize cleanly.
+- Particle and floating-text arrays (these may move to a dedicated `ParticleSystem` later if needed).
 
-3. **Phase 1C: System Migration (Loop Isolation)**
-* Sequentially extract `InputSystem`, `CameraSystem`, and `ParticleSystem`.
-* Keep rendering routines functional by supplying data snapshots through `Renderer.draw()`.
-
-
-4. **Phase 1D: Physics & Combat Decoupling**
-* Extract `MovementSystem` and verify wall sliding against `map.ts` geometry.
-
-
-* Extract `CombatSystem` and `AISystem`, replacing internal direct mutations with event dispatches.
-
-
-5. **Phase 1E: Single-File Bundle Verification**
-* Run `npm run build` to ensure `vite-plugin-singlefile` bundles the modular imports into `dist/index.html` without tree-shaking regressions or circular dependency overhead.
+The goal is not zero lines in `engine.ts`; the goal is that `engine.ts` is only an orchestrator and
+contains no duplicated physics, AI, or combat rules.
