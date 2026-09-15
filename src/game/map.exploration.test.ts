@@ -129,7 +129,7 @@ describe("authored settlements", () => {
 
     const town = map.towns[0];
     expect(town.id).toBe("ilyarael-township");
-    expect(town.npcs.map((npc) => npc.role).sort()).toEqual(["healer", "lore"]);
+    expect(town.npcs.map((npc) => npc.role).sort()).toEqual(["healer", "lore", "scout"]);
     expect(town.safeRadius).toBeGreaterThan(0);
     expect(town.sign).toBeDefined();
 
@@ -182,7 +182,7 @@ describe("authored settlements", () => {
       expect(map.towns).toHaveLength(1);
       const town = map.towns[0];
       expect(town.id).toBe(townId);
-      expect(town.npcs.map((npc) => npc.role).sort()).toEqual(["healer", "lore"]);
+      expect(town.npcs.map((npc) => npc.role).sort()).toEqual(["healer", "lore", "scout"]);
       expect(town.safeRadius).toBeGreaterThan(0);
       expect(town.sign).toBeDefined();
 
@@ -208,6 +208,15 @@ describe("authored settlements", () => {
       expect(canWalk(map, sign.x, sign.y)).toBe(true);
       expect(map.signs.some((entry) => entry.x === sign.x && entry.y === sign.y)).toBe(true);
     }
+  });
+
+  it("gives every townsperson a unique, art-ready portrait placeholder", () => {
+    const maps = ["overworld", "cinderwild", "moonlit-coast", "starfall-moors"].map(generateMap);
+    const npcs = maps.flatMap((map) => map.towns.flatMap((town) => town.npcs));
+
+    expect(npcs).toHaveLength(12);
+    expect(npcs.every((npc) => npc.portrait?.id && npc.portrait.description.length > 30)).toBe(true);
+    expect(new Set(npcs.map((npc) => npc.portrait?.id)).size).toBe(12);
   });
 
   it("keeps frontier towns separate from wilderness patrols", () => {

@@ -1,7 +1,7 @@
 import { TILE, T, tileDefinition } from "../constants";
 import { rr, dot, hash2, DIRV, DIRA } from "../math";
 import type { EnemyState, ItemState, PlayerState, ProjectileState } from "../core/WorldState";
-import type { MapData } from "../types";
+import type { MapData, NpcData } from "../types";
 import { getAtlasRevision, loadAtlas, preloadAtlases, type SpriteAtlas } from "./spriteAtlas";
 
 export const TILE_SPRITE_KEY: Record<number, string> = {
@@ -829,7 +829,7 @@ function drawSortedWorldObjects(g: RenderState, ctx: CanvasRenderingContext2D) {
   for (const fire of g.map.campfires) objects.push({ y: fire.y, draw: () => drawCampfire(g, ctx, fire.x, fire.y) });
   for (const town of g.map.towns) {
     for (const npc of town.npcs) {
-      objects.push({ y: npc.y, draw: () => drawNpc(ctx, npc.x, npc.y, npc.color) });
+      objects.push({ y: npc.y, draw: () => drawNpc(ctx, npc.x, npc.y, npc.color, npc.role) });
     }
   }
   if (g.map.npc.x > 0 && g.map.npc.y > 0) {
@@ -881,7 +881,7 @@ function drawCampfire(g: RenderState, ctx: CanvasRenderingContext2D, x: number, 
 }
 
 
-function drawNpc(ctx: CanvasRenderingContext2D, x: number, y: number, color: string) {
+function drawNpc(ctx: CanvasRenderingContext2D, x: number, y: number, color: string, role?: NpcData["role"]) {
   const ix = Math.round(x);
   const iy = Math.round(y);
   ctx.save();
@@ -904,6 +904,29 @@ function drawNpc(ctx: CanvasRenderingContext2D, x: number, y: number, color: str
   ctx.beginPath();
   ctx.arc(0, -16, 5, 0, Math.PI * 2);
   ctx.fill();
+  // The small world figures mirror the practical role shown in dialogue:
+  // a readable silhouette now, portrait-specific art later.
+  ctx.strokeStyle = "rgba(255,240,205,0.72)";
+  ctx.fillStyle = "rgba(255,240,205,0.72)";
+  ctx.lineWidth = 1.5;
+  if (role === "lore") {
+    ctx.fillRect(5, -4, 5, 7); // tucked ledger
+    ctx.strokeRect(5, -4, 5, 7);
+  } else if (role === "healer") {
+    ctx.beginPath();
+    ctx.arc(7, 1, 3, 0, Math.PI * 2); // medicine vial
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(7, -5); ctx.lineTo(7, -2);
+    ctx.stroke();
+  } else if (role === "scout") {
+    ctx.beginPath();
+    ctx.moveTo(-8, 9); ctx.lineTo(8, -8); // route staff
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-5, -3); ctx.lineTo(4, -8);
+    ctx.stroke();
+  }
   ctx.restore();
 }
 

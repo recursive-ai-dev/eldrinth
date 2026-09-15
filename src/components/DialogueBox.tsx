@@ -15,15 +15,36 @@ export default function DialogueBox({
       onClick={data.choices ? undefined : onAdvance}
     >
       <div className="w-[min(820px,94vw)] rounded-xl border border-amber-200/20 bg-linear-to-b from-[#15131c]/95 to-[#0a0810]/95 p-5 shadow-2xl backdrop-blur-md">
-        <div
-          className="font-title mb-2 text-sm uppercase tracking-[0.3em]"
-          style={{ color: data.color }}
-        >
-          {data.speaker}
+        <div className="flex gap-4">
+          {data.portrait && (
+            <div
+              data-portrait-id={data.portrait.id}
+              title={data.portrait.description}
+              className="flex h-32 w-24 shrink-0 flex-col justify-between rounded-lg border border-dashed border-amber-200/35 bg-black/30 p-2 text-center sm:w-32"
+              aria-label={`Portrait placeholder for ${data.speaker}: ${data.portrait.description}`}
+            >
+              <span className="font-title text-[9px] tracking-[0.16em] text-amber-100/50">PORTRAIT</span>
+              <span className="font-title text-[10px] leading-tight tracking-wider text-amber-100/70">ART SLOT</span>
+              <span className="font-title text-[8px] tracking-widest text-teal-200/55">{data.portrait.id}</span>
+            </div>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <div
+                className="font-title text-sm uppercase tracking-[0.3em]"
+                style={{ color: data.color }}
+              >
+                {data.speaker}
+              </div>
+              {data.roleLabel && (
+                <span className="font-title text-[9px] tracking-[0.16em] text-amber-100/45">{data.roleLabel}</span>
+              )}
+            </div>
+            <p className="min-h-[3.5rem] font-serif text-lg leading-relaxed text-amber-50/90">
+              {data.text}
+            </p>
+          </div>
         </div>
-        <p className="min-h-[3.5rem] font-serif text-lg leading-relaxed text-amber-50/90">
-          {data.text}
-        </p>
         {data.choices && (
           <div className="mt-4 grid gap-2">
             {data.choices.map((choice, index) => (

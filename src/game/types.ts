@@ -35,6 +35,17 @@ export interface JournalEntry {
   resolved?: boolean;
 }
 
+/**
+ * A stable art brief for a conversation portrait. `id` is deliberately kept
+ * separate from a file path: portrait art can be dropped in later without
+ * changing narrative or save data.
+ */
+export interface NpcPortrait {
+  id: string;
+  /** Locked appearance direction for the reserved frame and portrait handoff. */
+  description: string;
+}
+
 /** A marked road at a region boundary. Coordinates are in tiles. */
 export interface RegionExit {
   x: number;
@@ -62,6 +73,8 @@ export interface NpcData {
   color: string;
   /** Functional role — drives which interaction branch in the engine handles this NPC. */
   role: "healer" | "scout" | "merchant" | "lore";
+  /** Locked visual identity and reserved conversation-portrait slot. */
+  portrait?: NpcPortrait;
 }
 
 export interface TownData {
@@ -126,6 +139,10 @@ export interface DialogueData {
   total: number;
   color: string;
   choices?: { id: string; label: string }[];
+  /** Present for named NPC conversations until final portrait art is supplied. */
+  portrait?: NpcPortrait;
+  /** Makes an NPC's practical role clear at a glance in the dialogue panel. */
+  roleLabel?: string;
 }
 
 export interface GameCallbacks {

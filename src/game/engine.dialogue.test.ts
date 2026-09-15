@@ -78,7 +78,7 @@ describe("town NPC dialogue and lore system", () => {
     const bursts: any[] = [];
     const ctx = {
       usedTownServices: usedServices,
-      world: { journal },
+      world: { journal, quests: { facts: [], resolutions: {} } },
       player: { hp: 10, maxHp: 18 },
       shards: 0,
       publishJournal() {},
@@ -89,6 +89,9 @@ describe("town NPC dialogue and lore system", () => {
         bursts.push({ x, y, color, count });
       },
       townLoreEntry: (Game.prototype as any).townLoreEntry,
+      townScoutEntry: (Game.prototype as any).townScoutEntry,
+      scoutQuestId: (Game.prototype as any).scoutQuestId,
+      openNpcDialogue: (Game.prototype as any).openNpcDialogue,
     };
     return { ctx, journal, usedServices, dialogueEvents, bursts };
   }
@@ -147,6 +150,18 @@ describe("town NPC dialogue and lore system", () => {
     expect(dialogueEvents).toHaveLength(2);
     expect((dialogueEvents[1] as any).lines[0]).toContain("carrying one of them");
   });
+
+  it("gives scouts a journal route and starts their associated side quest", () => {
+    const { ctx, journal, dialogueEvents } = makeNpcHarness();
+    const npc = { id: "town:cinderwild:outrunner", name: "Elodie the Outrunner", color: "#e0b084", role: "scout" as const, x: 100, y: 100 };
+
+    (Game.prototype as any).speakWithTownNpc.call(ctx, npc);
+
+    expect(ctx.world.quests.facts).toContain("lead:courier");
+    expect(journal[0]?.id).toBe("town:cinderwild:outrunner");
+    expect(dialogueEvents[0] as any).toMatchObject({ speaker: npc.name, color: npc.color });
+    expect((dialogueEvents[0] as any).lines[1]).toContain("The Courier Who Never Came");
+  });
 });
 
 describe("shard intake recording in fortresses", () => {
@@ -169,5 +184,4 @@ describe("shard intake recording in fortresses", () => {
     expect(journal.find((entry) => entry.id === "intake:vaelen")?.title).toContain("Archivist Vaelen");
   });
 });
-
 

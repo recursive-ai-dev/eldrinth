@@ -38,4 +38,14 @@ describe("quest progress", () => {
     const release: QuestProgress = { facts: ["courier-orders", "courier-memory"], resolutions: {} };
     expect(resolveQuest(release, "courier", "release")?.reward).toEqual({ stat: "health", amount: 2 });
   });
+
+  it("resolves the pilgrim investigation only after both identity records are found", () => {
+    const progress: QuestProgress = { facts: ["lead:pilgrim", "pilgrim-ledger"], resolutions: {} };
+    const quest = QUESTS.find((entry) => entry.id === "pilgrim");
+    if (!quest) throw new Error("Missing pilgrim quest");
+
+    expect(canResolve(progress, quest)).toBe(false);
+    learnFact(progress, "pilgrim-reflection");
+    expect(resolveQuest(progress, "pilgrim", "name")?.reward).toEqual({ stat: "stamina", amount: 10 });
+  });
 });
