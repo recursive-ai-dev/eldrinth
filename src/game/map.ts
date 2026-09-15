@@ -1,5 +1,5 @@
 import { MAP_W, MAP_H, TILE, T } from "./constants";
-import type { MapData, Vec, EnemySpawn, SignData, RegionExit, CampfireData, TownData, NpcData } from "./types";
+import type { MapData, Vec, EnemySpawn, SignData, RegionExit, CampfireData, TownData, TownBuildingData, NpcData } from "./types";
 import { parseFortressLayout } from "./fortress";
 import { FORTRESS_LAYOUTS } from "./fortressLayouts";
 
@@ -60,55 +60,86 @@ function townNpc(
   return { id, name, color, role, portrait: { id: portraitId, description: portraitDescription } };
 }
 
-/** Hand-authored settlement layouts. Glyphs: # wall, . floor, D door, H house block, N NPC spot. */
-const TOWN_LAYOUTS: Record<string, string[]> = {
+/** The same residents are used by the exterior town directory and their interiors. */
+const TOWN_RESIDENTS = {
   "ilyarael-township": [
-    "####################",
-    "#..................#",
-    "#..HH...N.....HH...#",
-    "#..HH.........HH...#",
-    "#..................#",
-    "#.......##.........#",
-    "D.......##....N....#",
-    "#...........N......#",
-    "#..................#",
-    "####################",
+    townNpc("town:ilyarael:scrivener", "Scribe Althea", "#c9a86c", "lore", "scribe-althea", "A sharp-eyed archivist in an ochre hood, with silver hair pinned by a quill and ink-dark fingertips; a cracked ledger held close to her chest."),
+    townNpc("town:ilyarael:healer", "Hollow Sister Mirene", "#8fcca8", "healer", "sister-mirene", "A solemn woman in a sea-green veil, her hands wrapped in linen and faintly lit from within; black-glass prayer beads at her throat."),
+    townNpc("town:ilyarael:smith", "Barris the Smith", "#d4a373", "scout", "barris-the-smith", "A broad, scarred scavenger in a soot-stiff leather apron, with a cropped iron-grey beard, a broken sword over one shoulder, and a smith's hammer at his belt."),
   ],
   "cinder-haven": [
-    "####################",
-    "#..................#",
-    "#..HH...N.....HH...#",
-    "#..HH.........HH...#",
-    "#..................#",
-    "D.......##.........#",
-    "#.......##....N....#",
-    "#...........N......#",
-    "#..................#",
-    "####################",
+    townNpc("town:cinderwild:kilnmaster", "Kiln-Master Vance", "#ff8c52", "lore", "kiln-master-vance", "An elderly kiln tender with a copper half-mask, ember-orange goggles, and a charcoal cloak dusted in pale ash; he carries a tally hook like a cane."),
+    townNpc("town:cinderwild:healer", "Cinder-Nurse Greta", "#f0a882", "healer", "cinder-nurse-greta", "A practical nurse with cropped dark curls beneath a singed linen cap, a rust-red coat, and sulfur-stained gloves; a blue glass water flask at her hip."),
+    townNpc("town:cinderwild:outrunner", "Elodie the Outrunner", "#e0b084", "scout", "elodie-outrunner", "A wiry young outrunner in an ash-grey scarf and patched red climbing coat, with one shaved temple, a charcoal map case, and a hooked ravine staff."),
   ],
   "oarsmans-bight": [
-    "####################",
-    "#..................#",
-    "#..HH.........HH...#",
-    "#..HH...N.....HH...#",
-    "#..................#",
-    "D.......##.........#",
-    "#.......##....N....#",
-    "#...........N......#",
-    "#..................#",
-    "####################",
+    townNpc("town:moonlit:dredger", "Mistress Morveth", "#7ec4cf", "lore", "mistress-morveth", "An older dredger in an oilskin mantle the colour of storm water, with braided white hair, brass dive goggles, and name-tags sewn into every sleeve."),
+    townNpc("town:moonlit:healer", "Sister Lyra of the Brine", "#9fe6d9", "healer", "sister-lyra", "A calm healer in layered kelp-green robes, with a shaved head, pearl ear cuffs, and a satchel of glass salve jars glowing through wet netting."),
+    townNpc("town:moonlit:blind-oar", "Kieran the Blind Oar", "#a2c8e0", "scout", "kieran-blind-oar", "A weathered ferryman in a salt-bleached blue coat, eyes clouded by glare, with a long carved oar used as a walking staff and a rope coil across his chest."),
   ],
   "crater-watch": [
-    "####################",
-    "#..................#",
-    "#..HH...N.....HH...#",
-    "#..HH.........HH...#",
-    "#..................#",
-    "D.......##.........#",
-    "#.......##....N....#",
-    "#...........N......#",
-    "#..................#",
-    "####################",
+    townNpc("town:starfall:stargazer", "Reeve Toran", "#d6b4fc", "lore", "reeve-toran", "A gaunt stargazer in a violet wool mantle, with a brass monocle cracked across one eye, wind-tossed black hair, and a telescope lens cradled under one arm."),
+    townNpc("town:starfall:healer", "Hermit Cassian", "#b39ddb", "healer", "hermit-cassian", "A soft-spoken hermit in a plum-coloured hooded coat, with a close silver beard, moss tucked into his sleeves, and a meteorite bowl of glowing spring water."),
+    townNpc("town:starfall:drift-child", "Mina the Drift-Child", "#e2d0ff", "scout", "mina-drift-child", "A slight child in an oversized charcoal cloak sewn with meteor-glass beads, with pale braided hair, ink-dark eyes, and a tuning fork hanging from a cord."),
+  ],
+} satisfies Record<string, Omit<NpcData, "x" | "y">[]>;
+
+const TOWN_PLACEMENTS = {
+  "ilyarael-township": { regionId: "overworld", x: 68, y: 92 },
+  "cinder-haven": { regionId: "cinderwild", x: 50, y: 70 },
+  "oarsmans-bight": { regionId: "moonlit-coast", x: 86, y: 72 },
+  "crater-watch": { regionId: "starfall-moors", x: 74, y: 72 },
+} as const;
+
+/** Hand-authored settlement layouts. A, B, and C are enterable building doors. */
+const TOWN_LAYOUTS: Record<string, string[]> = {
+  "ilyarael-township": [
+    "#######################",
+    "#.....................#",
+    "#..HHH...HHH...HHH....#",
+    "#..H.H...H.H...H.H....#",
+    "#..HAH...HBH...HCH....#",
+    "#.....................#",
+    "#.......##............#",
+    "D.......##............#",
+    "#.....................#",
+    "#######################",
+  ],
+  "cinder-haven": [
+    "#######################",
+    "#.....................#",
+    "#..HHH...HHH...HHH....#",
+    "#..H.H...H.H...H.H....#",
+    "#..HAH...HBH...HCH....#",
+    "#.....................#",
+    "D.......##............#",
+    "#.......##............#",
+    "#.....................#",
+    "#######################",
+  ],
+  "oarsmans-bight": [
+    "#######################",
+    "#.....................#",
+    "#..HHH...HHH...HHH....#",
+    "#..H.H...H.H...H.H....#",
+    "#..HAH...HBH...HCH....#",
+    "#.....................#",
+    "D.......##............#",
+    "#.......##............#",
+    "#.....................#",
+    "#######################",
+  ],
+  "crater-watch": [
+    "#######################",
+    "#.....................#",
+    "#..HHH...HHH...HHH....#",
+    "#..H.H...H.H...H.H....#",
+    "#..HAH...HBH...HCH....#",
+    "#.....................#",
+    "D.......##............#",
+    "#.......##............#",
+    "#.....................#",
+    "#######################",
   ],
 };
 
@@ -116,7 +147,7 @@ interface ParsedTown {
   width: number;
   height: number;
   door: Vec;
-  npcSpots: Vec[];
+  buildingDoors: { glyph: "A" | "B" | "C"; x: number; y: number }[];
 }
 
 function parseTownLayout(id: string, rows: string[]): ParsedTown {
@@ -127,17 +158,18 @@ function parseTownLayout(id: string, rows: string[]): ParsedTown {
     if (row.length !== width) throw new Error(`Town row ${y} has width ${row.length}, expected ${width} in ${id}`);
   }
   const door: Vec[] = [];
-  const npcSpots: Vec[] = [];
+  const buildingDoors: ParsedTown["buildingDoors"] = [];
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const glyph = rows[y][x];
-      if (!"#HDN.".includes(glyph)) throw new Error(`Unknown town glyph "${glyph}" at ${x},${y} in ${id}`);
+      if (!"#HDABC.".includes(glyph)) throw new Error(`Unknown town glyph "${glyph}" at ${x},${y} in ${id}`);
       if (glyph === "D") door.push({ x, y });
-      if (glyph === "N") npcSpots.push({ x, y });
+      if (glyph === "A" || glyph === "B" || glyph === "C") buildingDoors.push({ glyph, x, y });
     }
   }
   if (door.length !== 1) throw new Error(`Town ${id} needs exactly one door, found ${door.length}`);
-  return { width, height, door: door[0], npcSpots };
+  if (buildingDoors.length !== 3) throw new Error(`Town ${id} needs exactly three building doors, found ${buildingDoors.length}`);
+  return { width, height, door: door[0], buildingDoors };
 }
 
 /** Stamp a town onto the tile grid and return its metadata for MapData.towns. */
@@ -157,7 +189,7 @@ function stampTown(
       if (!inB(tx, ty)) continue;
       const i = idx(tx, ty);
       if (glyph === "#" || glyph === "H") tiles[i] = T.RWALL;
-      else if (glyph === "." || glyph === "D" || glyph === "N") tiles[i] = T.RFLOOR;
+      else if (glyph === "." || glyph === "D" || glyph === "A" || glyph === "B" || glyph === "C") tiles[i] = T.RFLOOR;
     }
   }
   const centerX = worldX + layout.width / 2;
@@ -169,11 +201,21 @@ function stampTown(
   // The sign sits one tile inward from the door so it is always on walkable floor.
   const inwardX = layout.door.x === 0 ? 1 : layout.door.x === layout.width - 1 ? -1 : 0;
   const inwardY = layout.door.y === 0 ? 1 : layout.door.y === layout.height - 1 ? -1 : 0;
-  const townNpcs = layout.npcSpots.map((spot, index) => {
-    const npc = npcs[index];
-    if (!npc) throw new Error(`Town ${townId} has an NPC spot without a matching NPC definition.`);
-    return { ...npc, x: px(worldX + spot.x), y: px(worldY + spot.y) };
-  });
+  const buildings: TownBuildingData[] = layout.buildingDoors
+    .sort((a, b) => a.glyph.localeCompare(b.glyph))
+    .map((door, index) => {
+      const resident = npcs[index];
+      if (!resident) throw new Error(`Town ${townId} has a building without a matching resident.`);
+      const suffix = door.glyph.toLowerCase();
+      return {
+        id: `${townId}-${suffix}`,
+        name: townBuildingName(townId, index),
+        x: worldX + door.x,
+        y: worldY + door.y,
+        interiorId: `interior.${townId}.${suffix}`,
+        resident,
+      };
+    });
   const name = townId
     .split("-")
     .map((word) => word[0].toUpperCase() + word.slice(1))
@@ -184,7 +226,7 @@ function stampTown(
     x: px(centerX),
     y: px(centerY),
     safeRadius,
-    npcs: townNpcs,
+    buildings,
     sign: {
       x: doorWorldX + inwardX,
       y: doorWorldY + inwardY,
@@ -192,6 +234,175 @@ function stampTown(
       text: "No enemies pursue past the threshold. Rest, speak, and read the road before you go.",
     },
   };
+}
+
+const TOWN_BUILDING_NAMES: Record<string, [string, string, string]> = {
+  "ilyarael-township": ["Althea's Ledger Room", "The Hollow Sister's Cell", "Barris's Salvage Shop"],
+  "cinder-haven": ["Vance's Kiln Office", "Greta's Cooling Room", "Elodie's Route House"],
+  "oarsmans-bight": ["Morveth's Name Loft", "Lyra's Brine Room", "Kieran's Oar Shed"],
+  "crater-watch": ["Toran's Lens Room", "Cassian's Spring Cellar", "Mina's Listening Tent"],
+};
+
+function townBuildingName(townId: string, index: number): string {
+  const names = TOWN_BUILDING_NAMES[townId];
+  if (!names?.[index]) throw new Error(`Town ${townId} needs a name for building ${index}.`);
+  return names[index];
+}
+
+interface TownInteriorDefinition {
+  townId: keyof typeof TOWN_RESIDENTS;
+  residentIndex: 0 | 1 | 2;
+  name: string;
+  /** # wall, . floor, D door, N resident, L lamp, = inlaid floor, ~ sand. */
+  layout: string[];
+}
+
+/**
+ * Every occupied building has its own small, authored room plan. These stay
+ * intentionally compact: entering a town gives the player a place to pause,
+ * converse, and read the character of the settlement without another trek.
+ */
+const TOWN_INTERIORS: Record<string, TownInteriorDefinition> = {
+  "interior.ilyarael-township.a": {
+    townId: "ilyarael-township", residentIndex: 0, name: "Althea's Ledger Room",
+    layout: ["###########", "#..=......#", "#.###.L...#", "#...#.....#", "#.N.#.###.#", "#...#.....#", "#...###...#", "#.........#", "#####D#####"],
+  },
+  "interior.ilyarael-township.b": {
+    townId: "ilyarael-township", residentIndex: 1, name: "The Hollow Sister's Cell",
+    layout: ["###########", "#....L....#", "#.#######.#", "#.#.....#.#", "#.#.N...#.#", "#.#.....#.#", "#.###.###.#", "#.........#", "#####D#####"],
+  },
+  "interior.ilyarael-township.c": {
+    townId: "ilyarael-township", residentIndex: 2, name: "Barris's Salvage Shop",
+    layout: ["###########", "#.........#", "#.###.###.#", "#...#...#.#", "#.N.#.L.#.#", "#...#...#.#", "#.#######.#", "#.........#", "#####D#####"],
+  },
+  "interior.cinder-haven.a": {
+    townId: "cinder-haven", residentIndex: 0, name: "Vance's Kiln Office",
+    layout: ["###########", "#...L.....#", "#.#####...#", "#.#...#...#", "#.#.N...=.#", "#.#...#...#", "#.#####...#", "#.........#", "#####D#####"],
+  },
+  "interior.cinder-haven.b": {
+    townId: "cinder-haven", residentIndex: 1, name: "Greta's Cooling Room",
+    layout: ["###########", "#....L....#", "#.##...##.#", "#.#.....#.#", "#...N.....#", "#.#.....#.#", "#.##...##.#", "#.........#", "#####D#####"],
+  },
+  "interior.cinder-haven.c": {
+    townId: "cinder-haven", residentIndex: 2, name: "Elodie's Route House",
+    layout: ["###########", "#.........#", "#.L.###...#", "#...#.....#", "#.###.N##.#", "#.....#...#", "#...###...#", "#.........#", "#####D#####"],
+  },
+  "interior.oarsmans-bight.a": {
+    townId: "oarsmans-bight", residentIndex: 0, name: "Morveth's Name Loft",
+    layout: ["###########", "#...L.....#", "#.~~~~~...#", "#.~...~...#", "#.~.N.~.=.#", "#.~...~...#", "#.~~~~~...#", "#.........#", "#####D#####"],
+  },
+  "interior.oarsmans-bight.b": {
+    townId: "oarsmans-bight", residentIndex: 1, name: "Lyra's Brine Room",
+    layout: ["###########", "#....L....#", "#.##...##.#", "#...~.....#", "#.N.~~~...#", "#.....~...#", "#.##...##.#", "#.........#", "#####D#####"],
+  },
+  "interior.oarsmans-bight.c": {
+    townId: "oarsmans-bight", residentIndex: 2, name: "Kieran's Oar Shed",
+    layout: ["###########", "#.........#", "#.###.###.#", "#...#.....#", "#.=.#.N.L.#", "#...#.....#", "#.###.###.#", "#.........#", "#####D#####"],
+  },
+  "interior.crater-watch.a": {
+    townId: "crater-watch", residentIndex: 0, name: "Toran's Lens Room",
+    layout: ["###########", "#....L....#", "#.###.###.#", "#.#.....#.#", "#.#.N.=.#.#", "#.#.....#.#", "#.###.###.#", "#.........#", "#####D#####"],
+  },
+  "interior.crater-watch.b": {
+    townId: "crater-watch", residentIndex: 1, name: "Cassian's Spring Cellar",
+    layout: ["###########", "#.........#", "#.~~~~~...#", "#.~...~...#", "#.~~~.~.N.#", "#.....~...#", "#.#####...#", "#....L....#", "#####D#####"],
+  },
+  "interior.crater-watch.c": {
+    townId: "crater-watch", residentIndex: 2, name: "Mina's Listening Tent",
+    layout: ["###########", "#....L....#", "#.=.....=.#", "#...###...#", "#.N.#.#...#", "#...###...#", "#.=.....=.#", "#.........#", "#####D#####"],
+  },
+};
+
+interface ParsedTownInterior {
+  width: number;
+  height: number;
+  door: Vec;
+  npc: Vec;
+  lights: Vec[];
+  tiles: Uint8Array;
+}
+
+function parseTownInterior(id: string, rows: string[]): ParsedTownInterior {
+  if (rows.length === 0) throw new Error(`Interior ${id} needs at least one row.`);
+  const width = rows[0].length;
+  const tiles = new Uint8Array(width * rows.length);
+  const doors: Vec[] = [];
+  const npcs: Vec[] = [];
+  const lights: Vec[] = [];
+  for (const [y, row] of rows.entries()) {
+    if (row.length !== width) throw new Error(`Interior row ${y} has width ${row.length}, expected ${width} in ${id}`);
+    for (let x = 0; x < width; x++) {
+      const glyph = row[x];
+      if (!"#.DNL=~".includes(glyph)) throw new Error(`Unknown interior glyph "${glyph}" at ${x},${y} in ${id}`);
+      tiles[y * width + x] = glyph === "#" ? T.RWALL : glyph === "=" ? T.SPIREFLOOR : glyph === "~" ? T.SAND : glyph === "L" ? T.CRYSTAL : T.RFLOOR;
+      if (glyph === "D") doors.push({ x, y });
+      if (glyph === "N") npcs.push({ x, y });
+      if (glyph === "L") lights.push({ x: px(x), y: px(y) });
+    }
+  }
+  if (doors.length !== 1 || npcs.length !== 1) throw new Error(`Interior ${id} needs exactly one door and resident.`);
+  return { width, height: rows.length, door: doors[0], npc: npcs[0], lights, tiles };
+}
+
+function townInteriorSpawn(interiorId: string): Vec {
+  const definition = TOWN_INTERIORS[interiorId];
+  if (!definition) throw new Error(`Unknown town interior: ${interiorId}`);
+  const { door } = parseTownInterior(interiorId, definition.layout);
+  return { x: px(door.x), y: px(door.y - 1) };
+}
+
+function townBuildingExits(towns: TownData[]): RegionExit[] {
+  return towns.flatMap((town) => town.buildings.map((building) => ({
+    x: building.x,
+    y: building.y,
+    targetRegion: building.interiorId,
+    destination: townInteriorSpawn(building.interiorId),
+    label: building.name,
+    requiresInteraction: true,
+  })));
+}
+
+function generateTownInteriorMap(regionId: string): MapData {
+  const definition = TOWN_INTERIORS[regionId];
+  if (!definition) throw new Error(`Unknown town interior: ${regionId}`);
+  const layout = parseTownInterior(regionId, definition.layout);
+  const resident = TOWN_RESIDENTS[definition.townId][definition.residentIndex];
+  const placement = TOWN_PLACEMENTS[definition.townId];
+  const exterior = parseTownLayout(definition.townId, TOWN_LAYOUTS[definition.townId]);
+  const suffix = regionId.slice(-1).toUpperCase() as "A" | "B" | "C";
+  const exteriorDoor = exterior.buildingDoors.find((door) => door.glyph === suffix);
+  if (!exteriorDoor) throw new Error(`No exterior door for ${regionId}`);
+  return {
+    regionName: definition.name,
+    width: layout.width,
+    height: layout.height,
+    tiles: layout.tiles,
+    wardTiles: [],
+    spawn: townInteriorSpawn(regionId),
+    npcs: [{ ...resident, x: px(layout.npc.x), y: px(layout.npc.y) }],
+    npc: { x: -9999, y: -9999 },
+    signs: [],
+    shards: [],
+    enemySpawns: [],
+    bossCenter: { x: -9999, y: -9999 },
+    exits: [{
+      x: layout.door.x,
+      y: layout.door.y,
+      targetRegion: placement.regionId,
+      destination: { x: px(placement.x + exteriorDoor.x), y: px(placement.y + exteriorDoor.y + 1) },
+      label: definition.townId.split("-").map((word) => word[0].toUpperCase() + word.slice(1)).join(" "),
+      requiresInteraction: true,
+    }],
+    campfires: [],
+    towns: [],
+    dark: true,
+    resetOnDeath: false,
+    lights: layout.lights,
+  };
+}
+
+export function isInteriorRegion(regionId: string): boolean {
+  return regionId.startsWith("fortress.") || regionId.startsWith("interior.");
 }
 
 // Smooth value-noise for organic patches of terrain.
@@ -347,6 +558,7 @@ export function isInsideTownSafeZone(map: MapData, x: number, y: number): boolea
 
 export function generateMap(regionId = "overworld"): MapData {
   if (regionId.startsWith("fortress.")) return generateFortressMap(regionId);
+  if (regionId.startsWith("interior.")) return generateTownInteriorMap(regionId);
   if (regionId !== "overworld") return generateFrontierMap(regionId);
   const rng = mulberry32(0x9e3779b1);
   const tiles = new Uint8Array(MAP_W * MAP_H);
@@ -496,11 +708,7 @@ export function generateMap(regionId = "overworld"): MapData {
 
   // ----- Ilyarael Township: a safe settlement on the southern road -----
   const towns: TownData[] = [
-    stampTown(tiles, "ilyarael-township", 68, 92, [
-      townNpc("town:ilyarael:scrivener", "Scribe Althea", "#c9a86c", "lore", "scribe-althea", "A sharp-eyed archivist in an ochre hood, with silver hair pinned by a quill and ink-dark fingertips; a cracked ledger held close to her chest."),
-      townNpc("town:ilyarael:healer", "Hollow Sister Mirene", "#8fcca8", "healer", "sister-mirene", "A solemn woman in a sea-green veil, her hands wrapped in linen and faintly lit from within; black-glass prayer beads at her throat."),
-      townNpc("town:ilyarael:smith", "Barris the Smith", "#d4a373", "scout", "barris-the-smith", "A broad, scarred scavenger in a soot-stiff leather apron, with a cropped iron-grey beard, a broken sword over one shoulder, and a smith's hammer at his belt."),
-    ]),
+    stampTown(tiles, "ilyarael-township", TOWN_PLACEMENTS["ilyarael-township"].x, TOWN_PLACEMENTS["ilyarael-township"].y, TOWN_RESIDENTS["ilyarael-township"]),
   ];
 
   // Spur road from the southern ash highway to the township door
@@ -686,12 +894,13 @@ export function generateMap(regionId = "overworld"): MapData {
     tiles,
     wardTiles,
     spawn: { x: px(14), y: px(42) },
+    npcs: [],
     npc: { x: px(56), y: px(74) },
     signs,
     shards,
     enemySpawns,
     bossCenter: { x: px(trueSpireX), y: px(trueSpireY) },
-    exits,
+    exits: [...exits, ...townBuildingExits(towns)],
     campfires: [{ x: px(56), y: px(60), name: "Ilyarael's Last Ember", relic: "emberheart" }],
     dark: false,
     resetOnDeath: false,
@@ -747,13 +956,9 @@ function generateFrontierMap(regionId: string): MapData {
       ],
       townConfig: {
         id: "cinder-haven",
-        x: 50,
-        y: 70,
-        npcs: [
-          townNpc("town:cinderwild:kilnmaster", "Kiln-Master Vance", "#ff8c52", "lore", "kiln-master-vance", "An elderly kiln tender with a copper half-mask, ember-orange goggles, and a charcoal cloak dusted in pale ash; he carries a tally hook like a cane."),
-          townNpc("town:cinderwild:healer", "Cinder-Nurse Greta", "#f0a882", "healer", "cinder-nurse-greta", "A practical nurse with cropped dark curls beneath a singed linen cap, a rust-red coat, and sulfur-stained gloves; a blue glass water flask at her hip."),
-          townNpc("town:cinderwild:outrunner", "Elodie the Outrunner", "#e0b084", "scout", "elodie-outrunner", "A wiry young outrunner in an ash-grey scarf and patched red climbing coat, with one shaved temple, a charcoal map case, and a hooked ravine staff."),
-        ],
+        x: TOWN_PLACEMENTS["cinder-haven"].x,
+        y: TOWN_PLACEMENTS["cinder-haven"].y,
+        npcs: TOWN_RESIDENTS["cinder-haven"],
         spurRoad: [
           [80, 56, 50, 56],
           [50, 56, 50, 75],
@@ -786,13 +991,9 @@ function generateFrontierMap(regionId: string): MapData {
       ],
       townConfig: {
         id: "oarsmans-bight",
-        x: 86,
-        y: 72,
-        npcs: [
-          townNpc("town:moonlit:dredger", "Mistress Morveth", "#7ec4cf", "lore", "mistress-morveth", "An older dredger in an oilskin mantle the colour of storm water, with braided white hair, brass dive goggles, and name-tags sewn into every sleeve."),
-          townNpc("town:moonlit:healer", "Sister Lyra of the Brine", "#9fe6d9", "healer", "sister-lyra", "A calm healer in layered kelp-green robes, with a shaved head, pearl ear cuffs, and a satchel of glass salve jars glowing through wet netting."),
-          townNpc("town:moonlit:blind-oar", "Kieran the Blind Oar", "#a2c8e0", "scout", "kieran-blind-oar", "A weathered ferryman in a salt-bleached blue coat, eyes clouded by glare, with a long carved oar used as a walking staff and a rope coil across his chest."),
-        ],
+        x: TOWN_PLACEMENTS["oarsmans-bight"].x,
+        y: TOWN_PLACEMENTS["oarsmans-bight"].y,
+        npcs: TOWN_RESIDENTS["oarsmans-bight"],
         spurRoad: [
           [80, 56, 86, 56],
           [86, 56, 86, 77],
@@ -826,13 +1027,9 @@ function generateFrontierMap(regionId: string): MapData {
       ],
       townConfig: {
         id: "crater-watch",
-        x: 74,
-        y: 72,
-        npcs: [
-          townNpc("town:starfall:stargazer", "Reeve Toran", "#d6b4fc", "lore", "reeve-toran", "A gaunt stargazer in a violet wool mantle, with a brass monocle cracked across one eye, wind-tossed black hair, and a telescope lens cradled under one arm."),
-          townNpc("town:starfall:healer", "Hermit Cassian", "#b39ddb", "healer", "hermit-cassian", "A soft-spoken hermit in a plum-coloured hooded coat, with a close silver beard, moss tucked into his sleeves, and a meteorite bowl of glowing spring water."),
-          townNpc("town:starfall:drift-child", "Mina the Drift-Child", "#e2d0ff", "scout", "mina-drift-child", "A slight child in an oversized charcoal cloak sewn with meteor-glass beads, with pale braided hair, ink-dark eyes, and a tuning fork hanging from a cord."),
-        ],
+        x: TOWN_PLACEMENTS["crater-watch"].x,
+        y: TOWN_PLACEMENTS["crater-watch"].y,
+        npcs: TOWN_RESIDENTS["crater-watch"],
         spurRoad: [
           [80, 56, 74, 56],
           [74, 56, 74, 77],
@@ -1078,12 +1275,13 @@ function generateFrontierMap(regionId: string): MapData {
     tiles,
     wardTiles: [],
     spawn: { x: px(80), y: px(56) },
+    npcs: [],
     npc: { x: -9999, y: -9999 },
     signs,
     shards: [],
     enemySpawns,
     bossCenter: { x: px(80), y: px(56) },
-    exits: config.exits,
+    exits: [...config.exits, ...townBuildingExits(towns)],
     campfires: [{ x: px(80), y: px(56), name: `${config.name} Wayfire`, relic: config.relic }],
     dark: false,
     resetOnDeath: false,
@@ -1108,6 +1306,7 @@ function generateFortressMap(regionId: string): MapData {
     tiles: layout.tiles,
     wardTiles: [],
     spawn: { x: px(layout.door.x), y: px(layout.door.y + 1) },
+    npcs: [],
     npc: { x: -9999, y: -9999 },
     signs: [],
     shards: [{ x: px(layout.shard.x), y: px(layout.shard.y) }],

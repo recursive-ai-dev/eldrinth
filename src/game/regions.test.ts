@@ -13,7 +13,7 @@ describe("RegionRepository", () => {
           height: 1,
           tiles: new Uint8Array([T.GRASS]),
           wardTiles: [],
-          spawn: { x: 0, y: 0 }, npc: { x: 0, y: 0 }, signs: [], shards: [], enemySpawns: [], bossCenter: { x: 0, y: 0 }, exits: [], campfires: [], towns: [],
+          spawn: { x: 0, y: 0 }, npcs: [], npc: { x: 0, y: 0 }, signs: [], shards: [], enemySpawns: [], bossCenter: { x: 0, y: 0 }, exits: [], campfires: [], towns: [],
           dark: false, resetOnDeath: false, lights: [],
         },
       }),

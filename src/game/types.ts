@@ -54,6 +54,8 @@ export interface RegionExit {
   /** Pixel position where the traveller arrives in the target region. */
   destination: Vec;
   label: string;
+  /** Doorways use an explicit interaction; frontier gates remain walk-through. */
+  requiresInteraction?: boolean;
 }
 
 export interface CampfireData {
@@ -85,10 +87,23 @@ export interface TownData {
   y: number;
   /** Radius in pixels inside which enemies do not spawn and will not pursue. */
   safeRadius: number;
-  /** Townsfolk. */
-  npcs: NpcData[];
+  /** Enterable homes and workrooms around the town square. */
+  buildings: TownBuildingData[];
   /** Readable sign at the town entrance. */
   sign?: SignData;
+}
+
+/** An exterior doorway which leads to a resident's small authored interior. */
+export interface TownBuildingData {
+  id: string;
+  name: string;
+  /** Door tile on the exterior map. */
+  x: number;
+  y: number;
+  /** Region id for the building's interior. */
+  interiorId: string;
+  /** The resident found inside. */
+  resident: Omit<NpcData, "x" | "y">;
 }
 
 export interface MapData {
@@ -98,6 +113,9 @@ export interface MapData {
   tiles: Uint8Array;
   wardTiles: number[];
   spawn: Vec;
+  /** Named inhabitants presently rendered and interactable in this map. */
+  npcs: NpcData[];
+  /** Legacy single NPC slot used by Orithel in the Old Lands. */
   npc: Vec;
   signs: SignData[];
   shards: Vec[];

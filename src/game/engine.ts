@@ -24,6 +24,7 @@ import {
 } from "./core/WorldState";
 import type { EndingId } from "./core/SceneStack";
 import { createRegionRepository, type RegionRepository } from "./regions";
+import { isInteriorRegion } from "./map";
 import { applyHarvestCost, fortressShardIntakeEntry, fortressWardenEntry, shardBleedEntry, shardPickupMessage, wardDialogue, wardenFact, wardUnlockMessage } from "./escalation";
 import { hazardDamageAt } from "./hazard";
 import { QUESTS, learnFact, canResolve, questKnown, questJournal, resolveQuest } from "./quests";
@@ -391,7 +392,7 @@ export class Game {
       this.rememberRegion();
       this.regions.release(previousId);
       this.world.regionId = region.id;
-      this.cb.onInterior(region.id.startsWith("fortress."));
+      this.cb.onInterior(isInteriorRegion(region.id));
       this.map = region.map;
       this.usedTownServices.clear();
       this.mapPxW = this.map.width * TILE;
@@ -447,6 +448,7 @@ export class Game {
     this.world.restore(snapshot);
     this.rememberRegion();
     this.publishJournal();
+    this.cb.onInterior(isInteriorRegion(this.world.regionId));
     this.wardSet = new Set(this.map.wardTiles);
     this.syncMovementSystem();
     this.centerCam();
@@ -810,7 +812,7 @@ export class Game {
     this.checkPickups();
 
     if (this.regionGateCooldown <= 0 && !this.changingRegion) {
-      const exit = this.map.exits.find((gate) => Math.hypot(p.x - (gate.x * TILE + TILE / 2), p.y - (gate.y * TILE + TILE / 2)) < TILE * 1.35);
+      const exit = this.map.exits.find((gate) => !gate.requiresInteraction && Math.hypot(p.x - (gate.x * TILE + TILE / 2), p.y - (gate.y * TILE + TILE / 2)) < TILE * 1.35);
       if (exit) void this.changeRegion(exit);
     }
 
@@ -1259,17 +1261,20 @@ export class Game {
   }
   tryInteract() {
     const p = this.player;
+    const doorway = this.map.exits.find((exit) => exit.requiresInteraction && Math.hypot(p.x - (exit.x * TILE + TILE / 2), p.y - (exit.y * TILE + TILE / 2)) < INTERACT_SIGN_DISTANCE);
+    if (doorway) {
+      void this.changeRegion(doorway);
+      return;
+    }
     const fire = this.map.campfires.find((campfire) => Math.hypot(p.x - campfire.x, p.y - campfire.y) < 52);
     if (fire) {
       this.restAtCampfire(fire);
       return;
     }
-    for (const town of this.map.towns) {
-      const npc = town.npcs.find((n) => Math.hypot(p.x - n.x, p.y - n.y) < INTERACT_NPC_DISTANCE);
-      if (npc) {
-        this.speakWithTownNpc(npc);
-        return;
-      }
+    const townNpc = this.map.npcs.find((npc) => Math.hypot(p.x - npc.x, p.y - npc.y) < INTERACT_NPC_DISTANCE);
+    if (townNpc) {
+      this.speakWithTownNpc(townNpc);
+      return;
     }
     const npc = this.map.npc;
     if (Math.hypot(p.x - npc.x, p.y - npc.y) < INTERACT_NPC_DISTANCE) {
