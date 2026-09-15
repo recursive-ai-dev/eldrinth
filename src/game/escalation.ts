@@ -123,3 +123,59 @@ export function fortressWardenEntry(regionId: string): JournalEntry | null {
   if (!text) return null;
   return { id: `warden:${regionId}`, title: "What kept the shard", text, source: "Firsthand discovery" };
 }
+
+/** The conscious individual trapped in each core, recorded when the shard is torn free. */
+const FORTRESS_SHARD_INTAKES: Record<string, { id: string; title: string; text: string }> = {
+  "fortress.old-lands-archive": {
+    id: "intake:vaelen",
+    title: "Intake Docket 1,402: Archivist Vaelen",
+    text: "Docket 1,402. Vaelen, First Scribe. Cause: Unlawful duplication of classified rolls. Core function: Memory indexing and cataloguing. — Archivist Vaelen was still holding the ledger when the core tore free. His fingers were stained with gall ink that had turned to glass. He did not cry out; he only asked if the duplicates had survived the damp.",
+  },
+  "fortress.old-lands-reliquary": {
+    id: "intake:theon",
+    title: "Intake Docket 1,890: Theon the Glasswright",
+    text: "Docket 1,890. Theon, Glasswright. Cause: Deficit in vessel production. Core function: Matrix resonance stabilization. — Theon's mind was spread across every mirror in the reliquary. In the moment of extraction, every reflection looked at me with the weary embarrassment of a craftsman caught by his own faulty hinge.",
+  },
+  "fortress.old-lands-vault": {
+    id: "intake:morwyn",
+    title: "Intake Docket 0,089: Castellan Morwyn",
+    text: "Docket 0,089. Morwyn, Castellan. Cause: Emergency seal containment. Core function: Structural perimeter security. — The seal was fused into Castellan Morwyn's jawbone. When I pulled the shard free, the jaw cracked like dry pine, releasing a smell of nine-hundred-year-old cedar wax and stagnant breath.",
+  },
+  "fortress.cinderwild-shrine": {
+    id: "intake:roryn",
+    title: "Intake Docket 4,411: Roryn, Ward of St. Elun",
+    text: "Docket 4,411. Roryn, ward of St. Elun. Cause: General replenishment cohort IV. Core function: Baseline emotional dampening. — Roryn's voice in the core was thin, like greaseproof paper vibrating in a draft. He asked whether his mother had come back to the wagon yet. When the light transferred into my chest, the cold made my ribs ache.",
+  },
+  "fortress.cinderwild-watchpost": {
+    id: "intake:kaelen",
+    title: "Intake Docket 2,104: Decurion Kaelen",
+    text: "Docket 2,104. Kaelen, Decurion. Cause: Posthumous extraction from active post. Core function: Threat vector scanning. — Decurion Kaelen was still keeping watch through the arrow slits. When the core snapped out of the dais, he whispered: 'Post relieved.' He had been standing in the dark for nine centuries waiting for someone to say it.",
+  },
+  "fortress.moonlit-salt-graves": {
+    id: "intake:maris",
+    title: "Intake Docket 3,892: Maris of the Shallows",
+    text: "Docket 3,892. Maris, sail-maker. Cause: Reconciled off boarding manifest. Core function: Hydrostatic sensory processing. — Maris did not fight. When I took her core, my hands smelled of salt brine and lye soap. She murmured two names over and over until the connection severed. Neither name was mine.",
+  },
+  "fortress.moonlit-beacon": {
+    id: "intake:alden",
+    title: "Intake Docket 3,901: Alden the Lamplighter",
+    text: "Docket 3,901. Alden, Lamplighter. Cause: Voluntary biological lamp sustainment. Core function: Photonic amplification. — Alden's core was boiling hot. As it cooled in my palm, a flare of blind white light burned across my retinas, showing me the black sea and forty empty rowboats drifting away.",
+  },
+  "fortress.starfall-observatory": {
+    id: "intake:selene",
+    title: "Intake Docket 0,442: Selene the Reckoner",
+    text: "Docket 0,442. Selene, Chief Reckoner. Cause: Specialized apparatus integration. Core function: Harmonic cycle alignment. — The core was covered in tiny scratched tallies. Selene's mind was still counting seconds: twenty-eight billion, four hundred million... then silence.",
+  },
+  "fortress.starfall-watch": {
+    id: "intake:orren",
+    title: "Intake Docket 0,001: Master Orren",
+    text: "Docket 0,001. Orren, Lead Investigator. Cause: Self-administered prototype trial. Core function: Autonomous core defense. — Master Orren's core came away with a jagged iron ring still fused to it. As his consciousness unraveled, he asked one final question: 'Did the work endure?'",
+  },
+};
+
+export function fortressShardIntakeEntry(regionId: string): JournalEntry | null {
+  const intake = FORTRESS_SHARD_INTAKES[regionId];
+  if (!intake) return null;
+  return { id: intake.id, title: intake.title, text: intake.text, source: "Intake Core Recovery" };
+}
+

@@ -169,4 +169,59 @@ describe("authored settlements", () => {
       ).toBeGreaterThan(town.safeRadius);
     }
   });
+
+  it("places authored settlements in all frontier regions with reachable NPCs", () => {
+    const regions = [
+      { id: "cinderwild", townId: "cinder-haven" },
+      { id: "moonlit-coast", townId: "oarsmans-bight" },
+      { id: "starfall-moors", townId: "crater-watch" },
+    ];
+
+    for (const { id, townId } of regions) {
+      const map = generateMap(id);
+      expect(map.towns).toHaveLength(1);
+      const town = map.towns[0];
+      expect(town.id).toBe(townId);
+      expect(town.npcs.map((npc) => npc.role).sort()).toEqual(["healer", "lore"]);
+      expect(town.safeRadius).toBeGreaterThan(0);
+      expect(town.sign).toBeDefined();
+
+      for (const npc of town.npcs) {
+        const tx = Math.floor(npc.x / TILE);
+        const ty = Math.floor(npc.y / TILE);
+        expect(canWalk(map, tx, ty), `${npc.name} at (${tx}, ${ty}) in ${id} must stand on walkable floor`).toBe(true);
+      }
+
+      // Safe-zone center is walkable floor
+      expect(canWalk(map, Math.floor(town.x / TILE), Math.floor(town.y / TILE))).toBe(true);
+
+      // Hub wayfire can reach the town NPCs
+      const hub = { x: 80, y: 56 };
+      for (const npc of town.npcs) {
+        const target = { x: Math.floor(npc.x / TILE), y: Math.floor(npc.y / TILE) };
+        const reached = findPathBFS(map, hub, target);
+        expect(reached, `Expected walking route from hub to ${npc.name} in ${id}`).toBe(true);
+      }
+
+      // Town sign is walkable and advertised
+      const sign = town.sign!;
+      expect(canWalk(map, sign.x, sign.y)).toBe(true);
+      expect(map.signs.some((entry) => entry.x === sign.x && entry.y === sign.y)).toBe(true);
+    }
+  });
+
+  it("keeps frontier towns separate from wilderness patrols", () => {
+    for (const regionId of ["cinderwild", "moonlit-coast", "starfall-moors"]) {
+      const map = generateMap(regionId);
+      const town = map.towns[0];
+      for (const spawn of map.enemySpawns) {
+        const px = spawn.x * TILE + TILE / 2;
+        const py = spawn.y * TILE + TILE / 2;
+        expect(
+          Math.hypot(px - town.x, py - town.y),
+          `Enemy spawn at (${spawn.x}, ${spawn.y}) should not begin inside ${town.name} in ${regionId}`,
+        ).toBeGreaterThan(town.safeRadius);
+      }
+    }
+  });
 });

@@ -22,7 +22,7 @@ import {
 } from "./core/WorldState";
 import type { EndingId } from "./core/SceneStack";
 import { createRegionRepository, type RegionRepository } from "./regions";
-import { applyHarvestCost, fortressWardenEntry, shardBleedEntry, shardPickupMessage, wardDialogue, wardenFact, wardUnlockMessage } from "./escalation";
+import { applyHarvestCost, fortressShardIntakeEntry, fortressWardenEntry, shardBleedEntry, shardPickupMessage, wardDialogue, wardenFact, wardUnlockMessage } from "./escalation";
 import { hazardDamageAt } from "./hazard";
 import { QUESTS, learnFact, canResolve, questKnown, questJournal, resolveQuest } from "./quests";
 import { AISystem } from "./systems/AISystem";
@@ -914,6 +914,13 @@ export class Game {
             this.world.journal.push(bleed);
             this.publishJournal();
           }
+          if (this.world.regionId.startsWith("fortress.")) {
+            const intake = fortressShardIntakeEntry(this.world.regionId);
+            if (intake && !this.world.journal.some((entry) => entry.id === intake.id)) {
+              this.world.journal.push(intake);
+              this.publishJournal();
+            }
+          }
           if (this.shards >= this.totalShards) {
             this.wardUnlocked = true;
             this.syncMovementSystem();
@@ -1264,17 +1271,73 @@ export class Game {
   private speakWithTownNpc(npc: import("./types").NpcData) {
     const used = this.usedTownServices.has(npc.id);
     if (npc.role === "healer") {
+      const healerLines: Record<string, { heal: string[]; exhausted: string }> = {
+        "town:ilyarael:healer": {
+          heal: [
+            "Close your eyes. I will borrow the hollow spaces between your ribs and fill them with what little light is left here.",
+            "Your wounds close. For now, the town's grace holds.",
+          ],
+          exhausted: "I have done what I can for you this visit. The road will do the rest.",
+        },
+        "town:cinderwild:healer": {
+          heal: [
+            "Hold still. The sulfur will sting, but it draws the ash-heat out of your blood before it settles into your lungs.",
+            "Your wounds close. The kiln's warmth settles into your limbs.",
+          ],
+          exhausted: "Save your strength, pilgrim. The embers will wait for no one.",
+        },
+        "town:moonlit:healer": {
+          heal: [
+            "Let the brine wash over the cuts. Salt cleans what fire cannot burn away.",
+            "Your wounds close. The sea's chill numbs your pain.",
+          ],
+          exhausted: "The tide comes in, the tide goes out. You have had your share of the water today.",
+        },
+        "town:starfall:healer": {
+          heal: [
+            "The moss that grows beneath meteorite slabs drinks starlight. Drink this brew down slowly.",
+            "Your wounds close. Your breath steadies under the quiet crater.",
+          ],
+          exhausted: "The kettle is dry until the next nightfall. Walk softly.",
+        },
+      };
+      const lines = healerLines[npc.id] ?? {
+        heal: ["Your wounds close. The sanctuary's warmth restores you."],
+        exhausted: "I have done what I can for you this visit. The road will do the rest.",
+      };
       if (used) {
-        this.openDialogue(["I have done what I can for you this visit. The road will do the rest."], npc.name, npc.color);
+        this.openDialogue([lines.exhausted], npc.name, npc.color);
       } else {
         this.usedTownServices.add(npc.id);
         this.player.hp = this.player.maxHp;
-        this.burst(npc.x, npc.y, "#8fcca8", 14);
-        this.openDialogue(["Close your eyes. I will borrow the hollow spaces between your ribs and fill them with what little light is left here.", "Your wounds close. For now, the town's grace holds."], npc.name, npc.color);
+        this.burst(npc.x, npc.y, npc.color, 14);
+        this.openDialogue(lines.heal, npc.name, npc.color);
       }
     } else if (npc.role === "lore") {
       if (used) {
-        this.openDialogue(["The records do not change because you keep asking. Go and make a new one."], npc.name, npc.color);
+        const reactiveLines: Record<string, { default: string; withShards: string }> = {
+          "town:ilyarael:scrivener": {
+            default: "The records do not change because you keep asking. Go and make a new one.",
+            withShards: "The ink on your skin is darkening. Every piece you carry takes a little more of you to hold.",
+          },
+          "town:cinderwild:kilnmaster": {
+            default: "Old smoke doesn't blow back into the chimney. Watch your step in the ash ravines.",
+            withShards: "Your chest is glowing like a draft damper pulled wide. You're carrying one of them, aren't you? It's burning you from the inside out.",
+          },
+          "town:moonlit:dredger": {
+            default: "Go on now. The drowned don't like being talked about twice in one afternoon.",
+            withShards: "You smell of the Spire. That cold, clean smell. It turns my stomach just the way it did when the collectors came down the pier.",
+          },
+          "town:starfall:stargazer": {
+            default: "The glass is cracked, traveller. Nothing I tell you will make the stars come back.",
+            withShards: "I can hear the harmonic vibration from three paces away. It's vibrating at the exact frequency Orren noted down on page seventy-four.",
+          },
+        };
+        const config = reactiveLines[npc.id];
+        const text = config
+          ? (this.shards > 0 ? config.withShards : config.default)
+          : "The records do not change because you keep asking. Go and make a new one.";
+        this.openDialogue([text], npc.name, npc.color);
       } else {
         this.usedTownServices.add(npc.id);
         const entry = this.townLoreEntry(npc.id);
@@ -1300,6 +1363,24 @@ export class Game {
         title: "The Scrivener's Mark",
         text: "The Weeping Archive lies north along the western forest track. Its door is black timber, and the records inside have been sealed against weather, fire, and the people they were written about. A wraith circles the threshold. It was a clerk once, or so the locals say.",
         source: "The Scrivener · Ilyarael Township",
+      },
+      "town:cinderwild:kilnmaster": {
+        id: "town:cinderwild:kilnmaster",
+        title: "What the Chimneys Drank",
+        text: "The smoke from the Spire was never pine or birch. We tended the smelting kilns down here, but the wagons coming east weren't carrying ore; they were carrying closed iron crates stamped with Ilyarael's seal. When the furnace doors opened, the air smelled like scorched hair and burnt vinegar. Orithel called it 'thermal reconciliation.' I still have the delivery receipts.",
+        source: "Kiln-Master Vance · Cinder Haven",
+      },
+      "town:moonlit:dredger": {
+        id: "town:moonlit:dredger",
+        title: "The Last Evacuation Barge",
+        text: "Forty sailed and thirty-nine were left behind on the pier. The Beacon Keeper didn't lose the ledger; he balanced it. I've dragged forty-one chests out of the breakers, and half of them were filled with children's shoes and silver hairpins traded to buy passage that never came. If you find the Salt Graves, don't look for bones. The tide took what was left after the collectors were done.",
+        source: "Mistress Morveth · Oarsman's Bight",
+      },
+      "town:starfall:stargazer": {
+        id: "town:starfall:stargazer",
+        title: "The Lens of Orren",
+        text: "Master Orren built the great glass at the observatory not to study the stars, but to capture their light and compress it into living minds. He believed the human spirit could be hardened into diamond if you heated it fast enough. When the funding ran out, he clamped himself into the apparatus to prove it was painless. He has been screaming inside that iron casing for nine hundred years.",
+        source: "Reeve Toran · Crater Watch",
       },
     };
     return entries[npcId] ?? null;

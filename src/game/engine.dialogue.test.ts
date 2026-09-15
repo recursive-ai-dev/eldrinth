@@ -69,3 +69,105 @@ describe("dialogue choice attachment", () => {
     expect(ctx.dialogue.index).toBe(0);
   });
 });
+
+describe("town NPC dialogue and lore system", () => {
+  function makeNpcHarness() {
+    const journal: any[] = [];
+    const usedServices = new Set<string>();
+    const dialogueEvents: unknown[] = [];
+    const bursts: any[] = [];
+    const ctx = {
+      usedTownServices: usedServices,
+      world: { journal },
+      player: { hp: 10, maxHp: 18 },
+      shards: 0,
+      publishJournal() {},
+      openDialogue(lines: string[], speaker: string, color: string) {
+        dialogueEvents.push({ lines, speaker, color });
+      },
+      burst(x: number, y: number, color: string, count: number) {
+        bursts.push({ x, y, color, count });
+      },
+      townLoreEntry: (Game.prototype as any).townLoreEntry,
+    };
+    return { ctx, journal, usedServices, dialogueEvents, bursts };
+  }
+
+  it("returns authored lore entries for all four regional lore NPCs", () => {
+    const loreIds = [
+      "town:ilyarael:scrivener",
+      "town:cinderwild:kilnmaster",
+      "town:moonlit:dredger",
+      "town:starfall:stargazer",
+    ];
+    for (const id of loreIds) {
+      const entry = (Game.prototype as any).townLoreEntry(id);
+      expect(entry, `Expected entry for ${id}`).not.toBeNull();
+      expect(entry.text.length).toBeGreaterThan(60);
+      expect(entry.source).toBeDefined();
+    }
+  });
+
+  it("copies lore to journal and triggers dialogue on first lore NPC conversation", () => {
+    const { ctx, journal, usedServices, dialogueEvents } = makeNpcHarness();
+    const npc = { id: "town:cinderwild:kilnmaster", name: "Kiln-Master Vance", color: "#ff8c52", role: "lore" as const, x: 100, y: 100 };
+
+    (Game.prototype as any).speakWithTownNpc.call(ctx, npc);
+    expect(usedServices.has(npc.id)).toBe(true);
+    expect(journal).toHaveLength(1);
+    expect(journal[0].title).toBe("What the Chimneys Drank");
+    expect(dialogueEvents).toHaveLength(1);
+  });
+
+  it("heals player to maxHp and sets service used on first healer conversation", () => {
+    const { ctx, usedServices, dialogueEvents } = makeNpcHarness();
+    const npc = { id: "town:cinderwild:healer", name: "Cinder-Nurse Greta", color: "#f0a882", role: "healer" as const, x: 100, y: 100 };
+
+    (Game.prototype as any).speakWithTownNpc.call(ctx, npc);
+    expect(ctx.player.hp).toBe(18);
+    expect(usedServices.has(npc.id)).toBe(true);
+    expect(dialogueEvents).toHaveLength(1);
+
+    // Second visit gives exhausted line
+    (Game.prototype as any).speakWithTownNpc.call(ctx, npc);
+    expect(dialogueEvents).toHaveLength(2);
+    expect((dialogueEvents[1] as any).lines[0]).toContain("Save your strength");
+  });
+
+  it("offers reactive dialogue from lore NPCs when carrying shards", () => {
+    const { ctx, dialogueEvents } = makeNpcHarness();
+    const npc = { id: "town:cinderwild:kilnmaster", name: "Kiln-Master Vance", color: "#ff8c52", role: "lore" as const, x: 100, y: 100 };
+
+    // First visit copies lore
+    (Game.prototype as any).speakWithTownNpc.call(ctx, npc);
+
+    // Second visit with shards
+    ctx.shards = 3;
+    (Game.prototype as any).speakWithTownNpc.call(ctx, npc);
+    expect(dialogueEvents).toHaveLength(2);
+    expect((dialogueEvents[1] as any).lines[0]).toContain("carrying one of them");
+  });
+});
+
+describe("shard intake recording in fortresses", () => {
+  it("copies the specific intake docket into the journal when taking a shard inside a fortress", () => {
+    const journal: any[] = [];
+    const ctx = {
+      world: { regionId: "fortress.old-lands-archive", journal },
+      player: { x: 100, y: 100, r: 12, hp: 18, maxHp: 18 },
+      items: [{ x: 100, y: 100, type: "shard", taken: false }],
+      shards: 0,
+      totalShards: 9,
+      shardsBurst() {},
+      addText() {},
+      publishJournal() {},
+      msg() {},
+    };
+    (Game.prototype as any).checkPickups.call(ctx);
+    expect(ctx.shards).toBe(1);
+    expect(journal.some((entry) => entry.id === "intake:vaelen")).toBe(true);
+    expect(journal.find((entry) => entry.id === "intake:vaelen")?.title).toContain("Archivist Vaelen");
+  });
+});
+
+
