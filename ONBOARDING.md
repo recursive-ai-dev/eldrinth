@@ -215,7 +215,7 @@ Map data shape: `MapData` (`types.ts:23`):
 
 | Field         | Meaning |
 | ------------- | ------- |
-| `width`/`height` | Grid size in tiles (from `MAP_W=70`, `MAP_H=50` in `constants.ts`). |
+| `width`/`height` | Grid size in tiles (from `MAP_W=160`, `MAP_H=112` in `constants.ts`). |
 | `tiles`       | `Uint8Array` of tile-type ids (`T.*` from `constants.ts`). |
 | `solid`       | `Uint8Array` (0/1) — blocks movement (derived from `SOLID_TILES`). |
 | `wardTiles`   | Indices of the ward barrier tiles guarding the Spire. |
@@ -228,13 +228,12 @@ Map data shape: `MapData` (`types.ts:23`):
 
 The map is hand-**structured** procedurally (not random blobs): regions are carved by code in `generateMap()`:
 
-- **Weeping Forest** (west, x<22): trees around the starting clearing.
-- **Murkwater lake** (ellipse around 38,14) with a **bridge** path across it.
-- **Mountain barrier** (x≈45-47, full height) with a **pass** at y 12-16.
-- **Ruins of Ilyarael** (hall 28-37, 36-43): the NPC + lore.
-- **Glass Spire arena** (circle around 60,13): `SPIREFLOOR` interior, rock ring, **ward** tiles at
-  `idx(53,12/13/14)` that block entry until shards are collected.
-- **Roads/paths** carved with `carve()` connecting spawn → lake → spire, and branches to the ruins & shards.
+- **Weeping Forest** (west, x<42): dense ancient timber and foggy tracks leading to the Weeping Archive.
+- **Murkwater lake** (north-center, ellipse around 66,24) with an ancient **stone bridge** path across it.
+- **Mountain barrier** (x≈84-87, full height) with a grand **mountain pass** at y 20-28.
+- **Ruins of Ilyarael** (citadel 46-66, 64-82): the Great Hall, Orithel, the Last Ember wayfire, and the descent to Ilyarael's Sealed Vault.
+- **Glass Spire arena** (circle around 140,26): `SPIREFLOOR` interior, rock ring, and **ward** tiles guarding the True Spire.
+- **Roads/paths** carved with `carve()` connecting spawn → lake → pass → spire, with broad branches to the ruins, fortresses, and frontier exits.
 - **Decoration**: crystals, tall grass, flowers, graves/bones scattered on grass.
 
 Tile types are defined in `constants.ts` (`T` object) and rendered per-type in `drawTile()`

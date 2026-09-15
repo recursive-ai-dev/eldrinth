@@ -19,16 +19,27 @@ const px = (t: number) => t * TILE + TILE / 2;
 
 type FortressId = keyof typeof FORTRESS_LAYOUTS;
 
+export type FortressTheme =
+  | "timber"
+  | "glass"
+  | "vault"
+  | "cinder"
+  | "watchpost"
+  | "salt"
+  | "beacon"
+  | "observatory"
+  | "watch";
+
 const FORTRESS_REGIONS = {
-  "fortress.cinderwild-shrine": { name: "The Broken Shrine", returnTo: { region: "cinderwild", destination: { x: px(72), y: px(21) }, label: "the Cinderwild" } },
-  "fortress.old-lands-archive": { name: "The Weeping Archive", returnTo: { region: "overworld", destination: { x: px(18), y: px(13) }, label: "the Old Lands" } },
-  "fortress.old-lands-reliquary": { name: "The Glass Reliquary", returnTo: { region: "overworld", destination: { x: px(50), y: px(10) }, label: "the Old Lands" } },
-  "fortress.old-lands-vault": { name: "Ilyarael's Sealed Vault", returnTo: { region: "overworld", destination: { x: px(40), y: px(35) }, label: "the Old Lands" } },
-  "fortress.cinderwild-watchpost": { name: "The Ruined Watchpost", returnTo: { region: "cinderwild", destination: { x: px(84), y: px(54) }, label: "the Cinderwild" } },
-  "fortress.moonlit-salt-graves": { name: "The Salt Graves", returnTo: { region: "moonlit-coast", destination: { x: px(24), y: px(49) }, label: "the Moonlit Coast" } },
-  "fortress.moonlit-beacon": { name: "The Keeper's Beacon", returnTo: { region: "moonlit-coast", destination: { x: px(78), y: px(19) }, label: "the Moonlit Coast" } },
-  "fortress.starfall-observatory": { name: "The Fallen Observatory", returnTo: { region: "starfall-moors", destination: { x: px(47), y: px(36) }, label: "the Starfall Moors" } },
-  "fortress.starfall-watch": { name: "The Astronomer's Watch", returnTo: { region: "starfall-moors", destination: { x: px(78), y: px(43) }, label: "the Starfall Moors" } },
+  "fortress.cinderwild-shrine": { name: "The Broken Shrine", returnTo: { region: "cinderwild", destination: { x: px(132), y: px(23) }, label: "the Cinderwild" } },
+  "fortress.cinderwild-watchpost": { name: "The Ruined Watchpost", returnTo: { region: "cinderwild", destination: { x: px(142), y: px(79) }, label: "the Cinderwild" } },
+  "fortress.old-lands-archive": { name: "The Weeping Archive", returnTo: { region: "overworld", destination: { x: px(24), y: px(19) }, label: "the Old Lands" } },
+  "fortress.old-lands-reliquary": { name: "The Glass Reliquary", returnTo: { region: "overworld", destination: { x: px(96), y: px(15) }, label: "the Old Lands" } },
+  "fortress.old-lands-vault": { name: "Ilyarael's Sealed Vault", returnTo: { region: "overworld", destination: { x: px(78), y: px(77) }, label: "the Old Lands" } },
+  "fortress.moonlit-salt-graves": { name: "The Salt Graves", returnTo: { region: "moonlit-coast", destination: { x: px(28), y: px(89) }, label: "the Moonlit Coast" } },
+  "fortress.moonlit-beacon": { name: "The Keeper's Beacon", returnTo: { region: "moonlit-coast", destination: { x: px(136), y: px(21) }, label: "the Moonlit Coast" } },
+  "fortress.starfall-observatory": { name: "The Fallen Observatory", returnTo: { region: "starfall-moors", destination: { x: px(36), y: px(25) }, label: "the Starfall Moors" } },
+  "fortress.starfall-watch": { name: "The Astronomer's Watch", returnTo: { region: "starfall-moors", destination: { x: px(142), y: px(63) }, label: "the Starfall Moors" } },
 } satisfies Record<FortressId, { name: string; returnTo: { region: string; destination: Vec; label: string } }>;
 
 /** A frontier gate always arrives one tile inside the destination door. */
@@ -64,6 +75,123 @@ function smoothNoise(rng: () => number, scale: number): Float32Array {
   return out;
 }
 
+/**
+ * Builds an authored, imposing exterior fortress facade and paved courtyard.
+ * Every fortress has an unmistakable silhouette that rewards the journey.
+ */
+function buildFortressExterior(
+  tiles: Uint8Array,
+  gx: number,
+  gy: number,
+  theme: FortressTheme
+) {
+  // Paved courtyard leading up to the gate
+  for (let dy = -1; dy <= 4; dy++) {
+    for (let dx = -4; dx <= 4; dx++) {
+      const tx = gx + dx;
+      const ty = gy + dy;
+      if (!inB(tx, ty)) continue;
+      tiles[idx(tx, ty)] =
+        theme === "glass" || theme === "observatory"
+          ? T.SPIREFLOOR
+          : theme === "salt"
+          ? T.SAND
+          : T.RFLOOR;
+    }
+  }
+
+  // Gateway facade walls flanking the entrance archway
+  for (let dx = -4; dx <= 4; dx++) {
+    if (dx === 0) continue; // the gate itself is walkable floor
+    const tx = gx + dx;
+    if (inB(tx, gy)) {
+      tiles[idx(tx, gy)] = theme === "timber" ? T.TREE : theme === "salt" ? T.ROCK : T.RWALL;
+    }
+  }
+
+  // Gate entrance tile is walkable floor
+  if (inB(gx, gy)) {
+    tiles[idx(gx, gy)] = theme === "glass" || theme === "observatory" ? T.SPIREFLOOR : T.RFLOOR;
+  }
+  // Step-out arrival tile in front is clear floor
+  if (inB(gx, gy + 1)) {
+    tiles[idx(gx, gy + 1)] =
+      theme === "glass" || theme === "observatory"
+        ? T.SPIREFLOOR
+        : theme === "salt"
+        ? T.SAND
+        : T.RFLOOR;
+  }
+
+  // Flanking pillars/towers
+  if (inB(gx - 2, gy)) tiles[idx(gx - 2, gy)] = T.RWALL;
+  if (inB(gx + 2, gy)) tiles[idx(gx + 2, gy)] = T.RWALL;
+  if (inB(gx - 2, gy - 1)) tiles[idx(gx - 2, gy - 1)] = T.RWALL;
+  if (inB(gx + 2, gy - 1)) tiles[idx(gx + 2, gy - 1)] = T.RWALL;
+
+  // Distinct themed architectural elements
+  switch (theme) {
+    case "timber":
+      if (inB(gx - 3, gy + 1)) tiles[idx(gx - 3, gy + 1)] = T.BONES;
+      if (inB(gx + 3, gy + 1)) tiles[idx(gx + 3, gy + 1)] = T.BONES;
+      if (inB(gx - 4, gy + 2)) tiles[idx(gx - 4, gy + 2)] = T.TREE;
+      if (inB(gx + 4, gy + 2)) tiles[idx(gx - 4, gy + 2)] = T.TREE;
+      break;
+    case "glass":
+      if (inB(gx - 2, gy + 2)) tiles[idx(gx - 2, gy + 2)] = T.CRYSTAL;
+      if (inB(gx + 2, gy + 2)) tiles[idx(gx + 2, gy + 2)] = T.CRYSTAL;
+      if (inB(gx - 4, gy + 1)) tiles[idx(gx - 4, gy + 1)] = T.WATER;
+      if (inB(gx + 4, gy + 1)) tiles[idx(gx + 4, gy + 1)] = T.WATER;
+      break;
+    case "vault":
+      if (inB(gx - 3, gy + 2)) tiles[idx(gx - 3, gy + 2)] = T.RWALL;
+      if (inB(gx + 3, gy + 2)) tiles[idx(gx + 3, gy + 2)] = T.RWALL;
+      if (inB(gx - 4, gy + 3)) tiles[idx(gx - 4, gy + 3)] = T.CRYSTAL;
+      break;
+    case "cinder":
+      if (inB(gx - 3, gy + 1)) tiles[idx(gx - 3, gy + 1)] = T.EMBERS;
+      if (inB(gx + 3, gy + 1)) tiles[idx(gx + 3, gy + 1)] = T.EMBERS;
+      if (inB(gx - 3, gy + 2)) tiles[idx(gx - 3, gy + 2)] = T.ROCK;
+      if (inB(gx + 3, gy + 2)) tiles[idx(gx + 3, gy + 2)] = T.ROCK;
+      break;
+    case "watchpost":
+      if (inB(gx - 4, gy + 1)) tiles[idx(gx - 4, gy + 1)] = T.RWALL;
+      if (inB(gx + 4, gy + 1)) tiles[idx(gx + 4, gy + 1)] = T.RWALL;
+      if (inB(gx - 3, gy + 2)) tiles[idx(gx - 3, gy + 2)] = T.ROCK;
+      if (inB(gx + 3, gy + 2)) tiles[idx(gx + 3, gy + 2)] = T.ROCK;
+      break;
+    case "salt":
+      if (inB(gx - 3, gy + 1)) tiles[idx(gx - 3, gy + 1)] = T.GRAVE;
+      if (inB(gx + 3, gy + 1)) tiles[idx(gx + 3, gy + 1)] = T.GRAVE;
+      if (inB(gx - 4, gy + 2)) tiles[idx(gx - 4, gy + 2)] = T.ROCK;
+      if (inB(gx + 4, gy + 2)) tiles[idx(gx + 4, gy + 2)] = T.ROCK;
+      break;
+    case "beacon":
+      if (inB(gx - 2, gy + 1)) tiles[idx(gx - 2, gy + 1)] = T.RWALL;
+      if (inB(gx + 2, gy + 1)) tiles[idx(gx + 2, gy + 1)] = T.RWALL;
+      if (inB(gx - 4, gy + 1)) tiles[idx(gx - 4, gy + 1)] = T.WATER;
+      if (inB(gx + 4, gy + 1)) tiles[idx(gx + 4, gy + 1)] = T.WATER;
+      break;
+    case "observatory":
+      for (let r = 3; r <= 5; r++) {
+        for (let a = 0; a < Math.PI; a += 0.3) {
+          const rx = Math.round(gx + Math.cos(a) * r);
+          const ry = Math.round(gy - Math.sin(a) * r);
+          if (inB(rx, ry)) tiles[idx(rx, ry)] = T.ROCK;
+        }
+      }
+      if (inB(gx - 3, gy + 2)) tiles[idx(gx - 3, gy + 2)] = T.CRYSTAL;
+      if (inB(gx + 3, gy + 2)) tiles[idx(gx + 3, gy + 2)] = T.CRYSTAL;
+      break;
+    case "watch":
+      if (inB(gx - 3, gy + 1)) tiles[idx(gx - 3, gy + 1)] = T.RWALL;
+      if (inB(gx + 3, gy + 1)) tiles[idx(gx + 3, gy + 1)] = T.RWALL;
+      if (inB(gx - 2, gy + 3)) tiles[idx(gx - 2, gy + 3)] = T.CRYSTAL;
+      if (inB(gx + 2, gy + 3)) tiles[idx(gx + 2, gy + 3)] = T.CRYSTAL;
+      break;
+  }
+}
+
 export function generateMap(regionId = "overworld"): MapData {
   if (regionId.startsWith("fortress.")) return generateFortressMap(regionId);
   if (regionId !== "overworld") return generateFrontierMap(regionId);
@@ -83,40 +211,47 @@ export function generateMap(regionId = "overworld"): MapData {
 
   // ----- The Weeping Forest (west region) -----
   for (let y = 0; y < MAP_H; y++) {
-    for (let x = 0; x < 22; x++) {
+    for (let x = 0; x < 42; x++) {
       const i = idx(x, y);
-      const dSpawn = Math.hypot(x - 10, y - 26);
-      if (dSpawn < 4.5) continue; // keep the starting clearing open
-      if (fine[i] > 0.7 && rng() < 0.45) tiles[i] = T.TREE;
+      const dSpawn = Math.hypot(x - 14, y - 42);
+      if (dSpawn < 5.5) continue; // keep the starting clearing open
+      if (fine[i] > 0.68 && rng() < 0.48) tiles[i] = T.TREE;
     }
   }
 
   // ----- The Murkwater lake -----
-  const lx = 38;
-  const ly = 14;
-  const lrx = 8;
-  const lry = 4;
+  const lx = 66;
+  const ly = 24;
+  const lrx = 14;
+  const lry = 8;
   for (let y = 0; y < MAP_H; y++) {
     for (let x = 0; x < MAP_W; x++) {
       const d = Math.hypot((x - lx) / lrx, (y - ly) / lry);
       if (d < 1) tiles[idx(x, y)] = T.WATER;
-      else if (d < 1.25 && tiles[idx(x, y)] !== T.WATER) tiles[idx(x, y)] = T.SAND;
+      else if (d < 1.28 && tiles[idx(x, y)] !== T.WATER) tiles[idx(x, y)] = T.SAND;
+    }
+  }
+
+  // ----- Northern Alpine Crags & Cliffs -----
+  for (let y = 6; y <= 20; y++) {
+    for (let x = 80; x <= 115; x++) {
+      if (inB(x, y) && fine[idx(x, y)] > 0.72 && rng() < 0.4) tiles[idx(x, y)] = T.ROCK;
     }
   }
 
   // ----- Mountain barrier (full height, with a pass) -----
   for (let y = 0; y < MAP_H; y++) {
-    if (y >= 12 && y <= 16) continue; // the pass
-    for (let x = 45; x <= 47; x++) tiles[idx(x, y)] = T.ROCK;
+    if (y >= 20 && y <= 28) continue; // the grand mountain pass
+    for (let x = 84; x <= 87; x++) tiles[idx(x, y)] = T.ROCK;
   }
-  for (let i = 0; i < 48; i++) {
-    const x = 43 + Math.floor(rng() * 6);
+  for (let i = 0; i < 64; i++) {
+    const x = 82 + Math.floor(rng() * 8);
     const y = Math.floor(rng() * MAP_H);
-    if (y >= 11 && y <= 17) continue;
+    if (y >= 19 && y <= 29) continue;
     if (inB(x, y) && tiles[idx(x, y)] !== T.WATER) tiles[idx(x, y)] = T.ROCK;
   }
 
-  // ----- Ruins of Ilyarael (the fallen elven hall) -----
+  // ----- Ruins of Ilyarael (the fallen elven citadel) -----
   const hall = (x0: number, y0: number, x1: number, y1: number) => {
     for (let y = y0; y <= y1; y++)
       for (let x = x0; x <= x1; x++) tiles[idx(x, y)] = T.RFLOOR;
@@ -129,54 +264,40 @@ export function generateMap(regionId = "overworld"): MapData {
       tiles[idx(x1, y)] = T.RWALL;
     }
   };
-  hall(28, 36, 37, 43);
-  tiles[idx(33, 36)] = T.RFLOOR; // north entrance
-  tiles[idx(32, 39)] = T.RFLOOR;
+  hall(46, 64, 66, 82);
+  tiles[idx(56, 64)] = T.RFLOOR; // north entrance
+  tiles[idx(56, 65)] = T.RFLOOR;
+  tiles[idx(56, 74)] = T.RFLOOR; // Watcher's dais
 
-  // ----- The old Glass Spire, now a silent waypoint -----
-  const cx = 60;
-  const cy = 13;
-  for (let y = 6; y <= 20; y++) {
-    for (let x = 52; x <= 68; x++) {
-      if (!inB(x, y)) continue;
-      const d = Math.hypot(x - cx, y - cy);
-      if (d <= 6) tiles[idx(x, y)] = T.SPIREFLOOR;
-      else if (d <= 8.4) tiles[idx(x, y)] = T.ROCK;
-    }
-  }
-  tiles[idx(54, 12)] = T.SPIREFLOOR;
-  tiles[idx(54, 13)] = T.SPIREFLOOR;
-  tiles[idx(54, 14)] = T.SPIREFLOOR;
-  // ----- The Moonfall Reach and the true Spire -----
-  // The old arena remains as a visual landmark. The Unbound has retreated to
-  // the far eastern reach, turning the final act into a real journey.
-  const trueSpireX = 88;
-  const trueSpireY = 14;
-  for (let y = 5; y <= 23; y++) {
-    for (let x = 78; x <= 98; x++) {
+  // ----- The Moonfall Reach and the True Glass Spire arena -----
+  const trueSpireX = 140;
+  const trueSpireY = 26;
+  for (let y = 14; y <= 38; y++) {
+    for (let x = 126; x <= 154; x++) {
       const d = Math.hypot(x - trueSpireX, y - trueSpireY);
-      if (d <= 7) tiles[idx(x, y)] = T.SPIREFLOOR;
-      else if (d <= 9.3) tiles[idx(x, y)] = T.ROCK;
+      if (d <= 8) tiles[idx(x, y)] = T.SPIREFLOOR;
+      else if (d <= 11) tiles[idx(x, y)] = T.ROCK;
     }
   }
-  // A one-tile gate preserves the ward as an actual gate rather than a
-  // decoration that can be walked around.
-  for (let x = 77; x <= 80; x++) tiles[idx(x, 14)] = T.SPIREFLOOR;
-  const wardTiles = [idx(79, 13), idx(79, 14), idx(79, 15)];
+  // Gateway into the True Spire arena
+  for (let x = 124; x <= 128; x++) tiles[idx(x, 26)] = T.SPIREFLOOR;
+  const wardTiles = [idx(126, 25), idx(126, 26), idx(126, 27)];
   for (const wi of wardTiles) tiles[wi] = T.SPIREFLOOR;
   const wardSet = new Set(wardTiles);
 
   // ----- Ashen Expanse (south) -----
-  for (let y = 50; y < MAP_H; y++) {
-    for (let x = 18; x < 82; x++) {
+  for (let y = 80; y < MAP_H; y++) {
+    for (let x = 24; x < 134; x++) {
       const i = idx(x, y);
       if (patches[i] < 0.5) tiles[i] = T.DGRASS;
       if (fine[i] > 0.82 && rng() < 0.35) tiles[i] = T.ROCK;
     }
   }
-  // A broken moon-water inlet makes the southern route feel distinct.
-  for (let y = 57; y <= 65; y++) for (let x = 82; x <= 98; x++) {
-    if (Math.hypot((x - 91) / 10, (y - 62) / 5) < 1) tiles[idx(x, y)] = T.WATER;
+  // Moonlit water inlet
+  for (let y = 96; y <= 110; y++) {
+    for (let x = 130; x <= 158; x++) {
+      if (Math.hypot((x - 144) / 14, (y - 103) / 7) < 1) tiles[idx(x, y)] = T.WATER;
+    }
   }
 
   // ----- Roads / paths -----
@@ -202,24 +323,28 @@ export function generateMap(regionId = "overworld"): MapData {
     const V = Math.max(y0, y1);
     for (let y = v; y <= V; y++) stamp(x1, y, false);
   };
-  carve(10, 26, 33, 26); // spawn -> main road
-  carve(33, 26, 33, 14); // up toward the lake
-  carve(33, 14, 53, 14); // east across the lake (bridge) toward the Spire
-  carve(33, 26, 33, 36); // branch south into the ruins
-  carve(18, 12, 18, 26); // shard 1 -> main road
-  carve(50, 9, 50, 14); // shard 2 -> main road
-  carve(33, 34, 40, 34); // shard 3 -> main road
-  carve(53, 14, 79, 14); // old Spire -> Moonfall Reach
-  carve(33, 43, 33, 54); // ruins -> Ashen Expanse
-  carve(33, 54, 62, 54);
-  carve(62, 54, 78, 55);
-  carve(78, 55, 88, 49);
-  carve(78, 55, 88, 30);
-  carve(62, 54, 62, 61);
-  carve(62, 61, 62, 69); // south road to the Moonlit Coast
-  carve(78, 55, 96, 56); // east road to the Cinderwild
-  carve(62, 54, 70, 42);
-  carve(70, 42, 73, 22);
+
+  // Road network across the Old Lands
+  carve(14, 42, 56, 42); // spawn east to central north-south junction
+  carve(24, 42, 24, 18); // north track to The Weeping Archive
+  carve(56, 42, 56, 26); // north toward the lake bridge
+  carve(56, 26, 84, 26); // east across Murkwater Lake bridge and through the mountain pass
+  carve(84, 26, 84, 14); // alpine pass north toward Glass Reliquary
+  carve(84, 14, 96, 14);
+  carve(56, 42, 56, 64); // branch south into Ruins of Ilyarael
+  carve(56, 76, 78, 76); // branch east to Ilyarael's Sealed Vault
+  carve(56, 82, 56, 88); // exit south into Ashen Expanse
+  carve(56, 88, 120, 88); // southern ash highway to Moonfall Crossing
+  carve(96, 88, 96, 110); // south road to Moonlit Coast
+  carve(120, 88, 156, 90); // east road to Cinderwild
+  carve(84, 26, 126, 26); // mountain pass east to Moonfall Reach & True Spire
+  carve(120, 88, 120, 38); // Moonfall Crossing north to Spire approach
+  carve(120, 38, 126, 26);
+
+  // ----- Authored Exterior Fortress Sites -----
+  buildFortressExterior(tiles, 24, 18, "timber");
+  buildFortressExterior(tiles, 96, 14, "glass");
+  buildFortressExterior(tiles, 78, 76, "vault");
 
   // ----- Decoration -----
   const isGrass = (t: number) => t === T.GRASS || t === T.DGRASS;
@@ -227,86 +352,163 @@ export function generateMap(regionId = "overworld"): MapData {
     if (!inB(x, y) || !isGrass(tiles[idx(x, y)])) return;
     tiles[idx(x, y)] = T.CRYSTAL;
   };
-  for (let i = 0; i < 26; i++) {
-    crystalNear(26 + Math.floor(rng() * 16), 34 + Math.floor(rng() * 12));
-    crystalNear(50 + Math.floor(rng() * 16), 6 + Math.floor(rng() * 16));
+  for (let i = 0; i < 36; i++) {
+    crystalNear(46 + Math.floor(rng() * 26), 60 + Math.floor(rng() * 20));
+    crystalNear(90 + Math.floor(rng() * 26), 10 + Math.floor(rng() * 20));
   }
-  for (let i = 0; i < 230; i++) {
+  for (let i = 0; i < 400; i++) {
     const x = Math.floor(rng() * MAP_W);
     const y = Math.floor(rng() * MAP_H);
     if (isGrass(tiles[idx(x, y)]) && fine[idx(x, y)] > 0.46) tiles[idx(x, y)] = T.TALLGRASS;
   }
-  for (let i = 0; i < 90; i++) {
+  for (let i = 0; i < 150; i++) {
     const x = Math.floor(rng() * MAP_W);
     const y = Math.floor(rng() * MAP_H);
     if (isGrass(tiles[idx(x, y)]) && rng() < 0.5) tiles[idx(x, y)] = T.FLOWER;
   }
-  for (let i = 0; i < 24; i++) {
-    const x = 3 + Math.floor(rng() * 18);
-    const y = 2 + Math.floor(rng() * 22);
+  for (let i = 0; i < 40; i++) {
+    const x = 4 + Math.floor(rng() * 32);
+    const y = 4 + Math.floor(rng() * 36);
     if (isGrass(tiles[idx(x, y)])) tiles[idx(x, y)] = rng() < 0.5 ? T.GRAVE : T.BONES;
   }
-  for (let i = 0; i < 26; i++) {
+  for (let i = 0; i < 48; i++) {
     const x = Math.floor(rng() * MAP_W);
     const y = Math.floor(rng() * MAP_H);
-    if (isGrass(tiles[idx(x, y)]) && x > 22 && x < 44) tiles[idx(x, y)] = T.ROCK;
+    if (isGrass(tiles[idx(x, y)]) && x > 44 && x < 80) tiles[idx(x, y)] = T.ROCK;
   }
-  for (let y = 24; y <= 28; y++)
-    for (let x = 8; x <= 12; x++)
+  // Clear starting glade around spawn
+  for (let y = 39; y <= 45; y++) {
+    for (let x = 11; x <= 17; x++) {
       if (tiles[idx(x, y)] === T.TREE || tiles[idx(x, y)] === T.ROCK) tiles[idx(x, y)] = T.GRASS;
+    }
+  }
 
   // ----- Entities / points of interest -----
   const exits: RegionExit[] = [
-    { x: 96, y: 56, targetRegion: "cinderwild", destination: { x: px(7), y: px(38) }, label: "Cinderwild" },
-    { x: 62, y: 69, targetRegion: "moonlit-coast", destination: { x: px(50), y: px(7) }, label: "Moonlit Coast" },
-    fortressExit(18, 12, "fortress.old-lands-archive", "The Weeping Archive"),
-    fortressExit(50, 9, "fortress.old-lands-reliquary", "The Glass Reliquary"),
-    fortressExit(40, 34, "fortress.old-lands-vault", "Ilyarael's Sealed Vault"),
+    { x: 156, y: 90, targetRegion: "cinderwild", destination: { x: px(10), y: px(58) }, label: "Cinderwild" },
+    { x: 96, y: 110, targetRegion: "moonlit-coast", destination: { x: px(80), y: px(8) }, label: "Moonlit Coast" },
+    fortressExit(24, 18, "fortress.old-lands-archive", "The Weeping Archive"),
+    fortressExit(96, 14, "fortress.old-lands-reliquary", "The Glass Reliquary"),
+    fortressExit(78, 76, "fortress.old-lands-vault", "Ilyarael's Sealed Vault"),
   ];
+
   const signs: SignData[] = [
     {
-      x: 13,
-      y: 27,
+      x: 17,
+      y: 43,
       title: "A Traveller's Primer",
       text: "MOVE  WASD / Arrows · ATTACK  J / Space · DASH  Shift · SPEAK / READ  E · JOURNAL  L · PAUSE  Esc. The Watcher keeps the hall in Ilyarael: this road east to the junction, then south past the wayfire into the ruin. Write down what you find. Nobody else is going to.",
     },
     {
-      x: 33,
-      y: 35,
+      x: 56,
+      y: 68,
       title: "Inscription at Ilyarael",
       text: "Here stood Ilyarael. Orithel keeps the hall through this northern doorway. A scout marked three sealed doors before she stopped reporting: north along the western forest track; north of the mountain pass beyond the lake; and east of this approach, below the hall's broken seal.",
     },
-    { x: 35, y: 41, title: "The Courier's Orders", fact: "courier-orders", text: "Deliver the vessel to the collector at the broken shrine northeast of the Cinderwild's central circle. Do not open it. Do not listen to it. Beneath the seal, in a hand that tore the paper: ‘It has a child's voice. I have read this four times looking for the part where this is something other than what it fucking is. It isn't there. It was never going to be there.’" },
-    { x: 44, y: 13, title: "The Spire Warning", text: "Beyond the black ridge stands a glass tower. The old moon-road crosses the lake and keeps east. Those who followed it came back describing a sleeping thing. The ones who stayed and listened longer came back describing a crowd." },
-    { x: 52, y: 16, title: "A Pilgrim's Correction", text: "The first Spire is empty. Its keeper went east past the old ward. The pale-stone road is surest; the southern ash road has fewer eyes on it, if that matters to you. It mattered to me." },
-    { x: 64, y: 54, title: "Charred Surveyor's Page", text: "No fragments remain in the ash country — collected long ago, the ledger says, though it does not say by whom or on whose authority. At this junction the south road reaches Moonlit Coast; east past Moonfall Crossing lies the Cinderwild. Each frontier holds two. Both roads run on to the Starfall Moors, where the last pair went." },
-    { x: 78, y: 55, title: "Moonfall Crossing", text: "East into the Cinderwild. North back toward the Spire. Nine fragments answer the ward: three in the Old Lands, two in each frontier — Cinderwild, Moonlit Coast, Starfall Moors. Nine is not a natural number for a ward. Somebody asked for nine." },
-    { x: 76, y: 22, title: "Offering Ledger", text: "Before entering Moonfall Reach, travellers left offerings at the fork north of the ash road. The last party took the eastern path. The ledger records their offering and their names, and then a second entry striking the names out, in a different hand, dated the same day." },
-    { x: 79, y: 14, title: "The Last Ward", text: "Nine Anima Shards shall quiet the dreamer. No fewer. The ward does not point the way. It only remembers what was taken, which is the one thing everybody involved would rather it did not do." },
-    { x: 18, y: 12, title: "The Weeping Archive", text: "The forest track ends at a door of black timber. The records inside have been sealed against weather, fire, and the people they were written about." },
-    { x: 50, y: 9, title: "The Glass Reliquary", text: "The first Spire is empty above ground. Its lower door reflects you badly, as if someone else has been asked to stand where you are." },
-    { x: 40, y: 34, title: "Ilyarael's Sealed Vault", text: "The hall has another door below its east approach. The old elven seal is broken from the inside." },
-    { x: 96, y: 56, title: "East Road Marker", text: "The Cinderwild lies east: ash storms, broken shrines, no easy return. A tall stone circle at its heart, if the scouts were being honest." },
-    { x: 62, y: 69, title: "South Road Marker", text: "Moonlit Coast lies south. Follow the salt wind to lands the old maps forgot, or were made to forget. A pale beacon burns where its roads meet." },
+    {
+      x: 62,
+      y: 76,
+      title: "The Courier's Orders",
+      fact: "courier-orders",
+      text: "Deliver the vessel to the collector at the broken shrine northeast of the Cinderwild's central circle. Do not open it. Do not listen to it. Beneath the seal, in a hand that tore the paper: ‘It has a child's voice. I have read this four times looking for the part where this is something other than what it fucking is. It isn't there. It was never going to be there.’",
+    },
+    {
+      x: 78,
+      y: 24,
+      title: "The Spire Warning",
+      text: "Beyond the black ridge stands a glass tower. The old moon-road crosses the lake and keeps east. Those who followed it came back describing a sleeping thing. The ones who stayed and listened longer came back describing a crowd.",
+    },
+    {
+      x: 90,
+      y: 28,
+      title: "A Pilgrim's Correction",
+      text: "The first Spire is empty. Its keeper went east past the old ward. The pale-stone road is surest; the southern ash road has fewer eyes on it, if that matters to you. It mattered to me.",
+    },
+    {
+      x: 102,
+      y: 88,
+      title: "Charred Surveyor's Page",
+      text: "No fragments remain in the ash country — collected long ago, the ledger says, though it does not say by whom or on whose authority. At this junction the south road reaches Moonlit Coast; east past Moonfall Crossing lies the Cinderwild. Each frontier holds two. Both roads run on to the Starfall Moors, where the last pair went.",
+    },
+    {
+      x: 120,
+      y: 88,
+      title: "Moonfall Crossing",
+      text: "East into the Cinderwild. North back toward the Spire. Nine fragments answer the ward: three in the Old Lands, two in each frontier — Cinderwild, Moonlit Coast, Starfall Moors. Nine is not a natural number for a ward. Somebody asked for nine.",
+    },
+    {
+      x: 122,
+      y: 42,
+      title: "Offering Ledger",
+      text: "Before entering Moonfall Reach, travellers left offerings at the fork north of the ash road. The last party took the eastern path. The ledger records their offering and their names, and then a second entry striking the names out, in a different hand, dated the same day.",
+    },
+    {
+      x: 125,
+      y: 26,
+      title: "The Last Ward",
+      text: "Nine Anima Shards shall quiet the dreamer. No fewer. The ward does not point the way. It only remembers what was taken, which is the one thing everybody involved would rather it did not do.",
+    },
+    {
+      x: 24,
+      y: 18,
+      title: "The Weeping Archive",
+      text: "The forest track ends at a door of black timber. The records inside have been sealed against weather, fire, and the people they were written about.",
+    },
+    {
+      x: 96,
+      y: 14,
+      title: "The Glass Reliquary",
+      text: "The first Spire is empty above ground. Its lower door reflects you badly, as if someone else has been asked to stand where you are.",
+    },
+    {
+      x: 78,
+      y: 76,
+      title: "Ilyarael's Sealed Vault",
+      text: "The hall has another door below its east approach. The old elven seal is broken from the inside.",
+    },
+    {
+      x: 156,
+      y: 90,
+      title: "East Road Marker",
+      text: "The Cinderwild lies east: ash storms, broken shrines, no easy return. A tall stone circle at its heart, if the scouts were being honest.",
+    },
+    {
+      x: 96,
+      y: 110,
+      title: "South Road Marker",
+      text: "Moonlit Coast lies south. Follow the salt wind to lands the old maps forgot, or were made to forget. A pale beacon burns where its roads meet.",
+    },
   ];
-  // Shards are deliberately absent from the overworld. Each landmark is a
-  // commitment point into the interior that contains its own shard.
+
   const shards: Vec[] = [];
+
+  // 18 enemies strategically distributed across the expanded Old Lands
   const enemySpawns: EnemySpawn[] = [
-    { x: 16, y: 18, type: "wraith" },
-    { x: 22, y: 7, type: "wraith" },
-    { x: 48, y: 11, type: "sentinel" },
-    { x: 56, y: 22, type: "adept" },
-    { x: 42, y: 36, type: "adept" },
-    // Sparse patrols create intentional encounters without sealing the roads.
-    { x: 38, y: 51, type: "wraith" },
-    { x: 60, y: 58, type: "adept" },
-    { x: 70, y: 44, type: "sentinel" },
-    { x: 84, y: 50, type: "wraith" },
-    { x: 90, y: 34, type: "adept" },
-    // Moonfall Reach has room to approach the final road deliberately.
-    { x: 76, y: 19, type: "wraith" },
-    { x: 93, y: 18, type: "adept" },
+    // Weeping Forest patrols & Archive guards
+    { x: 20, y: 34, type: "wraith" },
+    { x: 30, y: 50, type: "wraith" },
+    { x: 16, y: 26, type: "wraith" },
+    { x: 24, y: 23, type: "sentinel" }, // The Weeping Archive perimeter guard
+    // Murkwater Lake shores
+    { x: 48, y: 24, type: "sentinel" },
+    { x: 70, y: 36, type: "adept" },
+    // Mountain Pass guards
+    { x: 84, y: 22, type: "sentinel" },
+    { x: 86, y: 28, type: "sentinel" },
+    // Alpine crags & Glass Reliquary guard
+    { x: 94, y: 18, type: "sentinel" }, // The Glass Reliquary perimeter guard
+    // Ruins of Ilyarael perimeter & Vault guard
+    { x: 48, y: 78, type: "wraith" },
+    { x: 66, y: 68, type: "adept" },
+    { x: 76, y: 80, type: "sentinel" }, // Ilyarael's Sealed Vault perimeter guard
+    // Ashen Expanse patrols
+    { x: 40, y: 94, type: "wraith" },
+    { x: 68, y: 98, type: "wraith" },
+    { x: 92, y: 96, type: "sentinel" },
+    { x: 114, y: 96, type: "adept" },
+    // Moonfall Crossing & Spire approaches
+    { x: 124, y: 86, type: "sentinel" },
+    { x: 128, y: 34, type: "adept" },
   ];
 
   return {
@@ -315,14 +517,14 @@ export function generateMap(regionId = "overworld"): MapData {
     height: MAP_H,
     tiles,
     wardTiles,
-    spawn: { x: px(10), y: px(26) },
-    npc: { x: px(32), y: px(39) },
+    spawn: { x: px(14), y: px(42) },
+    npc: { x: px(56), y: px(74) },
     signs,
     shards,
     enemySpawns,
     bossCenter: { x: px(trueSpireX), y: px(trueSpireY) },
     exits,
-    campfires: [{ x: px(33), y: px(31), name: "Ilyarael's Last Ember", relic: "emberheart" }],
+    campfires: [{ x: px(56), y: px(60), name: "Ilyarael's Last Ember", relic: "emberheart" }],
     dark: false,
     resetOnDeath: false,
     lights: [],
@@ -331,113 +533,323 @@ export function generateMap(regionId = "overworld"): MapData {
 
 /** Three large, seeded frontiers make the journey a world rather than one field. */
 function generateFrontierMap(regionId: string): MapData {
-  const configs: Record<string, { name: string; seed: number; water: boolean; exits: RegionExit[]; siteTiles: [number, number][]; relic: CampfireData["relic"] }> = {
-    "cinderwild": {
-      name: "The Cinderwild", seed: 0xc1d3a, water: false,
+  const configs: Record<
+    string,
+    {
+      name: string;
+      seed: number;
+      water: boolean;
+      exits: RegionExit[];
+      siteTiles: [number, number, FortressTheme][];
+      relic: CampfireData["relic"];
+      intermediateWaypoints: [number, number, number, number][];
+    }
+  > = {
+    cinderwild: {
+      name: "The Cinderwild",
+      seed: 0xc1d3a,
+      water: false,
       exits: [
-        { x: 3, y: 38, targetRegion: "overworld", destination: { x: px(94), y: px(56) }, label: "The Old Lands" },
-        { x: 88, y: 66, targetRegion: "starfall-moors", destination: { x: px(12), y: px(8) }, label: "Starfall Moors" },
-        fortressExit(72, 20, "fortress.cinderwild-shrine", "The Broken Shrine"),
-        fortressExit(84, 53, "fortress.cinderwild-watchpost", "The Ruined Watchpost"),
-      ], siteTiles: [[72, 20], [84, 53]], relic: "ashstep",
+        { x: 6, y: 58, targetRegion: "overworld", destination: { x: px(152), y: px(90) }, label: "The Old Lands" },
+        { x: 154, y: 104, targetRegion: "starfall-moors", destination: { x: px(14), y: px(14) }, label: "Starfall Moors" },
+        fortressExit(132, 22, "fortress.cinderwild-shrine", "The Broken Shrine"),
+        fortressExit(142, 78, "fortress.cinderwild-watchpost", "The Ruined Watchpost"),
+      ],
+      siteTiles: [
+        [132, 22, "cinder"],
+        [142, 78, "watchpost"],
+      ],
+      relic: "ashstep",
+      intermediateWaypoints: [
+        [6, 58, 42, 56],
+        [42, 56, 80, 56],
+        [80, 56, 108, 38],
+        [108, 38, 132, 22],
+        [80, 56, 114, 68],
+        [114, 68, 142, 78],
+        [114, 68, 154, 104],
+      ],
     },
     "moonlit-coast": {
-      name: "Moonlit Coast", seed: 0xbadc0de, water: true,
+      name: "Moonlit Coast",
+      seed: 0xbadc0de,
+      water: true,
       exits: [
-        { x: 50, y: 3, targetRegion: "overworld", destination: { x: px(62), y: px(67) }, label: "The Old Lands" },
-        { x: 91, y: 50, targetRegion: "starfall-moors", destination: { x: px(12), y: px(58) }, label: "Starfall Moors" },
-        fortressExit(24, 48, "fortress.moonlit-salt-graves", "The Salt Graves"),
-        fortressExit(78, 18, "fortress.moonlit-beacon", "The Keeper's Beacon"),
-      ], siteTiles: [[24, 48], [78, 18]], relic: "tidewell",
+        { x: 80, y: 5, targetRegion: "overworld", destination: { x: px(96), y: px(106) }, label: "The Old Lands" },
+        { x: 154, y: 76, targetRegion: "starfall-moors", destination: { x: px(14), y: px(96) }, label: "Starfall Moors" },
+        fortressExit(28, 88, "fortress.moonlit-salt-graves", "The Salt Graves"),
+        fortressExit(136, 20, "fortress.moonlit-beacon", "The Keeper's Beacon"),
+      ],
+      siteTiles: [
+        [28, 88, "salt"],
+        [136, 20, "beacon"],
+      ],
+      relic: "tidewell",
+      intermediateWaypoints: [
+        [80, 5, 80, 56],
+        [80, 56, 52, 72],
+        [52, 72, 28, 88],
+        [80, 56, 110, 36],
+        [110, 36, 136, 20],
+        [80, 56, 118, 66],
+        [118, 66, 154, 76],
+      ],
     },
     "starfall-moors": {
-      name: "The Starfall Moors", seed: 0x57a2fa11, water: false,
+      name: "The Starfall Moors",
+      seed: 0x57a2fa11,
+      water: false,
       exits: [
-        { x: 8, y: 8, targetRegion: "cinderwild", destination: { x: px(86), y: px(64) }, label: "The Cinderwild" },
-        { x: 8, y: 58, targetRegion: "moonlit-coast", destination: { x: px(89), y: px(50) }, label: "Moonlit Coast" },
-        fortressExit(47, 35, "fortress.starfall-observatory", "The Fallen Observatory"),
-        fortressExit(78, 42, "fortress.starfall-watch", "The Astronomer's Watch"),
-      ], siteTiles: [[47, 35], [78, 42]], relic: "starblade",
+        { x: 10, y: 12, targetRegion: "cinderwild", destination: { x: px(150), y: px(102) }, label: "The Cinderwild" },
+        { x: 10, y: 98, targetRegion: "moonlit-coast", destination: { x: px(150), y: px(76) }, label: "Moonlit Coast" },
+        fortressExit(36, 24, "fortress.starfall-observatory", "The Fallen Observatory"),
+        fortressExit(142, 62, "fortress.starfall-watch", "The Astronomer's Watch"),
+      ],
+      siteTiles: [
+        [36, 24, "observatory"],
+        [142, 62, "watch"],
+      ],
+      relic: "starblade",
+      intermediateWaypoints: [
+        [10, 12, 44, 34],
+        [44, 34, 80, 56],
+        [10, 98, 44, 78],
+        [44, 78, 80, 56],
+        [80, 56, 56, 38],
+        [56, 38, 36, 24],
+        [80, 56, 112, 58],
+        [112, 58, 142, 62],
+      ],
     },
   };
+
   const config = configs[regionId];
   if (!config) throw new Error(`Unknown region: ${regionId}`);
   const rng = mulberry32(config.seed);
   const tiles = new Uint8Array(MAP_W * MAP_H);
   const noise = smoothNoise(rng, 7);
-  for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
-    const n = noise[idx(x, y)];
-    tiles[idx(x, y)] = n < .38 ? T.DGRASS : T.GRASS;
-    if (n > .82 && rng() < .25) tiles[idx(x, y)] = config.water ? T.TALLGRASS : T.ROCK;
-    if (n < .14 && rng() < .35) tiles[idx(x, y)] = config.water ? T.SAND : T.TREE;
+
+  for (let y = 0; y < MAP_H; y++) {
+    for (let x = 0; x < MAP_W; x++) {
+      const n = noise[idx(x, y)];
+      tiles[idx(x, y)] = n < 0.38 ? T.DGRASS : T.GRASS;
+      if (n > 0.82 && rng() < 0.25) tiles[idx(x, y)] = config.water ? T.TALLGRASS : T.ROCK;
+      if (n < 0.14 && rng() < 0.35) tiles[idx(x, y)] = config.water ? T.SAND : T.TREE;
+    }
   }
+
   // Broad expedition roads leave room to observe, disengage, and choose fights.
-  const road = (x: number, y: number) => { if (inB(x, y)) tiles[idx(x, y)] = T.PATH; };
+  const road = (x: number, y: number) => {
+    if (inB(x, y)) tiles[idx(x, y)] = T.PATH;
+  };
   const line = (x0: number, y0: number, x1: number, y1: number) => {
     const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
-    for (let i = 0; i <= steps; i++) for (let w = -2; w <= 2; w++) {
-      const x = Math.round(x0 + (x1 - x0) * i / steps);
-      const y = Math.round(y0 + (y1 - y0) * i / steps);
-      road(x + (Math.abs(x1 - x0) > Math.abs(y1 - y0) ? 0 : w), y + (Math.abs(x1 - x0) > Math.abs(y1 - y0) ? w : 0));
+    for (let i = 0; i <= steps; i++) {
+      for (let w = -2; w <= 2; w++) {
+        const x = Math.round(x0 + ((x1 - x0) * i) / steps);
+        const y = Math.round(y0 + ((y1 - y0) * i) / steps);
+        road(
+          x + (Math.abs(x1 - x0) > Math.abs(y1 - y0) ? 0 : w),
+          y + (Math.abs(x1 - x0) > Math.abs(y1 - y0) ? w : 0)
+        );
+      }
     }
   };
-  const hub: [number, number] = [50, 36];
-  for (const exit of config.exits) line(exit.x, exit.y, hub[0], hub[1]);
-  for (const [x, y] of config.siteTiles) line(hub[0], hub[1], x, y);
-  // Landmark circle gives each map a discoverable centre and a combat clearing.
-  for (let y = 27; y <= 45; y++) for (let x = 40; x <= 60; x++) {
-    const d = Math.hypot(x - hub[0], y - hub[1]);
-    if (d < 7) tiles[idx(x, y)] = T.SPIREFLOOR;
-    else if (d < 9 && tiles[idx(x, y)] !== T.PATH) tiles[idx(x, y)] = T.ROCK;
+
+  // Carve the winding regional highways
+  for (const [x0, y0, x1, y1] of config.intermediateWaypoints) {
+    line(x0, y0, x1, y1);
   }
-  for (const exit of config.exits) for (let y = exit.y - 2; y <= exit.y + 2; y++) for (let x = exit.x - 2; x <= exit.x + 2; x++) road(x, y);
-  const signs: SignData[] = config.exits.map((exit) => ({ x: exit.x, y: exit.y, title: "Road of Wayfarers", text: `The road leads toward ${exit.label}. Old wheel-ruts, mostly. They run deeper going east than coming back, which tells you what the traffic was and which direction it was carrying.` }));
+
+  const hub: [number, number] = [80, 56];
+
+  // Landmark circle gives each map a discoverable centre and a combat clearing.
+  for (let y = hub[1] - 9; y <= hub[1] + 9; y++) {
+    for (let x = hub[0] - 10; x <= hub[0] + 10; x++) {
+      const d = Math.hypot(x - hub[0], y - hub[1]);
+      if (d < 7) tiles[idx(x, y)] = T.SPIREFLOOR;
+      else if (d < 9 && tiles[idx(x, y)] !== T.PATH) tiles[idx(x, y)] = T.ROCK;
+    }
+  }
+
+  // Clearings around region border exits
+  for (const exit of config.exits) {
+    for (let y = exit.y - 2; y <= exit.y + 2; y++) {
+      for (let x = exit.x - 2; x <= exit.x + 2; x++) {
+        road(x, y);
+      }
+    }
+  }
+
+  // Distinct regional environmental geography
+  if (regionId === "cinderwild") {
+    // Scorched Ravine hazards: rocks and embers flanking the northeast route
+    for (let y = 16; y <= 36; y++) {
+      for (let x = 98; x <= 136; x++) {
+        const i = idx(x, y);
+        if (tiles[i] === T.GRASS || tiles[i] === T.DGRASS) {
+          const r = rng();
+          if (r < 0.22) tiles[i] = T.EMBERS;
+          else if (r < 0.38) tiles[i] = T.ROCK;
+        }
+      }
+    }
+  } else if (regionId === "moonlit-coast") {
+    // Coastal ocean along south and east margins
+    for (let y = 0; y < MAP_H; y++) {
+      for (let x = 0; x < MAP_W; x++) {
+        const isOcean =
+          y > 98 || (x > 146 && y > 14) || (x < 36 && y > 82 && Math.hypot(x - 22, y - 96) < 18);
+        if (
+          isOcean &&
+          tiles[idx(x, y)] !== T.PATH &&
+          tiles[idx(x, y)] !== T.RFLOOR &&
+          tiles[idx(x, y)] !== T.RWALL
+        ) {
+          tiles[idx(x, y)] = T.WATER;
+        } else if (isOcean && tiles[idx(x, y)] === T.PATH) {
+          tiles[idx(x, y)] = T.BRIDGE;
+        }
+      }
+    }
+  } else if (regionId === "starfall-moors") {
+    // Celestial impact craters across the moors
+    const craters = [
+      { cx: 36, cy: 24, r: 8 },
+      { cx: 58, cy: 82, r: 7 },
+      { cx: 120, cy: 32, r: 6 },
+      { cx: 104, cy: 86, r: 7 },
+    ];
+    for (const { cx, cy, r } of craters) {
+      for (let y = cy - r - 2; y <= cy + r + 2; y++) {
+        for (let x = cx - r - 2; x <= cx + r + 2; x++) {
+          if (!inB(x, y)) continue;
+          const d = Math.hypot(x - cx, y - cy);
+          if (
+            d >= r - 1.2 &&
+            d <= r + 0.8 &&
+            tiles[idx(x, y)] !== T.PATH &&
+            tiles[idx(x, y)] !== T.RFLOOR
+          ) {
+            tiles[idx(x, y)] = T.ROCK;
+          } else if (
+            d < r - 1.2 &&
+            tiles[idx(x, y)] !== T.PATH &&
+            tiles[idx(x, y)] !== T.RFLOOR
+          ) {
+            tiles[idx(x, y)] = rng() < 0.18 ? T.CRYSTAL : T.SPIREFLOOR;
+          }
+        }
+      }
+    }
+  }
+
+  // Authored, imposing fortress exterior sites
+  for (const [x, y, theme] of config.siteTiles) {
+    buildFortressExterior(tiles, x, y, theme);
+  }
+
+  const signs: SignData[] = config.exits.map((exit) => ({
+    x: exit.x,
+    y: exit.y,
+    title: "Road of Wayfarers",
+    text: `The road leads toward ${exit.label}. Old wheel-ruts, mostly. They run deeper going east than coming back, which tells you what the traffic was and which direction it was carrying.`,
+  }));
+
   const surveys: Record<string, string> = {
-    cinderwild: "This is the Cinder Circle. The northeast track ends at a broken shrine — a fragment there, and a vessel that was never delivered. The southeast track ends at a ruined watchpost, where a warden still holds a second fragment and has forgotten why it is holding anything. The long road southeast reaches the Starfall Moors.",
-    "moonlit-coast": "At this pale circle: southwest to the salt graves and a fragment; northeast to the keeper's beacon, where a warden watches the second. The graves are the older road and much the better lit, which is not an accident. The eastern road reaches the Starfall Moors.",
-    "starfall-moors": "The fallen observatory lies northwest of this wayfire, inside the stone ring; a fragment sits among its records. The road east, sloping slightly south, ends at the astronomer's guardian and the last fragment. The northwest road returns to the Cinderwild, the southwest to Moonlit Coast.",
+    cinderwild:
+      "This is the Cinder Circle. The northeast track ends at a broken shrine — a fragment there, and a vessel that was never delivered. The southeast track ends at a ruined watchpost, where a warden still holds a second fragment and has forgotten why it is holding anything. The long road southeast reaches the Starfall Moors.",
+    "moonlit-coast":
+      "At this pale circle: southwest to the salt graves and a fragment; northeast to the keeper's beacon, where a warden watches the second. The graves are the older road and much the better lit, which is not an accident. The eastern road reaches the Starfall Moors.",
+    "starfall-moors":
+      "The fallen observatory lies northwest of this wayfire, inside the stone ring; a fragment sits among its records. The road east, sloping slightly south, ends at the astronomer's guardian and the last fragment. The northwest road returns to the Cinderwild, the southwest to Moonlit Coast.",
   };
-  signs.push({ x: 50, y: 39, title: `${config.name} Survey`, text: surveys[regionId] });
+  signs.push({ x: 80, y: 60, title: `${config.name} Survey`, text: surveys[regionId] });
+
   const records: Record<string, SignData[]> = {
     cinderwild: [
-      { x: 72, y: 20, title: "The Broken Shrine", fact: "courier-memory", text: "A courier's shell, curled around a vessel the size of a fist. She got this far and could not finish, so she spent herself keeping it warm instead — nine hundred years of her, for this. The thing inside is still awake. It has been awake the entire time. It asks, very politely, whether it is going to be allowed to stop. I copy every word into my journal because I do not trust myself to carry it accurately." },
-      { x: 84, y: 53, title: "The Ruined Watchpost", text: "The southern watch fell defending a fragment, and the warden still walks its circuit around an empty post. It does not know the post is empty. Beyond these fields the southeastern road descends into the Starfall Moors." },
+      {
+        x: 132,
+        y: 22,
+        title: "The Broken Shrine",
+        fact: "courier-memory",
+        text: "A courier's shell, curled around a vessel the size of a fist. She got this far and could not finish, so she spent herself keeping it warm instead — nine hundred years of her, for this. The thing inside is still awake. It has been awake the entire time. It asks, very politely, whether it is going to be allowed to stop. I copy every word into my journal because I do not trust myself to carry it accurately.",
+      },
+      {
+        x: 142,
+        y: 78,
+        title: "The Ruined Watchpost",
+        text: "The southern watch fell defending a fragment, and the warden still walks its circuit around an empty post. It does not know the post is empty. Beyond these fields the southeastern road descends into the Starfall Moors.",
+      },
     ],
     "moonlit-coast": [
-      { x: 24, y: 48, title: "The Salt Graves", fact: "salt-graves", text: "No bodies. Only names, scraped down to the stone. The evacuation ledger says the last boat left half empty, and every passenger who did not board carries the same mark in the margin — the intake mark, though the ledger does not call it that. RECONCILED — 41. TRANSFERRED TO COLLECTION — 39. And underneath, in the same clerk's unhurried hand, a note that the remainder, being already struck from the rolls, were not counted out, and that whatever the collectors did with them on the road was not a matter the harbour was obliged to record, a person who does not exist being incapable of complaint. Another account survives at the beacon northeast of the pale circle." },
-      { x: 78, y: 18, title: "The Keeper's Beacon", fact: "salt-beacon", text: "‘I chose. Someone had to choose and I was the one standing there. Forty went on that boat who would not have gone otherwise. I know exactly what that cost and I have never once pretended the arithmetic was clean.’ He is reasonable for eleven pages, and signed every one of them. By the ninth I had started nodding along, and that frightened me worse than the graves did. Orithel would know what to do with this." },
+      {
+        x: 28,
+        y: 88,
+        title: "The Salt Graves",
+        fact: "salt-graves",
+        text: "No bodies. Only names, scraped down to the stone. The evacuation ledger says the last boat left half empty, and every passenger who did not board carries the same mark in the margin — the intake mark, though the ledger does not call it that. RECONCILED — 41. TRANSFERRED TO COLLECTION — 39. And underneath, in the same clerk's unhurried hand, a note that the remainder, being already struck from the rolls, were not counted out, and that whatever the collectors did with them on the road was not a matter the harbour was obliged to record, a person who does not exist being incapable of complaint. Another account survives at the beacon northeast of the pale circle.",
+      },
+      {
+        x: 136,
+        y: 20,
+        title: "The Keeper's Beacon",
+        fact: "salt-beacon",
+        text: "‘I chose. Someone had to choose and I was the one standing there. Forty went on that boat who would not have gone otherwise. I know exactly what that cost and I have never once pretended the arithmetic was clean.’ He is reasonable for eleven pages, and signed every one of them. By the ninth I had started nodding along, and that frightened me worse than the graves did. Orithel would know what to do with this.",
+      },
     ],
     "starfall-moors": [
-      { x: 47, y: 35, title: "The Fallen Observatory", fact: "dawn-record", text: "‘One dawn, forever’ is what the plaque says, and what the funding said. The working notes say something else. The lens was an intake prototype and he tested it on himself, deliberately, to demonstrate the process was survivable at scale. He wrote down the moment he understood that it was not. He kept writing for a considerable time after. His guardian waits at the end of the eastern track, just south of east from the wayfire." },
-      { x: 78, y: 42, title: "The Astronomer's Watch", text: "The guardian's casing carries the observatory seal, stamped into the metal the way equipment is stamped. Something is burning inside it and has not been permitted to stop burning. It will not leave the road while the shell holds." },
+      {
+        x: 36,
+        y: 24,
+        title: "The Fallen Observatory",
+        fact: "dawn-record",
+        text: "‘One dawn, forever’ is what the plaque says, and what the funding said. The working notes say something else. The lens was an intake prototype and he tested it on himself, deliberately, to demonstrate the process was survivable at scale. He wrote down the moment he understood that it was not. He kept writing for a considerable time after. His guardian waits at the end of the eastern track, just south of east from the wayfire.",
+      },
+      {
+        x: 142,
+        y: 62,
+        title: "The Astronomer's Watch",
+        text: "The guardian's casing carries the observatory seal, stamped into the metal the way equipment is stamped. Something is burning inside it and has not been permitted to stop burning. It will not leave the road while the shell holds.",
+      },
     ],
   };
   signs.push(...records[regionId]);
-  // Authored, walkable gateway clearings preserve the roads to every interior.
-  for (const [x, y] of config.siteTiles) {
-    for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) tiles[idx(x + dx, y + dy)] = config.water ? T.SAND : T.RFLOOR;
-    tiles[idx(x - 3, y - 3)] = config.water ? T.GRAVE : T.RWALL;
-    tiles[idx(x + 3, y - 3)] = config.water ? T.GRAVE : T.RWALL;
-    tiles[idx(x, y - 3)] = T.CRYSTAL;
-  }
-  const enemySpawns: EnemySpawn[] = [];
-  const openGround = (tile: number) => tile === T.GRASS || tile === T.DGRASS || tile === T.TALLGRASS || tile === T.SAND;
+
+  // Exactly 10 enemies: 2 fortress approach sentinels + 8 wilderness patrols
+  const enemySpawns: EnemySpawn[] = [
+    { x: config.siteTiles[0][0] - 2, y: config.siteTiles[0][1] + 4, type: "sentinel" },
+    { x: config.siteTiles[1][0] - 2, y: config.siteTiles[1][1] + 4, type: "sentinel" },
+  ];
+
+  const openGround = (tile: number) =>
+    tile === T.GRASS || tile === T.DGRASS || tile === T.TALLGRASS || tile === T.SAND;
   let attempts = 0;
-  while (enemySpawns.length < 6 && attempts++ < 400) {
-    const x = 8 + Math.floor(rng() * 84), y = 7 + Math.floor(rng() * 58);
+  while (enemySpawns.length < 10 && attempts++ < 600) {
+    const x = 12 + Math.floor(rng() * (MAP_W - 24));
+    const y = 10 + Math.floor(rng() * (MAP_H - 20));
     if (!openGround(tiles[idx(x, y)])) continue;
-    if (Math.hypot(x - hub[0], y - hub[1]) < 12) continue;
-    if (config.siteTiles.some(([sx, sy]) => Math.hypot(x - sx, y - sy) < 7)) continue;
-    if (enemySpawns.some((spawn) => Math.hypot(x - spawn.x, y - spawn.y) < 16)) continue;
+    if (Math.hypot(x - hub[0], y - hub[1]) < 16) continue;
+    if (config.siteTiles.some(([sx, sy]) => Math.hypot(x - sx, y - sy) < 10)) continue;
+    if (enemySpawns.some((spawn) => Math.hypot(x - spawn.x, y - spawn.y) < 18)) continue;
     const i = enemySpawns.length;
-    enemySpawns.push({ x, y, type: i % 5 === 0 ? "adept" : i % 3 === 0 ? "sentinel" : "wraith" });
+    enemySpawns.push({ x, y, type: i % 4 === 0 ? "adept" : i % 3 === 0 ? "sentinel" : "wraith" });
   }
+
   return {
-    regionName: config.name, width: MAP_W, height: MAP_H, tiles, wardTiles: [],
-    spawn: { x: px(50), y: px(36) }, npc: { x: -9999, y: -9999 }, signs,
-    shards: [], enemySpawns,
-    bossCenter: { x: px(50), y: px(36) }, exits: config.exits,
-    campfires: [{ x: px(50), y: px(36), name: `${config.name} Wayfire`, relic: config.relic }],
+    regionName: config.name,
+    width: MAP_W,
+    height: MAP_H,
+    tiles,
+    wardTiles: [],
+    spawn: { x: px(80), y: px(56) },
+    npc: { x: -9999, y: -9999 },
+    signs,
+    shards: [],
+    enemySpawns,
+    bossCenter: { x: px(80), y: px(56) },
+    exits: config.exits,
+    campfires: [{ x: px(80), y: px(56), name: `${config.name} Wayfire`, relic: config.relic }],
     dark: false,
     resetOnDeath: false,
     lights: [],
@@ -465,13 +877,15 @@ function generateFortressMap(regionId: string): MapData {
     shards: [{ x: px(layout.shard.x), y: px(layout.shard.y) }],
     enemySpawns,
     bossCenter: { x: px(layout.shard.x), y: px(layout.shard.y) },
-    exits: [{
-      x: layout.door.x,
-      y: layout.door.y,
-      targetRegion: config.returnTo.region,
-      destination: config.returnTo.destination,
-      label: config.returnTo.label,
-    }],
+    exits: [
+      {
+        x: layout.door.x,
+        y: layout.door.y,
+        targetRegion: config.returnTo.region,
+        destination: config.returnTo.destination,
+        label: config.returnTo.label,
+      },
+    ],
     campfires: [],
     dark: true,
     resetOnDeath: true,
