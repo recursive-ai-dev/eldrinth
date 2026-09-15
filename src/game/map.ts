@@ -1,5 +1,5 @@
 import { MAP_W, MAP_H, TILE, T } from "./constants";
-import type { MapData, Vec, EnemySpawn, SignData, RegionExit, CampfireData } from "./types";
+import type { MapData, Vec, EnemySpawn, SignData, RegionExit, CampfireData, TownData } from "./types";
 import { parseFortressLayout } from "./fortress";
 import { FORTRESS_LAYOUTS } from "./fortressLayouts";
 
@@ -46,6 +46,103 @@ const FORTRESS_REGIONS = {
 function fortressExit(x: number, y: number, targetRegion: FortressId, label: string): RegionExit {
   const { door } = parseFortressLayout(FORTRESS_LAYOUTS[targetRegion]);
   return { x, y, targetRegion, destination: { x: px(door.x), y: px(door.y + 1) }, label };
+}
+/** Hand-authored settlement layouts. Glyphs: # wall, . floor, D door, H house block, N NPC spot. */
+const TOWN_LAYOUTS: Record<string, string[]> = {
+  "ilyarael-township": [
+    "####################",
+    "#..................#",
+    "#..HH...N.....HH...#",
+    "#..HH.........HH...#",
+    "#..................#",
+    "#.......##.........#",
+    "D.......##....N....#",
+    "#..................#",
+    "#..................#",
+    "####################",
+  ],
+};
+
+interface ParsedTown {
+  width: number;
+  height: number;
+  door: Vec;
+  npcSpots: Vec[];
+}
+
+function parseTownLayout(id: string, rows: string[]): ParsedTown {
+  if (rows.length === 0) throw new Error(`A town layout needs at least one row: ${id}`);
+  const width = rows[0].length;
+  const height = rows.length;
+  for (const [y, row] of rows.entries()) {
+    if (row.length !== width) throw new Error(`Town row ${y} has width ${row.length}, expected ${width} in ${id}`);
+  }
+  const door: Vec[] = [];
+  const npcSpots: Vec[] = [];
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const glyph = rows[y][x];
+      if (!"#HDN.".includes(glyph)) throw new Error(`Unknown town glyph "${glyph}" at ${x},${y} in ${id}`);
+      if (glyph === "D") door.push({ x, y });
+      if (glyph === "N") npcSpots.push({ x, y });
+    }
+  }
+  if (door.length !== 1) throw new Error(`Town ${id} needs exactly one door, found ${door.length}`);
+  return { width, height, door: door[0], npcSpots };
+}
+
+/** Stamp a town onto the tile grid and return its metadata for MapData.towns. */
+function stampTown(
+  tiles: Uint8Array,
+  townId: string,
+  worldX: number,
+  worldY: number,
+  npcs: { id: string; name: string; color: string; role: TownData["npcs"][number]["role"] }[],
+): TownData {
+  const layout = parseTownLayout(townId, TOWN_LAYOUTS[townId]);
+  for (let y = 0; y < layout.height; y++) {
+    for (let x = 0; x < layout.width; x++) {
+      const glyph = TOWN_LAYOUTS[townId][y][x];
+      const tx = worldX + x;
+      const ty = worldY + y;
+      if (!inB(tx, ty)) continue;
+      const i = idx(tx, ty);
+      if (glyph === "#" || glyph === "H") tiles[i] = T.RWALL;
+      else if (glyph === "." || glyph === "D" || glyph === "N") tiles[i] = T.RFLOOR;
+    }
+  }
+  const centerX = worldX + layout.width / 2;
+  const centerY = worldY + layout.height / 2;
+  // Covers the settlement footprint plus a one-tile buffer, but no further.
+  const safeRadius = (Math.max(layout.width, layout.height) / 2 + 1) * TILE;
+  const doorWorldX = worldX + layout.door.x;
+  const doorWorldY = worldY + layout.door.y;
+  // The sign sits one tile inward from the door so it is always on walkable floor.
+  const inwardX = layout.door.x === 0 ? 1 : layout.door.x === layout.width - 1 ? -1 : 0;
+  const inwardY = layout.door.y === 0 ? 1 : layout.door.y === layout.height - 1 ? -1 : 0;
+  const townNpcs = layout.npcSpots.map((spot, index) => {
+    const npc = npcs[index];
+    if (!npc) throw new Error(`Town ${townId} has an NPC spot without a matching NPC definition.`);
+    return { ...npc, x: px(worldX + spot.x), y: px(worldY + spot.y) };
+  });
+  const name = townId
+    .split("-")
+    .map((word) => word[0].toUpperCase() + word.slice(1))
+    .join(" ");
+  return {
+    id: townId,
+    name,
+    x: px(centerX),
+    y: px(centerY),
+    safeRadius,
+    npcs: townNpcs,
+    sign: {
+      x: doorWorldX + inwardX,
+      y: doorWorldY + inwardY,
+      title: name,
+      text: "No enemies pursue past the threshold. Rest, speak, and read the road before you go.",
+    },
+  };
 }
 
 // Smooth value-noise for organic patches of terrain.
@@ -190,6 +287,13 @@ function buildFortressExterior(
       if (inB(gx + 2, gy + 3)) tiles[idx(gx + 2, gy + 3)] = T.CRYSTAL;
       break;
   }
+}
+
+export function isInsideTownSafeZone(map: MapData, x: number, y: number): boolean {
+  for (const town of map.towns) {
+    if (Math.hypot(x - town.x, y - town.y) < town.safeRadius) return true;
+  }
+  return false;
 }
 
 export function generateMap(regionId = "overworld"): MapData {
@@ -341,6 +445,17 @@ export function generateMap(regionId = "overworld"): MapData {
   carve(120, 88, 120, 38); // Moonfall Crossing north to Spire approach
   carve(120, 38, 126, 26);
 
+  // ----- Ilyarael Township: a safe settlement on the southern road -----
+  const towns: TownData[] = [
+    stampTown(tiles, "ilyarael-township", 68, 92, [
+      { id: "town:ilyarael:scrivener", name: "The Scrivener", color: "#c9a86c", role: "lore" },
+      { id: "town:ilyarael:healer", name: "Hollow Sister", color: "#8fcca8", role: "healer" },
+    ]),
+  ];
+
+  // Spur road from the southern ash highway to the township door
+  carve(56, 88, 56, 98);
+  carve(56, 98, 68, 98);
   // ----- Authored Exterior Fortress Sites -----
   buildFortressExterior(tiles, 24, 18, "timber");
   buildFortressExterior(tiles, 96, 14, "glass");
@@ -480,6 +595,9 @@ export function generateMap(regionId = "overworld"): MapData {
     },
   ];
 
+  // Settlement signs are authored with the layout so a town always advertises itself.
+  for (const town of towns) if (town.sign) signs.push(town.sign);
+
   const shards: Vec[] = [];
 
   // 18 enemies strategically distributed across the expanded Old Lands
@@ -503,7 +621,7 @@ export function generateMap(regionId = "overworld"): MapData {
     { x: 76, y: 80, type: "sentinel" }, // Ilyarael's Sealed Vault perimeter guard
     // Ashen Expanse patrols
     { x: 40, y: 94, type: "wraith" },
-    { x: 68, y: 98, type: "wraith" },
+    { x: 44, y: 104, type: "wraith" },
     { x: 92, y: 96, type: "sentinel" },
     { x: 114, y: 96, type: "adept" },
     // Moonfall Crossing & Spire approaches
@@ -528,6 +646,7 @@ export function generateMap(regionId = "overworld"): MapData {
     dark: false,
     resetOnDeath: false,
     lights: [],
+    towns,
   };
 }
 
@@ -853,6 +972,7 @@ function generateFrontierMap(regionId: string): MapData {
     dark: false,
     resetOnDeath: false,
     lights: [],
+    towns: [],
   };
 }
 
@@ -890,5 +1010,6 @@ function generateFortressMap(regionId: string): MapData {
     dark: true,
     resetOnDeath: true,
     lights: layout.braziers.map(({ x, y }) => ({ x: px(x), y: px(y) })),
+    towns: [],
   };
 }

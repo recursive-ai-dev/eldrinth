@@ -21,7 +21,13 @@ export interface GameFlowState {
   messageId: number;
   prompt: string;
   dialogue: DialogueData | null;
-  map: { regionName: string; npc: { x: number; y: number }; signs: Array<{ x: number; y: number; text: string }>; campfires: Array<{ x: number; y: number }> };
+  map: {
+    regionName: string;
+    npc: { x: number; y: number };
+    towns: Array<{ x: number; y: number; npcs: Array<{ x: number; y: number; name: string; role: string }> }>;
+    signs: Array<{ x: number; y: number; text: string }>;
+    campfires: Array<{ x: number; y: number }>;
+  };
   items: Array<{ type: string; taken: boolean; x: number; y: number }>;
 }
 
@@ -62,6 +68,13 @@ export class GameFlowSystem {
     if (state.map.campfires.some((fire) => Math.hypot(p.x - fire.x, p.y - fire.y) < 52)) return "Press E to rest at the wayfire";
     if (Math.hypot(p.x - npc.x, p.y - npc.y) < 48) {
       return "Press E to speak with Orithel";
+    }
+    for (const town of state.map.towns) {
+      for (const npc of town.npcs) {
+        if (Math.hypot(p.x - npc.x, p.y - npc.y) < 44) {
+          return `Press E to speak with ${npc.name}`;
+        }
+      }
     }
     for (const s of state.map.signs) {
       const sx = s.x * TILE + TILE / 2;

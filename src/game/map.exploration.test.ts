@@ -121,3 +121,52 @@ describe("expanded map exploration & reachability", () => {
     }
   });
 });
+
+describe("authored settlements", () => {
+  it("places Ilyarael Township with reachable townsfolk and a safe zone", () => {
+    const map = generateMap("overworld");
+    expect(map.towns).toHaveLength(1);
+
+    const town = map.towns[0];
+    expect(town.id).toBe("ilyarael-township");
+    expect(town.npcs.map((npc) => npc.role).sort()).toEqual(["healer", "lore"]);
+    expect(town.safeRadius).toBeGreaterThan(0);
+    expect(town.sign).toBeDefined();
+
+    // Every townsperson stands on walkable floor.
+    for (const npc of town.npcs) {
+      const tx = Math.floor(npc.x / TILE);
+      const ty = Math.floor(npc.y / TILE);
+      expect(canWalk(map, tx, ty), `${npc.name} at (${tx}, ${ty}) must stand on walkable floor`).toBe(true);
+    }
+
+    // The town square (safe-zone centre) is walkable.
+    expect(canWalk(map, Math.floor(town.x / TILE), Math.floor(town.y / TILE))).toBe(true);
+
+    // The settlement is reachable on foot from the Old Lands spawn.
+    const spawnTile = { x: Math.floor(map.spawn.x / TILE), y: Math.floor(map.spawn.y / TILE) };
+    for (const npc of town.npcs) {
+      const target = { x: Math.floor(npc.x / TILE), y: Math.floor(npc.y / TILE) };
+      const reached = findPathBFS(map, spawnTile, target);
+      expect(reached, `Expected a walking route from spawn to ${npc.name}`).toBe(true);
+    }
+
+    // The town advertises itself with a readable sign.
+    const sign = town.sign!;
+    expect(canWalk(map, sign.x, sign.y)).toBe(true);
+    expect(map.signs.some((entry) => entry.x === sign.x && entry.y === sign.y)).toBe(true);
+  });
+
+  it("keeps the township separate from wilderness patrols", () => {
+    const map = generateMap("overworld");
+    const town = map.towns[0];
+    for (const spawn of map.enemySpawns) {
+      const px = spawn.x * TILE + TILE / 2;
+      const py = spawn.y * TILE + TILE / 2;
+      expect(
+        Math.hypot(px - town.x, py - town.y),
+        `Enemy spawn at (${spawn.x}, ${spawn.y}) should not begin inside the township`,
+      ).toBeGreaterThan(town.safeRadius);
+    }
+  });
+});

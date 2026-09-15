@@ -159,6 +159,8 @@ export class Game {
   /** Set when the player dies somewhere whose half-cleared state must not persist. */
   private discardCurrentRegion = false;
   private regionGateCooldown = 0;
+  /** Town services that have been used since entering this region. Cleared on region change. */
+  private usedTownServices = new Set<string>();
   journalOpen = false;
   private initPromise: Promise<void> | null = null;
   private destroyed = false;
@@ -377,6 +379,7 @@ export class Game {
       this.world.regionId = region.id;
       this.cb.onInterior(region.id.startsWith("fortress."));
       this.map = region.map;
+      this.usedTownServices.clear();
       this.mapPxW = this.map.width * TILE;
       this.mapPxH = this.map.height * TILE;
       this.wardSet = new Set(this.map.wardTiles);
@@ -935,6 +938,13 @@ export class Game {
     }
   }
 
+  private playerInTownSafeZone(): boolean {
+    for (const town of this.map.towns) {
+      if (Math.hypot(this.player.x - town.x, this.player.y - town.y) < town.safeRadius) return true;
+    }
+    return false;
+  }
+
   /* ----------------------------- enemies ----------------------------- */
   updateEnemy(e: Enemy, dt: number) {
     if (Math.abs(e.vx) > 1 || Math.abs(e.vy) > 1) this.moveEntity(e, e.vx * dt, e.vy * dt);
@@ -957,7 +967,7 @@ export class Game {
       onText: (x, y, text, color, size) => this.addText(x, y, text, color, size),
       onShake: (mag) => this.shake(mag),
       random: () => this.world.nextRandom(),
-      engagementMultiplier: DIFFICULTY_TUNING[this.world.difficulty].awareness,
+      engagementMultiplier: this.playerInTownSafeZone() ? 0 : DIFFICULTY_TUNING[this.world.difficulty].awareness,
     });
 
     this.moveEntity(e, e.vx * dt, e.vy * dt);
@@ -1228,6 +1238,13 @@ export class Game {
       this.restAtCampfire(fire);
       return;
     }
+    for (const town of this.map.towns) {
+      const npc = town.npcs.find((n) => Math.hypot(p.x - n.x, p.y - n.y) < INTERACT_NPC_DISTANCE);
+      if (npc) {
+        this.speakWithTownNpc(npc);
+        return;
+      }
+    }
     const npc = this.map.npc;
     if (Math.hypot(p.x - npc.x, p.y - npc.y) < INTERACT_NPC_DISTANCE) {
       this.openWatcherTopics();
@@ -1242,6 +1259,50 @@ export class Game {
         return;
       }
     }
+  }
+
+  private speakWithTownNpc(npc: import("./types").NpcData) {
+    const used = this.usedTownServices.has(npc.id);
+    if (npc.role === "healer") {
+      if (used) {
+        this.openDialogue(["I have done what I can for you this visit. The road will do the rest."], npc.name, npc.color);
+      } else {
+        this.usedTownServices.add(npc.id);
+        this.player.hp = this.player.maxHp;
+        this.burst(npc.x, npc.y, "#8fcca8", 14);
+        this.openDialogue(["Close your eyes. I will borrow the hollow spaces between your ribs and fill them with what little light is left here.", "Your wounds close. For now, the town's grace holds."], npc.name, npc.color);
+      }
+    } else if (npc.role === "lore") {
+      if (used) {
+        this.openDialogue(["The records do not change because you keep asking. Go and make a new one."], npc.name, npc.color);
+      } else {
+        this.usedTownServices.add(npc.id);
+        const entry = this.townLoreEntry(npc.id);
+        if (entry) {
+          if (!this.world.journal.some((existing) => entry.id === existing.id)) {
+            this.world.journal.push(entry);
+            this.publishJournal();
+          }
+          this.openDialogue([entry.text, "I have copied this into your journal. Press L to read it again."], npc.name, npc.color);
+        } else {
+          this.openDialogue(["I have nothing new for you."], npc.name, npc.color);
+        }
+      }
+    } else {
+      this.openDialogue(["The road has been hard. Rest while you can."], npc.name, npc.color);
+    }
+  }
+
+  private townLoreEntry(npcId: string): import("./types").JournalEntry | null {
+    const entries: Record<string, import("./types").JournalEntry> = {
+      "town:ilyarael:scrivener": {
+        id: "town:ilyarael:scrivener",
+        title: "The Scrivener's Mark",
+        text: "The Weeping Archive lies north along the western forest track. Its door is black timber, and the records inside have been sealed against weather, fire, and the people they were written about. A wraith circles the threshold. It was a clerk once, or so the locals say.",
+        source: "The Scrivener · Ilyarael Township",
+      },
+    };
+    return entries[npcId] ?? null;
   }
 
   private discoverNote(sign: import("./types").SignData) {

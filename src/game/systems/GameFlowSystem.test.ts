@@ -16,7 +16,7 @@ describe("GameFlowSystem HUD", () => {
       messageId: 0,
       prompt: "",
       dialogue: null,
-      map: { regionName: "Test", npc: { x: 0, y: 0 }, signs: [], campfires: [] },
+      map: { regionName: "Test", npc: { x: 0, y: 0 }, towns: [], signs: [], campfires: [] },
       items: [],
     });
 
@@ -38,7 +38,7 @@ describe("GameFlowSystem objectives", () => {
     messageId: 0,
     prompt: "",
     dialogue: null,
-    map: { regionName: "Test", npc: { x: 0, y: 0 }, signs: [], campfires: [] },
+    map: { regionName: "Test", npc: { x: 0, y: 0 }, towns: [], signs: [], campfires: [] },
     items: [],
   };
 

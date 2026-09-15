@@ -52,6 +52,32 @@ export interface CampfireData {
   relic: "emberheart" | "ashstep" | "tidewell" | "starblade";
 }
 
+export interface NpcData {
+  /** Pixel position. */
+  x: number;
+  y: number;
+  id: string;
+  name: string;
+  /** Dialogue color. */
+  color: string;
+  /** Functional role — drives which interaction branch in the engine handles this NPC. */
+  role: "healer" | "scout" | "merchant" | "lore";
+}
+
+export interface TownData {
+  id: string;
+  name: string;
+  /** Center of the safe zone in pixel coordinates. */
+  x: number;
+  y: number;
+  /** Radius in pixels inside which enemies do not spawn and will not pursue. */
+  safeRadius: number;
+  /** Townsfolk. */
+  npcs: NpcData[];
+  /** Readable sign at the town entrance. */
+  sign?: SignData;
+}
+
 export interface MapData {
   regionName: string;
   width: number;
@@ -66,6 +92,8 @@ export interface MapData {
   bossCenter: Vec;
   exits: RegionExit[];
   campfires: CampfireData[];
+  /** Authored settlements placed on the frontier. */
+  towns: TownData[];
   /** Interiors render under a darkness overlay punched by light sources. */
   dark: boolean;
   /** Dying here discards the region's retained inhabitants. */
