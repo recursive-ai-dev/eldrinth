@@ -951,10 +951,16 @@ function drawSortedWorldObjects(g: RenderState, ctx: CanvasRenderingContext2D) {
   }
   for (const fire of g.map.campfires) objects.push({ y: fire.y, draw: () => drawCampfire(g, ctx, fire.x, fire.y) });
   for (const npc of g.map.npcs) {
-    objects.push({ y: npc.y, draw: () => drawNpc(ctx, npc.x, npc.y, npc.color, npc.role) });
+    objects.push({
+      y: npc.y,
+      draw: () => drawNpc(ctx, npc.x, npc.y, npc.color, npc.role, npc.portrait?.id, g.time, npc.name, g.player),
+    });
   }
   if (g.map.npc.x > 0 && g.map.npc.y > 0) {
-    objects.push({ y: g.map.npc.y, draw: () => drawNpc(ctx, g.map.npc.x, g.map.npc.y, "#9ff7e6") });
+    objects.push({
+      y: g.map.npc.y,
+      draw: () => drawNpc(ctx, g.map.npc.x, g.map.npc.y, "#9ff7e6", "lore", "orithel-the-last-watcher", g.time, "Orithel", g.player),
+    });
   }
   for (const item of g.items) if (!item.taken) objects.push({ y: item.y, draw: () => drawItem(g, ctx, item) });
   for (const enemy of g.enemies) objects.push({ y: enemy.y, draw: () => drawEnemy(ctx, enemy) });
@@ -1001,53 +1007,637 @@ function drawCampfire(g: RenderState, ctx: CanvasRenderingContext2D, x: number, 
   ctx.restore();
 }
 
-
-function drawNpc(ctx: CanvasRenderingContext2D, x: number, y: number, color: string, role?: NpcData["role"]) {
+export function drawNpc(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  color: string,
+  role?: NpcData["role"],
+  portraitId?: string,
+  time: number = 0,
+  name?: string,
+  player?: PlayerState,
+) {
   const ix = Math.round(x);
   const iy = Math.round(y);
+  const breath = Math.sin(time * 3 + x * 0.1) * 0.8;
+  const isOrithel = portraitId === "orithel-the-last-watcher";
+  const floatY = isOrithel ? Math.sin(time * 2.5) * 3 - 3 : 0;
+
   ctx.save();
-  ctx.fillStyle = "rgba(0,0,0,0.35)";
+  // Shadow on floor
+  ctx.fillStyle = isOrithel ? "rgba(70,210,195,0.22)" : "rgba(0,0,0,0.35)";
   ctx.beginPath();
-  ctx.ellipse(ix, iy + 9, 8, 3, 0, 0, Math.PI * 2);
+  ctx.ellipse(ix, iy + 9, isOrithel ? 10 : 8, isOrithel ? 4 : 3, 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.translate(ix, iy);
-  // Simple robed figure
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.moveTo(0, -14);
-  ctx.quadraticCurveTo(-9, -6, -10, 6);
-  ctx.lineTo(-6, 14);
-  ctx.lineTo(6, 14);
-  ctx.lineTo(10, 6);
-  ctx.quadraticCurveTo(9, -6, 0, -14);
-  ctx.fill();
-  ctx.fillStyle = "#1a1c24";
-  ctx.beginPath();
-  ctx.arc(0, -16, 5, 0, Math.PI * 2);
-  ctx.fill();
-  // The small world figures mirror the practical role shown in dialogue:
-  // a readable silhouette now, portrait-specific art later.
-  ctx.strokeStyle = "rgba(255,240,205,0.72)";
-  ctx.fillStyle = "rgba(255,240,205,0.72)";
-  ctx.lineWidth = 1.5;
-  if (role === "lore") {
-    ctx.fillRect(5, -4, 5, 7); // tucked ledger
-    ctx.strokeRect(5, -4, 5, 7);
-  } else if (role === "healer") {
+
+  ctx.translate(ix, iy + floatY);
+
+  if (isOrithel) {
+    // Ethereal projection aura
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    const rad = ctx.createRadialGradient(0, -10, 2, 0, -10, 26);
+    rad.addColorStop(0, "rgba(118,242,223,0.35)");
+    rad.addColorStop(0.7, "rgba(60,168,154,0.12)");
+    rad.addColorStop(1, "rgba(60,168,154,0)");
+    ctx.fillStyle = rad;
     ctx.beginPath();
-    ctx.arc(7, 1, 3, 0, Math.PI * 2); // medicine vial
-    ctx.stroke();
+    ctx.arc(0, -10, 26, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Fractured Spire Halo shards rotating
+    ctx.fillStyle = "#a8f5ea";
+    for (let i = 0; i < 4; i++) {
+      const angle = time * 0.8 + (i * Math.PI) / 2;
+      const hx = Math.cos(angle) * 12;
+      const hy = -18 + Math.sin(angle) * 6;
+      ctx.beginPath();
+      ctx.moveTo(hx, hy - 3);
+      ctx.lineTo(hx + 2, hy);
+      ctx.lineTo(hx, hy + 3);
+      ctx.lineTo(hx - 2, hy);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // Drifting white hair behind
+    ctx.fillStyle = "#d8f5f0";
     ctx.beginPath();
-    ctx.moveTo(7, -5); ctx.lineTo(7, -2);
-    ctx.stroke();
-  } else if (role === "scout") {
+    ctx.moveTo(-5, -16);
+    ctx.quadraticCurveTo(-9 + Math.sin(time * 2) * 2, -4, -6, 6);
+    ctx.lineTo(-2, 4);
+    ctx.closePath();
+    ctx.fill();
     ctx.beginPath();
-    ctx.moveTo(-8, 9); ctx.lineTo(8, -8); // route staff
-    ctx.stroke();
+    ctx.moveTo(5, -16);
+    ctx.quadraticCurveTo(9 + Math.sin(time * 2 + 1) * 2, -4, 6, 6);
+    ctx.lineTo(2, 4);
+    ctx.closePath();
+    ctx.fill();
+
+    // Translucent teal robes
+    ctx.fillStyle = "#123d42";
     ctx.beginPath();
-    ctx.moveTo(-5, -3); ctx.lineTo(4, -8);
-    ctx.stroke();
+    ctx.moveTo(0, -14);
+    ctx.quadraticCurveTo(-9, -6, -8, 6);
+    ctx.lineTo(-5, 14);
+    ctx.lineTo(5, 14);
+    ctx.lineTo(8, 6);
+    ctx.quadraticCurveTo(9, -6, 0, -14);
+    ctx.fill();
+
+    // Gold-and-ivory collar
+    ctx.fillStyle = "#e0c479";
+    ctx.beginPath();
+    ctx.moveTo(-6, -11);
+    ctx.lineTo(0, -6);
+    ctx.lineTo(6, -11);
+    ctx.lineTo(4, -13);
+    ctx.lineTo(-4, -13);
+    ctx.closePath();
+    ctx.fill();
+
+    // Ethereal head
+    ctx.fillStyle = "#baf5ee";
+    ctx.beginPath();
+    ctx.arc(0, -17, 5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Glowing eyes
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(-2, -18, 1.5, 1.5);
+    ctx.fillRect(1, -18, 1.5, 1.5);
+  } else {
+    // Specific character rendering matching docs/npc-portrait-briefs.md
+    switch (portraitId) {
+      case "scribe-althea": {
+        // Ochre hood & robe
+        ctx.fillStyle = "#8a6122";
+        ctx.beginPath();
+        ctx.moveTo(0, -14);
+        ctx.quadraticCurveTo(-9, -6, -9, 6);
+        ctx.lineTo(-6, 14);
+        ctx.lineTo(6, 14);
+        ctx.lineTo(9, 6);
+        ctx.quadraticCurveTo(9, -6, 0, -14);
+        ctx.fill();
+
+        // Ochre hood
+        ctx.fillStyle = "#b58434";
+        ctx.beginPath();
+        ctx.arc(0, -16, 6, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Silver hair peeking out
+        ctx.fillStyle = "#d2d6dc";
+        ctx.fillRect(-3, -16, 6, 2);
+
+        // Face
+        ctx.fillStyle = "#e8cfb5";
+        ctx.fillRect(-2.5, -14, 5, 4);
+
+        // White quill feather pinned to hood
+        ctx.strokeStyle = "#fdf8ee";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(3, -21);
+        ctx.lineTo(1, -15);
+        ctx.stroke();
+
+        // Cracked brown ledger clutched in hands
+        ctx.fillStyle = "#54341a";
+        ctx.fillRect(3, -4, 6, 8);
+        ctx.strokeStyle = "#c9a86c";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(3, -4, 6, 8);
+        break;
+      }
+
+      case "sister-mirene": {
+        // Sea-green veil & flowing robes
+        ctx.fillStyle = "#264f43";
+        ctx.beginPath();
+        ctx.moveTo(0, -14);
+        ctx.quadraticCurveTo(-10, -6, -9, 8);
+        ctx.lineTo(-6, 14);
+        ctx.lineTo(6, 14);
+        ctx.lineTo(9, 8);
+        ctx.quadraticCurveTo(10, -6, 0, -14);
+        ctx.fill();
+
+        // Habit & veil
+        ctx.fillStyle = "#3a7564";
+        ctx.beginPath();
+        ctx.arc(0, -16, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillRect(-5, -16, 10, 8);
+
+        // Face
+        ctx.fillStyle = "#d9ebe3";
+        ctx.fillRect(-2.5, -14, 5, 3.5);
+
+        // Black-glass beads
+        ctx.strokeStyle = "#121816";
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.arc(0, -8, 4, 0, Math.PI);
+        ctx.stroke();
+
+        // Linen-wrapped hands with pulsing inner jade glow
+        const glowA = 0.6 + Math.sin(time * 4) * 0.3;
+        ctx.fillStyle = `rgba(143,252,202,${glowA})`;
+        ctx.beginPath();
+        ctx.arc(0, -2, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#d8ebe1";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        break;
+      }
+
+      case "barris-the-smith": {
+        // Broad muscular frame & soot leather apron
+        ctx.fillStyle = "#2e241c";
+        ctx.beginPath();
+        ctx.moveTo(0, -14);
+        ctx.quadraticCurveTo(-11, -6, -11, 6);
+        ctx.lineTo(-7, 14);
+        ctx.lineTo(7, 14);
+        ctx.lineTo(11, 6);
+        ctx.quadraticCurveTo(11, -6, 0, -14);
+        ctx.fill();
+
+        // Leather apron
+        ctx.fillStyle = "#5c3e24";
+        ctx.fillRect(-5, -6, 10, 16);
+
+        // Broken sword over shoulder
+        ctx.strokeStyle = "#7a8594";
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(6, -18);
+        ctx.lineTo(10, 4);
+        ctx.stroke();
+
+        // Head with iron-grey beard
+        ctx.fillStyle = "#c79c78";
+        ctx.beginPath();
+        ctx.arc(0, -16, 5.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#656973";
+        ctx.fillRect(-4, -15, 8, 5); // beard
+
+        // Smith hammer at hip
+        ctx.fillStyle = "#8a6428";
+        ctx.fillRect(-9, -2, 2, 8);
+        ctx.fillStyle = "#5a6470";
+        ctx.fillRect(-11, -4, 6, 3);
+        break;
+      }
+
+      case "kiln-master-vance": {
+        // Charcoal cloak dusted with ash
+        ctx.fillStyle = "#242228";
+        ctx.beginPath();
+        ctx.moveTo(0, -14);
+        ctx.quadraticCurveTo(-9, -6, -9, 6);
+        ctx.lineTo(-6, 14);
+        ctx.lineTo(6, 14);
+        ctx.lineTo(9, 6);
+        ctx.quadraticCurveTo(9, -6, 0, -14);
+        ctx.fill();
+
+        // Hood
+        ctx.fillStyle = "#33303a";
+        ctx.beginPath();
+        ctx.arc(0, -16, 5.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Copper half-mask
+        ctx.fillStyle = "#b86c3b";
+        ctx.fillRect(-3, -14, 6, 4);
+
+        // Ember goggles (twin glowing dots)
+        ctx.fillStyle = "#ff6a1a";
+        ctx.fillRect(-3.5, -17, 3, 2.5);
+        ctx.fillRect(0.5, -17, 3, 2.5);
+        ctx.fillStyle = "#fff099";
+        ctx.fillRect(-2.5, -16.5, 1, 1);
+        ctx.fillRect(1.5, -16.5, 1, 1);
+
+        // Tally hook cane in hand
+        ctx.strokeStyle = "#826348";
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.moveTo(7, -8);
+        ctx.lineTo(7, 14);
+        ctx.stroke();
+        ctx.strokeStyle = "#c99a47";
+        ctx.beginPath();
+        ctx.arc(7, -9, 2.5, Math.PI, 0);
+        ctx.stroke();
+        break;
+      }
+
+      case "cinder-nurse-greta": {
+        // Rust-red coat
+        ctx.fillStyle = "#7a2e22";
+        ctx.beginPath();
+        ctx.moveTo(0, -14);
+        ctx.quadraticCurveTo(-9, -6, -9, 6);
+        ctx.lineTo(-6, 14);
+        ctx.lineTo(6, 14);
+        ctx.lineTo(9, 6);
+        ctx.quadraticCurveTo(9, -6, 0, -14);
+        ctx.fill();
+
+        // Face with cropped dark hair
+        ctx.fillStyle = "#241913";
+        ctx.beginPath();
+        ctx.arc(0, -16, 5.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#dfaf92";
+        ctx.fillRect(-2.5, -15, 5, 4);
+
+        // Singed linen nurse cap
+        ctx.fillStyle = "#ded6c8";
+        ctx.fillRect(-4, -20, 8, 3.5);
+        ctx.fillStyle = "#8a3224";
+        ctx.fillRect(-1, -19.5, 2, 2);
+
+        // Sulfur gloves
+        ctx.fillStyle = "#d6c669";
+        ctx.fillRect(-5, 0, 3, 4);
+        ctx.fillRect(2, 0, 3, 4);
+
+        // Blue glass flask at hip
+        ctx.fillStyle = "#2b6fb5";
+        ctx.beginPath();
+        ctx.arc(6, 2, 3, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      }
+
+      case "elodie-outrunner": {
+        // Wiry build in patched vermilion coat
+        ctx.fillStyle = "#8f3227";
+        ctx.beginPath();
+        ctx.moveTo(0, -14);
+        ctx.quadraticCurveTo(-8, -6, -8, 6);
+        ctx.lineTo(-5, 14);
+        ctx.lineTo(5, 14);
+        ctx.lineTo(8, 6);
+        ctx.quadraticCurveTo(8, -6, 0, -14);
+        ctx.fill();
+
+        // Ash-grey scarf with fluttering ends
+        ctx.fillStyle = "#696c73";
+        ctx.fillRect(-5, -11, 10, 3.5);
+        const scarfFlutter = Math.sin(time * 6) * 2;
+        ctx.beginPath();
+        ctx.moveTo(4, -9);
+        ctx.lineTo(8 + scarfFlutter, 2);
+        ctx.lineTo(5 + scarfFlutter, 2);
+        ctx.closePath();
+        ctx.fill();
+
+        // Head with shaved temple
+        ctx.fillStyle = "#d49f7e";
+        ctx.beginPath();
+        ctx.arc(0, -16, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#241913";
+        ctx.fillRect(-4, -19, 5, 5); // left hair only
+
+        // Hooked ravine staff
+        ctx.strokeStyle = "#594638";
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.moveTo(-7, -20);
+        ctx.lineTo(-7, 14);
+        ctx.stroke();
+        ctx.strokeStyle = "#9c7c59";
+        ctx.beginPath();
+        ctx.arc(-9, -19, 2.5, 0, Math.PI);
+        ctx.stroke();
+        break;
+      }
+
+      case "mistress-morveth": {
+        // Storm-water oilskin mantle
+        ctx.fillStyle = "#2b4c57";
+        ctx.beginPath();
+        ctx.moveTo(0, -14);
+        ctx.quadraticCurveTo(-10, -6, -10, 6);
+        ctx.lineTo(-6, 14);
+        ctx.lineTo(6, 14);
+        ctx.lineTo(10, 6);
+        ctx.quadraticCurveTo(10, -6, 0, -14);
+        ctx.fill();
+
+        // Braided white hair over shoulder
+        ctx.fillStyle = "#e8edf0";
+        ctx.fillRect(3, -14, 3.5, 14);
+
+        // Head
+        ctx.fillStyle = "#cfab91";
+        ctx.beginPath();
+        ctx.arc(0, -16, 5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Brass dive goggles on forehead
+        ctx.fillStyle = "#cca647";
+        ctx.fillRect(-4, -19, 8, 2.5);
+
+        // White name-tag stitched on sleeve
+        ctx.fillStyle = "#f5f2e6";
+        ctx.fillRect(-8, -2, 4, 3);
+        break;
+      }
+
+      case "sister-lyra": {
+        // Kelp-green layered robes
+        ctx.fillStyle = "#245446";
+        ctx.beginPath();
+        ctx.moveTo(0, -14);
+        ctx.quadraticCurveTo(-9, -6, -9, 6);
+        ctx.lineTo(-6, 14);
+        ctx.lineTo(6, 14);
+        ctx.lineTo(9, 6);
+        ctx.quadraticCurveTo(9, -6, 0, -14);
+        ctx.fill();
+
+        // Shaved head & pearl ear cuffs
+        ctx.fillStyle = "#dfbe9f";
+        ctx.beginPath();
+        ctx.arc(0, -16, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#f0f7f4";
+        ctx.fillRect(-5.5, -16, 1.5, 1.5);
+        ctx.fillRect(4, -16, 1.5, 1.5);
+
+        // Netted satchel of glowing mint salve jars
+        ctx.fillStyle = "#59e3aa";
+        ctx.beginPath();
+        ctx.arc(5, 0, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#1b4033";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        break;
+      }
+
+      case "kieran-blind-oar": {
+        // Salt-bleached blue pea-coat
+        ctx.fillStyle = "#2d425c";
+        ctx.beginPath();
+        ctx.moveTo(0, -14);
+        ctx.quadraticCurveTo(-9, -6, -9, 6);
+        ctx.lineTo(-6, 14);
+        ctx.lineTo(6, 14);
+        ctx.lineTo(9, 6);
+        ctx.quadraticCurveTo(9, -6, 0, -14);
+        ctx.fill();
+
+        // Rope coil across chest
+        ctx.strokeStyle = "#ad9877";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(-5, -6);
+        ctx.lineTo(5, 4);
+        ctx.stroke();
+
+        // Head with clouded eye-wrap
+        ctx.fillStyle = "#c79a7b";
+        ctx.beginPath();
+        ctx.arc(0, -16, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#d9d5cb";
+        ctx.fillRect(-4, -17, 8, 2.5); // wrap
+
+        // Long carved wooden oar held upright
+        ctx.strokeStyle = "#6b4928";
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.moveTo(7, -22);
+        ctx.lineTo(7, 14);
+        ctx.stroke();
+        ctx.fillStyle = "#8a6239";
+        ctx.fillRect(5, -24, 4, 6);
+        break;
+      }
+
+      case "reeve-toran": {
+        // Deep violet mantle
+        ctx.fillStyle = "#3a2554";
+        ctx.beginPath();
+        ctx.moveTo(0, -14);
+        ctx.quadraticCurveTo(-9, -6, -9, 6);
+        ctx.lineTo(-6, 14);
+        ctx.lineTo(6, 14);
+        ctx.lineTo(9, 6);
+        ctx.quadraticCurveTo(9, -6, 0, -14);
+        ctx.fill();
+
+        // Gaunt head & black hair
+        ctx.fillStyle = "#1c1724";
+        ctx.beginPath();
+        ctx.arc(0, -16, 5.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#d9c2b0";
+        ctx.fillRect(-2.5, -15, 5, 4);
+
+        // Cracked brass monocle
+        ctx.strokeStyle = "#cca647";
+        ctx.lineWidth = 1.2;
+        ctx.strokeRect(-3, -16, 3, 3);
+
+        // Telescope lens cradled under arm
+        ctx.fillStyle = "#ba923a";
+        ctx.fillRect(4, -4, 5, 10);
+        ctx.fillStyle = "#b0d8f5";
+        ctx.beginPath();
+        ctx.arc(6.5, -4, 2.5, Math.PI, 0);
+        ctx.fill();
+        break;
+      }
+
+      case "hermit-cassian": {
+        // Plum hooded coat
+        ctx.fillStyle = "#3d2847";
+        ctx.beginPath();
+        ctx.moveTo(0, -14);
+        ctx.quadraticCurveTo(-9, -6, -9, 6);
+        ctx.lineTo(-6, 14);
+        ctx.lineTo(6, 14);
+        ctx.lineTo(9, 6);
+        ctx.quadraticCurveTo(9, -6, 0, -14);
+        ctx.fill();
+
+        // Hood & silver beard
+        ctx.fillStyle = "#4f335c";
+        ctx.beginPath();
+        ctx.arc(0, -16, 5.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#d1b297";
+        ctx.fillRect(-2, -15, 4, 3);
+        ctx.fillStyle = "#bdc3cc";
+        ctx.fillRect(-3, -13, 6, 4); // beard
+
+        // Meteorite bowl with shimmering starlight water
+        ctx.fillStyle = "#29262e";
+        ctx.fillRect(-3, 0, 6, 4);
+        ctx.fillStyle = "#a28ded";
+        ctx.fillRect(-2, -1, 4, 2);
+        break;
+      }
+
+      case "mina-drift-child": {
+        // Smaller child silhouette in charcoal cloak with meteor beads
+        ctx.fillStyle = "#24222a";
+        ctx.beginPath();
+        ctx.moveTo(0, -11);
+        ctx.quadraticCurveTo(-8, -4, -8, 6);
+        ctx.lineTo(-5, 13);
+        ctx.lineTo(5, 13);
+        ctx.lineTo(8, 6);
+        ctx.quadraticCurveTo(8, -4, 0, -11);
+        ctx.fill();
+
+        // Hood & pale braids
+        ctx.fillStyle = "#33303a";
+        ctx.beginPath();
+        ctx.arc(0, -13, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#ded7ec";
+        ctx.fillRect(-4, -11, 2, 7);
+        ctx.fillRect(2, -11, 2, 7);
+
+        // Meteor-glass beads on cloak
+        ctx.fillStyle = "#c8abfc";
+        ctx.fillRect(-5, 4, 1.5, 1.5);
+        ctx.fillRect(4, 5, 1.5, 1.5);
+        ctx.fillRect(-1, 8, 1.5, 1.5);
+
+        // Silver tuning fork held aloft
+        ctx.strokeStyle = "#dbe0eb";
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(6, -8);
+        ctx.lineTo(6, 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(6, -9, 2, 0, Math.PI);
+        ctx.stroke();
+        break;
+      }
+
+      default: {
+        // Fallback: clean robed figure with role silhouette
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(0, -14);
+        ctx.quadraticCurveTo(-9, -6, -10, 6);
+        ctx.lineTo(-6, 14);
+        ctx.lineTo(6, 14);
+        ctx.lineTo(10, 6);
+        ctx.quadraticCurveTo(9, -6, 0, -14);
+        ctx.fill();
+        ctx.fillStyle = "#1a1c24";
+        ctx.beginPath();
+        ctx.arc(0, -16, 5, 0, Math.PI * 2);
+        ctx.fill();
+        if (role === "lore") {
+          ctx.fillStyle = "rgba(255,240,205,0.72)";
+          ctx.fillRect(5, -4, 5, 7);
+        } else if (role === "healer") {
+          ctx.strokeStyle = "rgba(255,240,205,0.72)";
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(7, 1, 3, 0, Math.PI * 2);
+          ctx.stroke();
+        } else if (role === "scout") {
+          ctx.strokeStyle = "rgba(255,240,205,0.72)";
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(-8, 9);
+          ctx.lineTo(8, -8);
+          ctx.stroke();
+        }
+        break;
+      }
+    }
   }
+
+  // Floating proximity interaction indicator when player is near (< 48px)
+  if (player && Math.hypot(player.x - x, player.y - y) < 48) {
+    ctx.save();
+    const promptBob = Math.sin(time * 5) * 1.5;
+    const badgeY = -27 + promptBob;
+
+    // Small translucent banner badge
+    ctx.fillStyle = "rgba(12, 10, 18, 0.85)";
+    ctx.strokeStyle = isOrithel ? "#76f2df" : color;
+    ctx.beginPath();
+    if (typeof (ctx as any).roundRect === "function") {
+      (ctx as any).roundRect(-22, badgeY - 7, 44, 14, 3);
+    } else {
+      ctx.rect(-22, badgeY - 7, 44, 14);
+    }
+    ctx.fill();
+    ctx.stroke();
+
+    // Text: "[E] Talk"
+    ctx.font = "bold 9px 'Cinzel', serif, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#fff0d4";
+    ctx.fillText("[E] Talk", 0, badgeY);
+    ctx.restore();
+  }
+
   ctx.restore();
 }
 

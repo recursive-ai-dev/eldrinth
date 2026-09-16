@@ -61,7 +61,7 @@ function townNpc(
 }
 
 /** The same residents are used by the exterior town directory and their interiors. */
-const TOWN_RESIDENTS = {
+export const TOWN_RESIDENTS = {
   "ilyarael-township": [
     townNpc("town:ilyarael:scrivener", "Scribe Althea", "#c9a86c", "lore", "scribe-althea", "A sharp-eyed archivist in an ochre hood, with silver hair pinned by a quill and ink-dark fingertips; a cracked ledger held close to her chest."),
     townNpc("town:ilyarael:healer", "Hollow Sister Mirene", "#8fcca8", "healer", "sister-mirene", "A solemn woman in a sea-green veil, her hands wrapped in linen and faintly lit from within; black-glass prayer beads at her throat."),
@@ -227,6 +227,15 @@ function stampTown(
         resident,
       };
     });
+  const spots = TOWN_EXTERIOR_RESIDENT_SPOTS[townId] ?? [{ x: 5, y: 5 }, { x: 11, y: 6 }, { x: 17, y: 5 }];
+  const exteriorNpcs: NpcData[] = npcs.map((resident, index) => {
+    const spot = spots[index] ?? { x: 3 + index * 5, y: 5 };
+    return {
+      ...resident,
+      x: px(worldX + spot.x),
+      y: px(worldY + spot.y),
+    };
+  });
   const name = townId
     .split("-")
     .map((word) => word[0].toUpperCase() + word.slice(1))
@@ -245,8 +254,16 @@ function stampTown(
       townId,
       text: "No enemies pursue past the threshold. Rest, speak, and read the road before you go.",
     },
+    npcs: exteriorNpcs,
   };
 }
+
+const TOWN_EXTERIOR_RESIDENT_SPOTS: Record<string, [Vec, Vec, Vec]> = {
+  "ilyarael-township": [{ x: 4, y: 8 }, { x: 14, y: 8 }, { x: 19, y: 6 }],
+  "cinder-haven": [{ x: 4, y: 8 }, { x: 13, y: 7 }, { x: 19, y: 2 }],
+  "oarsmans-bight": [{ x: 4, y: 8 }, { x: 7, y: 3 }, { x: 19, y: 7 }],
+  "crater-watch": [{ x: 4, y: 3 }, { x: 4, y: 7 }, { x: 19, y: 3 }],
+};
 
 const TOWN_BUILDING_NAMES: Record<string, [string, string, string]> = {
   "ilyarael-township": ["Althea's Ledger Room", "The Hollow Sister's Cell", "Barris's Salvage Shop"],
@@ -908,7 +925,7 @@ export function generateMap(regionId = "overworld"): MapData {
     tiles,
     wardTiles,
     spawn: { x: px(14), y: px(42) },
-    npcs: [],
+    npcs: towns.flatMap((town) => town.npcs ?? []),
     npc: { x: px(56), y: px(74) },
     signs,
     shards,
@@ -1289,7 +1306,7 @@ function generateFrontierMap(regionId: string): MapData {
     tiles,
     wardTiles: [],
     spawn: { x: px(80), y: px(56) },
-    npcs: [],
+    npcs: towns.flatMap((town) => town.npcs ?? []),
     npc: { x: -9999, y: -9999 },
     signs,
     shards: [],
