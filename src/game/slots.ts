@@ -1,7 +1,7 @@
 import initSqlJs, { type Database } from "sql.js";
 import wasmUrl from "sql.js/dist/sql-wasm.wasm?url";
 import type { WorldSnapshot } from "./core/WorldState";
-import type { Difficulty } from "./types";
+import { type Difficulty, normalizeDifficulty } from "./types";
 
 const DATABASE_KEY = "eldrinth.sqlite.v1";
 export const SLOT_COUNT = 3;
@@ -36,7 +36,13 @@ class SlotStore {
   }
 
   private async open() {
-    const SQL = await initSqlJs({ locateFile: () => wasmUrl });
+    const locateFile = () => {
+      if (typeof window === "undefined" && wasmUrl.startsWith("/")) {
+        return "." + wasmUrl;
+      }
+      return wasmUrl;
+    };
+    const SQL = await initSqlJs({ locateFile });
     let bytes: Uint8Array | undefined;
     try {
       const saved = localStorage.getItem(DATABASE_KEY);
@@ -60,7 +66,7 @@ class SlotStore {
   async list(): Promise<SaveSlot[]> {
     const result = (await this.db()).exec("SELECT id, difficulty, shards, updated_at FROM save_slots ORDER BY id")[0];
     if (!result) return [];
-    return result.values.map((row: any[]) => ({ id: Number(row[0]), difficulty: row[1] as Difficulty, shards: Number(row[2]), updatedAt: Number(row[3]) }));
+    return result.values.map((row: any[]) => ({ id: Number(row[0]), difficulty: normalizeDifficulty(row[1]), shards: Number(row[2]), updatedAt: Number(row[3]) }));
   }
 
   async load(id: number): Promise<SlotSave | null> {
@@ -70,13 +76,16 @@ class SlotStore {
     try {
       const world = JSON.parse(String(json)) as WorldSnapshot;
       if ((world.version !== 1 && world.version !== 2 && world.version !== 3 && world.version !== 4) || !world.player) return null;
-      return { id, difficulty: difficulty as Difficulty, shards: Number(shards), updatedAt: Number(updatedAt), world };
+      const validDifficulty = normalizeDifficulty(difficulty, normalizeDifficulty(world.difficulty, "standard"));
+      world.difficulty = normalizeDifficulty(world.difficulty, validDifficulty);
+      return { id, difficulty: validDifficulty, shards: Number(shards), updatedAt: Number(updatedAt), world };
     } catch { return null; }
   }
 
   async save(id: number, world: WorldSnapshot) {
     const db = await this.db();
-    const difficulty = world.difficulty ?? "standard";
+    const difficulty = normalizeDifficulty(world.difficulty, "standard");
+    world.difficulty = difficulty;
     db.run("INSERT OR REPLACE INTO save_slots (id, difficulty, shards, updated_at, world_json) VALUES (?, ?, ?, ?, ?)", [id, difficulty, world.shards, Date.now(), JSON.stringify(world)]);
     this.persist(db);
   }

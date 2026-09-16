@@ -13,7 +13,7 @@ import type { GameCallbacks } from "@/game/types";
 import type { Game } from "@/game/engine";
 import type { WorldSnapshot } from "@/game/core/WorldState";
 import { slotStore, type SaveSlot } from "@/game/slots";
-import type { Difficulty } from "@/game/types";
+import { type Difficulty, normalizeDifficulty } from "@/game/types";
 
 
 
@@ -55,7 +55,7 @@ export default function App() {
       if (!saved) return;
       setCheckpoint(saved.world);
       setActiveSlot(slot);
-      setDifficulty(saved.difficulty);
+      setDifficulty(normalizeDifficulty(saved.difficulty));
       startGame();
     });
   }, [startGame]);

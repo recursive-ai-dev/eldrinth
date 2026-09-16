@@ -62,7 +62,7 @@ export class InputSystem {
   };
 
   private handleBlur = () => {
-    this.keys.clear();
+    this.clear();
     this.blurHandler?.();
   };
 }

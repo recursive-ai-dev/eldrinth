@@ -1,4 +1,4 @@
-import type { DialogueData, Difficulty, Dir, EnemyType, ItemType, JournalEntry, MapData } from "../types";
+import { type DialogueData, type Difficulty, type Dir, type EnemyType, type ItemType, type JournalEntry, type MapData, normalizeDifficulty } from "../types";
 import type { QuestProgress } from "../quests";
 import { cumulativeHarvestCost } from "../escalation";
 
@@ -219,7 +219,7 @@ export class WorldState {
     this.messageId = snapshot.messageId;
     this.nextEnemyId = snapshot.nextEnemyId;
     this.randomState = snapshot.randomState;
-    this.difficulty = snapshot.difficulty ?? "standard";
+    this.difficulty = normalizeDifficulty(snapshot.difficulty, "standard");
     this.journal = snapshot.journal?.map((entry) => ({ ...entry })) ?? [];
     // Pre-rewrite saves (v2 and earlier) carry sign-copied and Orithel-briefing
     // entries written against the old canon, and nothing ever re-resolves them.

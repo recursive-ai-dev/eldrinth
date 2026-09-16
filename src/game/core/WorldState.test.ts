@@ -157,4 +157,31 @@ describe("WorldState snapshots", () => {
     expect(restored.player.maxHp).toBe(5);
     expect(restored.player.hp).toBe(5);
   });
+
+  it("restores difficulty correctly and safely falls back to standard when corrupted", () => {
+    const world = new WorldState();
+    world.player = {
+      x: 1, y: 2, r: 3, hp: 4, maxHp: 6, stamina: 7, maxStamina: 8,
+      staminaRegenDelay: 0, dir: "down", speed: 1, attackTimer: 0, attackCd: 0,
+      attackDur: 0, attacking: false, swingHit: new Set(), swingDmg: 1,
+      invuln: 0, dashTimer: 0, dashCd: 0, dashDir: "down", dashing: false,
+      walkT: 0, hurtFlash: 0, kx: 0, ky: 0, dying: 0, relics: [], dashCostDiscount: 0, attackBonus: 0,
+    };
+    world.difficulty = "brutal";
+    const snap = world.snapshot();
+
+    const restored1 = new WorldState();
+    restored1.restore(snap);
+    expect(restored1.difficulty).toBe("brutal");
+
+    const corruptedSnap = { ...snap, difficulty: "invalid_nightmare" as any };
+    const restored2 = new WorldState();
+    restored2.restore(corruptedSnap);
+    expect(restored2.difficulty).toBe("standard");
+
+    const missingSnap = { ...snap, difficulty: undefined };
+    const restored3 = new WorldState();
+    restored3.restore(missingSnap);
+    expect(restored3.difficulty).toBe("standard");
+  });
 });
