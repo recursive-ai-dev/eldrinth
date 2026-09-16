@@ -413,7 +413,7 @@ button {
   --memory-index: 0;
   position: absolute;
   left: calc(8% + (var(--memory-index) * 13%));
-  top: calc(12% + (var(--memory-index) % 3) * 30%);
+  top: 12%;
   color: rgba(255, 255, 255, 0.18);
   font-family: "Cinzel", serif;
   font-size: clamp(13px, 2.5vw, 42px);
@@ -422,6 +422,9 @@ button {
   transform: rotate(calc(-8deg + var(--memory-index) * 3deg));
   animation: introMemoryWord 800ms calc(0.25s + var(--memory-index) * 0.45s) steps(2) both;
 }
+
+.intro-memory-words span:nth-child(3n + 2) { top: 42%; }
+.intro-memory-words span:nth-child(3n) { top: 72%; }
 
 .intro-alone {
   position: relative;
