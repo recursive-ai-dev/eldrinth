@@ -96,5 +96,27 @@ describe("InputSystem", () => {
     expect(onKeyDown).toHaveBeenCalledTimes(1);
     expect(input.has("w")).toBe(false);
   });
+
+  it("supports programmatic setKey for virtual and touch controls", () => {
+    const input = new InputSystem();
+    input.bind({});
+
+    input.setKey("w", true);
+    expect(input.has("w")).toBe(true);
+    expect(input.consumePressed("w")).toBe(true);
+    expect(input.consumePressed("w")).toBe(false);
+    expect(input.has("w")).toBe(true);
+
+    input.setKey("w", false);
+    expect(input.has("w")).toBe(false);
+
+    // Repeated key down doesn't re-trigger consumePressed if already held
+    input.setKey("Shift", true);
+    input.setKey("Shift", true);
+    expect(input.consumePressed("shift")).toBe(true);
+    expect(input.consumePressed("shift")).toBe(false);
+
+    input.destroy();
+  });
 });
 

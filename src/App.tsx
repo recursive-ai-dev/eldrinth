@@ -4,6 +4,7 @@ import HUD from "@/components/HUD";
 import DialogueBox from "@/components/DialogueBox";
 import Journal from "@/components/Journal";
 import PauseOverlay from "@/components/PauseOverlay";
+import VirtualControls from "@/components/VirtualControls";
 import TitleScreen from "@/components/TitleScreen";
 import EndScreen from "@/components/EndScreen";
 import IntroSequence from "@/components/IntroSequence";
@@ -125,6 +126,14 @@ export default function App() {
       )}
 
       {showGame && <HUD hud={hud} />}
+
+      {showGame && !paused && !dialogue && !journalOpen && (
+        <VirtualControls
+          onInput={(key, isDown) => gameRef.current?.setVirtualKey(key, isDown)}
+          onToggleJournal={() => setJournalVisibility(!journalOpen)}
+          onTogglePause={() => setPaused(!paused)}
+        />
+      )}
 
       {showGame && dialogue && (
         <DialogueBox
