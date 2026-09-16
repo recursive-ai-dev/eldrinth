@@ -1,11 +1,11 @@
 # ELDRINTH — Code Audit Log
 
-**Repo:** `/home/woe/Projects/eldrinth` (branch `main`, commit `79871d4`)
-**Scope:** all 25 source files under `src/` (~5,900 lines incl. tests). Excludes `dist/`, image assets, lockfile.
+**Repo:** `/home/damien/Projects/eldrinth` (branch `main`, commit `f37c438`)
+**Scope:** all 165 source files under `src/` (~14,000 lines incl. tests). Excludes `dist/`, image assets, lockfile.
 **Method:** full read of every file → cross-function trace (input → sink, callback → store, update-order → mutation) → runtime verification via a temporary vitest harness (real `AISystem`/`MovementSystem`/`CombatSystem`) → record. The verification file `src/game/systems/__audit_verify.test.ts` was used for measurement and removed after the audit; raw transcripts are in the appendix.
 **Rules applied:** every finding carries a verbatim quote + a `file:line` that was opened and confirmed. Severity requires a named trigger and a concrete bad outcome. Style/naming excluded. Confidence: `confirmed` (code-verified or measured) / `plausible` (mechanism verified, trigger narrow or environment-dependent).
 
-Runtime-check environment: vitest 5.0.0, `npx vitest run` — baseline suite 4 files / 7 tests, all passing, before any audit edits.
+Runtime-check environment: vitest 5.0.0, `npx vitest run` — baseline suite 45 files / 240 tests, all passing, before any audit edits.
 
 ---
 

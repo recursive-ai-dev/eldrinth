@@ -48,6 +48,17 @@ export class InputSystem {
     return this.pressed.delete(key.toLowerCase());
   }
 
+  /** Programmatically set key down or up (useful for touch, virtual controls, or pointer simulation). */
+  setKey(key: string, isDown: boolean) {
+    const k = key.toLowerCase();
+    if (isDown) {
+      if (!this.keys.has(k)) this.pressed.add(k);
+      this.keys.add(k);
+    } else {
+      this.keys.delete(k);
+    }
+  }
+
   private handleKeyDown = (event: KeyboardEvent) => {
     const key = event.key.toLowerCase();
     if (!this.keys.has(key)) this.pressed.add(key);

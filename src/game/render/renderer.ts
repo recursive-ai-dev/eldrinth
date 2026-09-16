@@ -1015,12 +1015,11 @@ export function drawNpc(
   role?: NpcData["role"],
   portraitId?: string,
   time: number = 0,
-  name?: string,
+  _name?: string,
   player?: PlayerState,
 ) {
   const ix = Math.round(x);
   const iy = Math.round(y);
-  const breath = Math.sin(time * 3 + x * 0.1) * 0.8;
   const isOrithel = portraitId === "orithel-the-last-watcher";
   const floatY = isOrithel ? Math.sin(time * 2.5) * 3 - 3 : 0;
 

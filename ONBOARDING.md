@@ -100,13 +100,13 @@ Then open the URL Vite prints (typically `http://localhost:5173`).
 Other scripts:
 
 ```bash
-npm run build      # production build -> dist/ plus separate cacheable assets
+npm run build      # production build -> tsc typecheck gate followed by vite build -> dist/
+npm run typecheck  # tsc --noEmit type check
+npm test           # vitest run test suite
 npm run preview    # serve the production build locally
 ```
 
-> Note: there is no `lint` or `typecheck` script defined in `package.json`. Type errors surface
-> through `vite build` (which runs `tsc` only if configured — here it does not). To type-check manually:
-> `npx tsc --noEmit`.
+> Note: `npm run build` is gated by `tsc --noEmit`, so type errors will immediately fail the production build. You can also run `npm run typecheck` (or `npx tsc --noEmit`) to verify types without building.
 
 ---
 

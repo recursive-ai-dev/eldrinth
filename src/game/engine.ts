@@ -618,6 +618,9 @@ export class Game {
   togglePause() {
     this.setPaused(!this.paused);
   }
+  setVirtualKey(key: string, isDown: boolean) {
+    this.input.setKey(key, isDown);
+  }
 
   /* ----------------------- fixed simulation pipeline ----------------------- */
   /**
@@ -1019,13 +1022,33 @@ export class Game {
     this.addText(e.x, e.y - 34, "BURST", "#7fe0ff", 15);
   }
   summonAdd(e: Enemy) {
-    const ang = this.world.nextRandom() * Math.PI * 2;
-    const x = e.x + Math.cos(ang) * 60;
-    const y = e.y + Math.sin(ang) * 60;
-    const w = this.makeEnemy("wraith", x, y);
+    const baseAng = this.world.nextRandom() * Math.PI * 2;
+    let spawnX = e.x;
+    let spawnY = e.y;
+    let found = false;
+
+    // Check candidate distances (60, 48, 36, 24) across 12 radial directions
+    const distances = [60, 48, 36, 24];
+    const steps = 12;
+    for (const dist of distances) {
+      for (let i = 0; i < steps; i++) {
+        const ang = baseAng + (i * Math.PI * 2) / steps;
+        const cx = e.x + Math.cos(ang) * dist;
+        const cy = e.y + Math.sin(ang) * dist;
+        if (!this.hitsSolid(cx, cy, ENEMY_DEFAULT_RADIUS) && !this.solidAtIdx(this.tileAtPx(cx, cy))) {
+          spawnX = cx;
+          spawnY = cy;
+          found = true;
+          break;
+        }
+      }
+      if (found) break;
+    }
+
+    const w = this.makeEnemy("wraith", spawnX, spawnY);
     w.shootCd = 0.5;
     this.enemies.push(w);
-    this.burst(x, y, "#8fe6b8", 12);
+    this.burst(spawnX, spawnY, "#8fe6b8", 12);
     this.addText(e.x, e.y - 40, "RISE", "#8fe6b8", 15);
   }
   shoot(x: number, y: number, ux: number, uy: number, spd: number, dmg: number, color: string) {
@@ -1684,7 +1707,7 @@ export class Game {
     return entries[regionKey] ?? null;
   }
 
-  private townNpcChoices(npc: NpcData): { id: string; label: string }[] {
+  private townNpcChoices(npc: Pick<NpcData, "id">): { id: string; label: string }[] {
     const choices: { id: string; label: string }[] = [];
     choices.push({ id: `npc:topic:${npc.id}:fortress`, label: "Inquire about minds sealed in nearby fortresses" });
     choices.push({ id: `npc:topic:${npc.id}:backstory`, label: "Ask about their memories and past" });
