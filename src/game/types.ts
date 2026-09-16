@@ -24,6 +24,7 @@ export interface SignData {
   text: string;
   title?: string;
   fact?: string;
+  townId?: string;
 }
 
 export interface JournalEntry {
@@ -91,6 +92,15 @@ export interface TownData {
   buildings: TownBuildingData[];
   /** Readable sign at the town entrance. */
   sign?: SignData;
+}
+
+export interface SettlementState {
+  townId: string;
+  refugees: number;
+  lamps: number;
+  guarded: boolean;
+  closedBusinesses: number;
+  completedProjects: number;
 }
 
 /** An exterior doorway which leads to a resident's small authored interior. */

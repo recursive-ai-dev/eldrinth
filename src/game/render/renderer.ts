@@ -1,7 +1,7 @@
 import { TILE, T, tileDefinition } from "../constants";
 import { rr, dot, hash2, DIRV, DIRA } from "../math";
 import type { EnemyState, ItemState, PlayerState, ProjectileState } from "../core/WorldState";
-import type { MapData, NpcData } from "../types";
+import type { MapData, NpcData, SettlementState } from "../types";
 import { getAtlasRevision, loadAtlas, preloadAtlases, type SpriteAtlas } from "./spriteAtlas";
 
 export const TILE_SPRITE_KEY: Record<number, string> = {
@@ -208,6 +208,7 @@ export interface RenderState {
   particles: ParticleRenderState[];
   texts: FloatTextRenderState[];
   items: ItemState[];
+  settlementStates: SettlementState[];
   shakeMag: number;
   lastShakeX: number;
   lastShakeY: number;
@@ -700,6 +701,7 @@ export function renderGame(g: RenderState) {
   ctx.translate(-Math.round(g.cam.x) + sx, -Math.round(g.cam.y) + sy);
   g.tileRenderer.drawGround(ctx, g.cam, g.viewW, g.viewH);
   drawTownBuildings(g, ctx);
+  drawSettlementState(g, ctx);
   drawWardBarrier(g, ctx);
   drawSortedWorldObjects(g, ctx);
   drawProjectiles(g, ctx);
@@ -723,6 +725,74 @@ function drawTownBuildings(g: RenderState, ctx: CanvasRenderingContext2D) {
       const x = (building.x - 1) * TILE;
       const y = (building.y - 2) * TILE;
       drawStaticSpriteBox(ctx, `house.${building.theme}`, x, y, TILE * 3, TILE * 3);
+    }
+  }
+}
+
+function drawSettlementState(g: RenderState, ctx: CanvasRenderingContext2D) {
+  for (const town of g.map.towns) {
+    const state = g.settlementStates.find((entry) => entry.townId === town.id);
+    if (!state) continue;
+
+    const lampOffsets = [[-48, -36], [48, -36], [0, 32]];
+    for (let index = 0; index < state.lamps; index++) {
+      const [ox, oy] = lampOffsets[index];
+      const x = town.x + ox;
+      const y = town.y + oy;
+      const glow = ctx.createRadialGradient(x, y, 3, x, y, 22);
+      glow.addColorStop(0, "rgba(255,224,143,0.8)");
+      glow.addColorStop(1, "rgba(255,181,72,0)");
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(x, y, 22, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#ffe49a";
+      ctx.fillRect(x - 2, y - 2, 4, 4);
+    }
+
+    const refugeeOffsets = [[-48, 44], [0, 48], [48, 44]];
+    for (let index = 0; index < state.refugees; index++) {
+      const [ox, oy] = refugeeOffsets[index];
+      const x = town.x + ox;
+      const y = town.y + oy;
+      ctx.fillStyle = "#c9d6cf";
+      ctx.beginPath();
+      ctx.arc(x, y - 7, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#6c8b82";
+      ctx.fillRect(x - 4, y - 4, 8, 10);
+    }
+
+    if (state.closedBusinesses > 0) {
+      const building = town.buildings[town.buildings.length - 1];
+      const x = (building.x - 1) * TILE;
+      const y = (building.y - 1) * TILE;
+      ctx.fillStyle = "rgba(32,24,24,0.82)";
+      ctx.fillRect(x + 8, y + 35, TILE * 2 - 16, 18);
+      ctx.strokeStyle = "#9b6b55";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(x + 10, y + 36);
+      ctx.lineTo(x + TILE * 2 - 10, y + 52);
+      ctx.moveTo(x + TILE * 2 - 10, y + 36);
+      ctx.lineTo(x + 10, y + 52);
+      ctx.stroke();
+    }
+
+    if (state.guarded) {
+      const x = town.x - 88;
+      const y = town.y + 4;
+      ctx.fillStyle = "#8b98a0";
+      ctx.beginPath();
+      ctx.arc(x, y - 12, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillRect(x - 6, y - 7, 12, 18);
+      ctx.strokeStyle = "#c7a56b";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x + 8, y - 12);
+      ctx.lineTo(x + 8, y + 16);
+      ctx.stroke();
     }
   }
 }
