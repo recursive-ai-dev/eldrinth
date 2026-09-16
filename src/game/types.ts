@@ -101,6 +101,8 @@ export interface TownData {
   buildings: TownBuildingData[];
   /** Readable sign at the town entrance. */
   sign?: SignData;
+  /** Living residents present in the town exterior settlement. */
+  npcs?: NpcData[];
 }
 
 export interface SettlementState {

@@ -25,7 +25,7 @@ import {
 } from "./core/WorldState";
 import type { EndingId } from "./core/SceneStack";
 import { createRegionRepository, type RegionRepository } from "./regions";
-import { isInteriorRegion } from "./map";
+import { isInteriorRegion, TOWN_RESIDENTS } from "./map";
 import { applyHarvestCost, fortressShardIntakeEntry, fortressWardenEntry, shardBleedEntry, shardPickupMessage, wardDialogue, wardenFact, wardUnlockMessage } from "./escalation";
 import { hazardDamageAt } from "./hazard";
 import { QUESTS, TOWN_PROJECTS, canCompleteTownProject, completeTownProject, learnFact, canResolve, questKnown, questJournal, resolveQuest, settlementState, townProjectComplete, townProjects } from "./quests";
@@ -1231,6 +1231,13 @@ export class Game {
       this.msg("Town project completed. The settlement has changed.");
       return;
     }
+    if (id.startsWith("npc:topic:")) {
+      const parts = id.split(":");
+      const topic = parts[parts.length - 1];
+      const npcId = parts.slice(2, parts.length - 1).join(":");
+      this.handleNpcTopic(npcId, topic);
+      return;
+    }
     if (id === "spire") {
       if (learnFact(this.world.quests, "spire")) {
         this.world.journal.push({ id: "orithel:spire", title: "The Unbound Spire", text: ORITHEL_LINES.slice(3, 7).join(" "), source: "Orithel · Ilyarael" });
@@ -1320,6 +1327,15 @@ export class Game {
   tryInteract() {
     const p = this.player;
     const doorway = this.map.exits.find((exit) => exit.requiresInteraction && Math.hypot(p.x - (exit.x * TILE + TILE / 2), p.y - (exit.y * TILE + TILE / 2)) < INTERACT_SIGN_DISTANCE);
+    const townNpc = this.map.npcs.find((npc) => Math.hypot(p.x - npc.x, p.y - npc.y) < INTERACT_NPC_DISTANCE);
+
+    const doorwayDist = doorway ? Math.hypot(p.x - (doorway.x * TILE + TILE / 2), p.y - (doorway.y * TILE + TILE / 2)) : Infinity;
+    const npcDist = townNpc ? Math.hypot(p.x - townNpc.x, p.y - townNpc.y) : Infinity;
+
+    if (townNpc && npcDist < doorwayDist) {
+      this.speakWithTownNpc(townNpc);
+      return;
+    }
     if (doorway) {
       void this.changeRegion(doorway);
       return;
@@ -1329,7 +1345,6 @@ export class Game {
       this.restAtCampfire(fire);
       return;
     }
-    const townNpc = this.map.npcs.find((npc) => Math.hypot(p.x - npc.x, p.y - npc.y) < INTERACT_NPC_DISTANCE);
     if (townNpc) {
       this.speakWithTownNpc(townNpc);
       return;
@@ -1354,8 +1369,11 @@ export class Game {
     }
   }
 
-  private openNpcDialogue(npc: NpcData, lines: string[]) {
+  private openNpcDialogue(npc: NpcData, lines: string[], choices?: { id: string; label: string }[]) {
     const reaction = typeof (this as any).townReaction === "function" ? this.townReaction(npc.id) : null;
+    if (choices && choices.length > 0) {
+      this.pendingChoices = choices;
+    }
     this.openDialogue(reaction ? [...lines, reaction] : lines, npc.name, npc.color, npc.portrait, NPC_ROLE_LABEL[npc.role]);
   }
 
@@ -1382,6 +1400,7 @@ export class Game {
 
   private speakWithTownNpc(npc: NpcData) {
     const used = this.usedTownServices.has(npc.id);
+    const choices = typeof this.townNpcChoices === "function" ? this.townNpcChoices(npc) : undefined;
     if (npc.role === "healer") {
       const healerLines: Record<string, { heal: string[]; exhausted: string }> = {
         "town:ilyarael:healer": {
@@ -1418,12 +1437,17 @@ export class Game {
         exhausted: "I have done what I can for you this visit. The road will do the rest.",
       };
       if (used) {
-        this.openNpcDialogue(npc, [lines.exhausted]);
+        this.openNpcDialogue(npc, [lines.exhausted], choices);
       } else {
         this.usedTownServices.add(npc.id);
         this.player.hp = this.player.maxHp;
         this.burst(npc.x, npc.y, npc.color, 14);
-        this.openNpcDialogue(npc, lines.heal);
+        const healerEntry = typeof this.townHealerEntry === "function" ? this.townHealerEntry(npc.id) : null;
+        if (healerEntry && !this.world.journal.some((existing) => existing.id === healerEntry.id)) {
+          this.world.journal.push(healerEntry);
+          this.publishJournal();
+        }
+        this.openNpcDialogue(npc, lines.heal, choices);
       }
       return;
     }
@@ -1442,7 +1466,7 @@ export class Game {
           quest && started
             ? `I have added “${quest.title}” to your journal. The decision is yours when you have both accounts.`
             : "I have copied the route into your journal. Press L before you leave the sanctuary.",
-        ]);
+        ], choices);
       } else {
         const lines: Record<string, { default: string; withShards: string; resolved?: string }> = {
           "town:ilyarael:smith": {
@@ -1468,7 +1492,7 @@ export class Game {
         };
         const config = lines[npc.id];
         const resolved = questId && Boolean(this.world.quests.resolutions[questId]);
-        this.openNpcDialogue(npc, [resolved && config?.resolved ? config.resolved : this.shards > 0 ? config?.withShards ?? "The road has changed around you." : config?.default ?? "The road has been hard. Rest while you can."]);
+        this.openNpcDialogue(npc, [resolved && config?.resolved ? config.resolved : this.shards > 0 ? config?.withShards ?? "The road has changed around you." : config?.default ?? "The road has been hard. Rest while you can."], choices);
       }
       return;
     }
@@ -1494,7 +1518,7 @@ export class Game {
           },
         };
         const config = reactiveLines[npc.id];
-        this.openNpcDialogue(npc, [this.shards > 0 ? config?.withShards ?? "The road is changing you." : config?.default ?? "The records do not change because you keep asking."]);
+        this.openNpcDialogue(npc, [this.shards > 0 ? config?.withShards ?? "The road is changing you." : config?.default ?? "The records do not change because you keep asking."], choices);
       } else {
         this.usedTownServices.add(npc.id);
         const entry = this.townLoreEntry(npc.id);
@@ -1510,12 +1534,12 @@ export class Game {
         if (entry || learned) this.publishJournal();
         this.openNpcDialogue(npc, entry
           ? [entry.text, "I have copied this testimony into your journal. Press L to read it again."]
-          : ["I have nothing new for you."]);
+          : ["I have nothing new for you."], choices);
       }
       return;
     }
 
-    this.openNpcDialogue(npc, ["The road has been hard. Rest while you can."]);
+    this.openNpcDialogue(npc, ["The road has been hard. Rest while you can."], choices);
   }
 
   private townLoreEntry(npcId: string): import("./types").JournalEntry | null {
@@ -1587,6 +1611,153 @@ export class Game {
       },
     };
     return entries[npcId] ?? null;
+  }
+
+  private townHealerEntry(npcId: string): import("./types").JournalEntry | null {
+    const entries: Record<string, import("./types").JournalEntry> = {
+      "town:ilyarael:healer": {
+        id: "town:ilyarael:healer",
+        title: "The Vow of Somatic Resonance",
+        text: "Sister Mirene was once an initiate of the Well of Tears in Ilyarael. When the holy well dried into black glass during the Sundering, the sisters abandoned their prayers. Mirene took a vow of somatic resonance instead: to heal not by miracle, but by drawing the physical rupture of others into her own living marrow. She remarks that my body heals strangely—the tissue knits without blood, as if remembering a blueprint rather than repairing a wound.",
+        source: "Hollow Sister Mirene · Ilyarael Township",
+      },
+      "town:cinderwild:healer": {
+        id: "town:cinderwild:healer",
+        title: "Greta's Sulfur Paste and Courier Scars",
+        text: "Cinder-Nurse Greta mixes her cooling salve from powdered yellow sulfur, ash-leached water, and cold mineral tallow. While binding my chest, she taps the seal beneath my collarbone. 'I've tended hundreds of miners and charcoal burns,' she says, 'and burnt skin always puckers into knots. Yours doesn't. Your skin closes flat, like poured paraffin cooling in a mold. You were grown for this road.'",
+        source: "Cinder-Nurse Greta · Cinder Haven",
+      },
+      "town:moonlit:healer": {
+        id: "town:moonlit:healer",
+        title: "Sister Lyra's Brine Poultice",
+        text: "Sister Lyra packs wounds with salt-bleached bladderwrack and sea-water drawn from the deepest ocean trench outside the breakers. She explains that the stinging brine preserves flesh against the radiant decay drifting from the Spire. She whispers a quiet prayer over each poultice: not to the gods of Ilyarael, who fled or drowned, but to the thirty-nine souls erased from the harbor manifest whose names now rest beneath the tide.",
+        source: "Sister Lyra of the Brine · Oarsman's Bight",
+      },
+      "town:starfall:healer": {
+        id: "town:starfall:healer",
+        title: "Cassian's Starlight Spring",
+        text: "Deep beneath a curved slab of meteoric brass, Hermit Cassian tends a subterranean spring whose clear water glows with a pale violet luminescence. The water filters through fallen stellar iron, absorbing celestial radiation that counters the psychic dissonance of the Unbound. He offers a draught from his meteorite bowl. The water tastes of copper and frost, but as it goes down, the screaming hum in my temples falls silent for the first time in leagues.",
+        source: "Hermit Cassian · Crater Watch",
+      },
+    };
+    return entries[npcId] ?? null;
+  }
+
+  private townFortressLore(npcId: string): import("./types").JournalEntry | null {
+    const regionKey = npcId.startsWith("town:ilyarael:")
+      ? "ilyarael"
+      : npcId.startsWith("town:cinderwild:")
+        ? "cinderwild"
+        : npcId.startsWith("town:moonlit:")
+          ? "moonlit"
+          : npcId.startsWith("town:starfall:")
+            ? "starfall"
+            : null;
+    if (!regionKey) return null;
+
+    const entries: Record<string, import("./types").JournalEntry> = {
+      ilyarael: {
+        id: "codex:fortress:old-lands",
+        title: "The Three Minds of the Old Lands",
+        text: "Archival fragments identify the three conscious minds sealed in the Old Lands redoubts: First Scribe Vaelen at the Weeping Archive, imprisoned for secretly duplicating the classified seedling ledgers; Master Theon the Glasswright at the Reliquary, remanded into his own resonance matrix after missing his production quota; and Castellan Morwyn at the Sealed Vault, who locked himself inside with the Spire's emergency seal between his teeth when the city fell.",
+        source: "Ilyarael Field Codex",
+      },
+      cinderwild: {
+        id: "codex:fortress:cinderwild",
+        title: "The Furnace Cohorts of the Cinderwild",
+        text: "Furnace manifests reveal the two load-bearing minds of the Cinderwild: young Roryn at the Broken Shrine, a seven-year-old child whose courier died in the ash ravines trying to shield his vessel; and Decurion Kaelen at the Ruined Watchpost, who was ordered to maintain border interdiction during the evacuation and starved in his plate armor waiting nine hundred years for relief.",
+        source: "Cinder Haven Field Codex",
+      },
+      moonlit: {
+        id: "codex:fortress:moonlit",
+        title: "The Drowned Registry of the Moonlit Coast",
+        text: "Salvaged maritime tags record the coastal fortress minds: Maris of the Shallows at the Salt Graves, a sail-stitcher sacrificed to balance the coal manifest for an elite evacuation barge; and Alden the Lamplighter at the Keeper's Beacon, who burned portions of his own nervous tissue to keep the harbor lighthouse blazing after the fuel shipments ceased.",
+        source: "Oarsman's Bight Field Codex",
+      },
+      starfall: {
+        id: "codex:fortress:starfall",
+        title: "The Astronomers of the Starfall Moors",
+        text: "Observatory calculations document the minds anchoring the moors: Chief Reckoner Selene at the Fallen Observatory, who calculated celestial angles to focus radiant light into intake chambers and spent nine centuries tallying seconds in the dark; and Master Orren at the Astronomer's Watch, who built the first self-intake prototype believing it would grant stellar immortality, only to be trapped forever in an armored defense loop.",
+        source: "Crater Watch Field Codex",
+      },
+    };
+    return entries[regionKey] ?? null;
+  }
+
+  private townNpcChoices(npc: NpcData): { id: string; label: string }[] {
+    const choices: { id: string; label: string }[] = [];
+    choices.push({ id: `npc:topic:${npc.id}:fortress`, label: "Inquire about minds sealed in nearby fortresses" });
+    choices.push({ id: `npc:topic:${npc.id}:backstory`, label: "Ask about their memories and past" });
+    if ((this.shards ?? 0) > 0) {
+      choices.push({ id: `npc:topic:${npc.id}:shards`, label: "Ask about the Anima Shards you carry" });
+    }
+    choices.push({ id: "leave", label: "Fare well" });
+    return choices;
+  }
+
+  private handleNpcTopic(npcId: string, topic: string) {
+    const npc = this.map.npcs.find((n) => n.id === npcId)
+      ?? Object.values(TOWN_RESIDENTS).flat().find((n) => n.id === npcId);
+    if (!npc) return;
+
+    if (topic === "fortress") {
+      const entry = this.townFortressLore(npcId);
+      if (entry && !this.world.journal.some((e) => e.id === entry.id)) {
+        this.world.journal.push(entry);
+        this.publishJournal();
+      }
+      this.pendingChoices = this.townNpcChoices(npc);
+      this.openDialogue(
+        entry ? [entry.text, "This account has been recorded in your field journal. Press L to review it."] : ["No fortress records remain for this region."],
+        npc.name,
+        npc.color,
+        npc.portrait,
+        NPC_ROLE_LABEL[npc.role] + " · FORTRESS CODEX",
+      );
+      return;
+    }
+
+    if (topic === "backstory") {
+      const entry = npc.role === "healer"
+        ? this.townHealerEntry(npcId)
+        : npc.role === "scout"
+          ? this.townScoutEntry(npcId)
+          : this.townLoreEntry(npcId);
+      if (entry && !this.world.journal.some((e) => e.id === entry.id)) {
+        this.world.journal.push(entry);
+        this.publishJournal();
+      }
+      this.pendingChoices = this.townNpcChoices(npc);
+      this.openDialogue(
+        entry ? [entry.text, "This testimony has been preserved in your field journal."] : ["I have nothing more to tell."],
+        npc.name,
+        npc.color,
+        npc.portrait,
+        NPC_ROLE_LABEL[npc.role] + " · TESTIMONY",
+      );
+      return;
+    }
+
+    if (topic === "shards") {
+      const shardReactions: Record<string, string> = {
+        "town:ilyarael:scrivener": `The ink on your skin is vibrating at the frequency of the archive. Vaelen's duplicate ledgers, Theon's crystal matrices, Morwyn's seal... they are all crying out from within your chest. You carry ${this.shards} of their minds now.`,
+        "town:ilyarael:healer": `When I place my hands on your collar, I feel nine hundred years of unresolvable torment. You are carrying ${this.shards} living minds inside a mortal body. Please, tread softly before the burden breaks you.`,
+        "town:ilyarael:smith": `Seven pilgrims before you carried those cores. Each one stood a little heavier, a little stiffer. With ${this.shards} shards, you don't even walk like a man anymore. Watch your step.`,
+        "town:cinderwild:kilnmaster": `Your chest is glowing like a furnace door left unlatched. You carry ${this.shards} shards. Young Roryn and Decurion Kaelen... I can smell the furnace ash on you from three paces away.`,
+        "town:cinderwild:healer": `The sulfur paste barely cools your skin now. The heat isn't fever; it is the radiant combustion of ${this.shards} Anima cores anchoring your bloodstream.`,
+        "town:cinderwild:outrunner": `The ash ravines answer the light under your ribs. Every beast between here and the spire can see that beacon. With ${this.shards} cores, there are no quiet roads left.`,
+        "town:moonlit:dredger": `You smell of the drowned harbor and the Spire's cold salt. Maris and Alden are speaking through your breath. You have ${this.shards} of them. Don't let their names wash away.`,
+        "town:moonlit:healer": `The tide rises when you near the water. The Anima cores—${this.shards} in total—hum like sunken church bells. The sea knows what was stolen.`,
+        "town:moonlit:blind-oar": `I am blind, traveller, but the sound of ${this.shards} conscious souls caught in harmonic lock is louder than the gale against the rocks. You carry a heavy crossing.`,
+        "town:starfall:stargazer": `The frequency! It matches page seventy-four of Master Orren's calculations! You carry ${this.shards} cores. Selene is still counting inside you—twenty-eight billion seconds and counting!`,
+        "town:starfall:healer": `The starlight water in my bowl shivers whenever you breathe. With ${this.shards} shards, you are more celestial beacon than flesh. Drink deeply; the spring will steady you.`,
+        "town:starfall:drift-child": `They are so loud now! ${this.shards} voices, all singing in different keys, trying to remember who they were before the Spire broke. Please... don't let them be forgotten.`,
+      };
+      const line = shardReactions[npcId] ?? `You carry ${this.shards} shards of the Mnemonic Engine. Their resonance changes the world around you.`;
+      this.pendingChoices = this.townNpcChoices(npc);
+      this.openDialogue([line], npc.name, npc.color, npc.portrait, NPC_ROLE_LABEL[npc.role] + " · SHARD RESONANCE");
+      return;
+    }
   }
 
   private discoverNote(sign: import("./types").SignData) {

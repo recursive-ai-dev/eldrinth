@@ -162,6 +162,99 @@ describe("town NPC dialogue and lore system", () => {
     expect(dialogueEvents[0] as any).toMatchObject({ speaker: npc.name, color: npc.color });
     expect((dialogueEvents[0] as any).lines[1]).toContain("The Courier Who Never Came");
   });
+
+  it("returns authored healer testimonies for all four regional healers", () => {
+    const healerIds = [
+      "town:ilyarael:healer",
+      "town:cinderwild:healer",
+      "town:moonlit:healer",
+      "town:starfall:healer",
+    ];
+    for (const id of healerIds) {
+      const entry = (Game.prototype as any).townHealerEntry(id);
+      expect(entry, `Expected healer entry for ${id}`).not.toBeNull();
+      expect(entry.title.length).toBeGreaterThan(5);
+      expect(entry.text.length).toBeGreaterThan(60);
+      expect(entry.source).toBeDefined();
+    }
+  });
+
+  it("returns fortress codex entries documenting all nine conscious minds across four regions", () => {
+    const testCases = [
+      { id: "town:ilyarael:scrivener", minds: ["Vaelen", "Theon", "Morwyn"] },
+      { id: "town:cinderwild:kilnmaster", minds: ["Roryn", "Kaelen"] },
+      { id: "town:moonlit:dredger", minds: ["Maris", "Alden"] },
+      { id: "town:starfall:stargazer", minds: ["Selene", "Orren"] },
+    ];
+    for (const { id, minds } of testCases) {
+      const entry = (Game.prototype as any).townFortressLore(id);
+      expect(entry, `Expected fortress lore for ${id}`).not.toBeNull();
+      expect(entry.text.length).toBeGreaterThan(100);
+      for (const mind of minds) {
+        expect(entry.text).toContain(mind);
+      }
+    }
+  });
+
+  it("builds topic choices for town NPCs including fortress inquiry and shard resonance", () => {
+    const npc = { id: "town:ilyarael:scrivener", name: "Scribe Althea", color: "#c9a86c", role: "lore" as const, x: 0, y: 0 };
+    const ctxNoShards = { shards: 0 };
+    const choicesNoShards = (Game.prototype as any).townNpcChoices.call(ctxNoShards, npc);
+    expect(choicesNoShards.map((c: any) => c.id)).toEqual([
+      "npc:topic:town:ilyarael:scrivener:fortress",
+      "npc:topic:town:ilyarael:scrivener:backstory",
+      "leave",
+    ]);
+
+    const ctxWithShards = { shards: 2 };
+    const choicesWithShards = (Game.prototype as any).townNpcChoices.call(ctxWithShards, npc);
+    expect(choicesWithShards.map((c: any) => c.id)).toContain("npc:topic:town:ilyarael:scrivener:shards");
+  });
+
+  it("handles interactive topics by recording lore in journal and displaying detailed dialogue", () => {
+    const journal: any[] = [];
+    const dialogueCalls: any[] = [];
+    const npc = {
+      id: "town:ilyarael:healer",
+      name: "Hollow Sister Mirene",
+      color: "#8fcca8",
+      role: "healer" as const,
+      portrait: { id: "sister-mirene", description: "A solemn woman in a sea-green veil" },
+      x: 100,
+      y: 100,
+    };
+    const ctx = {
+      map: { npcs: [npc] },
+      world: { journal, quests: { facts: [], resolutions: {} } },
+      shards: 3,
+      pendingChoices: null,
+      publishJournal() {},
+      openDialogue(lines: string[], speaker: string, color: string, portrait?: any, subtitle?: string) {
+        dialogueCalls.push({ lines, speaker, color, portrait, subtitle });
+      },
+      townFortressLore: (Game.prototype as any).townFortressLore,
+      townHealerEntry: (Game.prototype as any).townHealerEntry,
+      townScoutEntry: (Game.prototype as any).townScoutEntry,
+      townLoreEntry: (Game.prototype as any).townLoreEntry,
+      townNpcChoices: (Game.prototype as any).townNpcChoices,
+    };
+
+    // 1. Ask about fortress
+    (Game.prototype as any).handleNpcTopic.call(ctx, npc.id, "fortress");
+    expect(journal.some((e) => e.id === "codex:fortress:old-lands")).toBe(true);
+    expect(dialogueCalls[0].subtitle).toContain("FORTRESS CODEX");
+    expect(dialogueCalls[0].portrait?.id).toBe("sister-mirene");
+
+    // 2. Ask about backstory (healer vow)
+    (Game.prototype as any).handleNpcTopic.call(ctx, npc.id, "backstory");
+    expect(journal.some((e) => e.id === "town:ilyarael:healer")).toBe(true);
+    expect(dialogueCalls[1].subtitle).toContain("TESTIMONY");
+
+    // 3. Ask about shards carried
+    (Game.prototype as any).handleNpcTopic.call(ctx, npc.id, "shards");
+    expect(dialogueCalls[2].lines[0]).toContain("3 living minds");
+    expect(dialogueCalls[2].subtitle).toContain("SHARD RESONANCE");
+  });
 });
 
 describe("shard intake recording in fortresses", () => {
