@@ -2,6 +2,15 @@ import type { EndingId } from "./core/SceneStack";
 
 export type Dir = "up" | "down" | "left" | "right";
 export type Difficulty = "story" | "standard" | "brutal";
+export const VALID_DIFFICULTIES: readonly Difficulty[] = ["story", "standard", "brutal"] as const;
+
+export function isDifficulty(value: unknown): value is Difficulty {
+  return value === "story" || value === "standard" || value === "brutal";
+}
+
+export function normalizeDifficulty(value: unknown, fallback: Difficulty = "standard"): Difficulty {
+  return isDifficulty(value) ? value : fallback;
+}
 
 export type EnemyType = "wraith" | "sentinel" | "adept" | "boss";
 export type ItemType = "shard" | "potion";

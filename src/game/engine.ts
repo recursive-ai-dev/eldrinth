@@ -1,15 +1,16 @@
 import { TILE, MAP_W, MAP_H } from "./constants";
-import type {
-  Dir,
-  Vec,
-  EnemyType,
-  Difficulty,
-  MapData,
-  GameCallbacks,
-  DialogueData,
-  RegionExit,
-  NpcData,
-  NpcPortrait,
+import {
+  type Dir,
+  type Vec,
+  type EnemyType,
+  type Difficulty,
+  normalizeDifficulty,
+  type MapData,
+  type GameCallbacks,
+  type DialogueData,
+  type RegionExit,
+  type NpcData,
+  type NpcPortrait,
 } from "./types";
 import { clamp, DIRV } from "./math";
 import { CAMERA_ZOOM, preloadGameSprites, renderGame, TileChunkRenderer } from "./render/renderer";
@@ -221,7 +222,11 @@ export class Game {
     this.ctx = ctx;
     this.cb = cb;
     this.regions = regions;
-    this.world.difficulty = options?.difficulty ?? "standard";
+    this.world.difficulty = normalizeDifficulty(options?.difficulty, "standard");
+  }
+
+  private get difficultyTuning() {
+    return DIFFICULTY_TUNING[normalizeDifficulty(this.world.difficulty, "standard")];
   }
 
   // These accessors preserve the existing system APIs while making `world`
@@ -283,7 +288,7 @@ export class Game {
       this.tileRenderer = new TileChunkRenderer(this.map);
 
       const s = this.map.spawn;
-      const startingHealth = PLAYER_START_HP + DIFFICULTY_TUNING[this.world.difficulty].playerHealth;
+      const startingHealth = PLAYER_START_HP + this.difficultyTuning.playerHealth;
       this.player = {
         x: s.x,
         y: s.y,
@@ -560,7 +565,7 @@ export class Game {
       e.r = ADEPT_RADIUS;
       e.dmg = ADEPT_DAMAGE;
     }
-    const tuning = DIFFICULTY_TUNING[this.world.difficulty];
+    const tuning = this.difficultyTuning;
     e.hp = Math.max(1, Math.ceil(e.hp * tuning.hp));
     e.maxHp = e.hp;
     e.dmg = Math.max(1, Math.round(e.dmg * tuning.damage));
@@ -577,7 +582,7 @@ export class Game {
     b.r = BOSS_RADIUS;
     b.speed = BOSS_SPEED;
     b.dmg = BOSS_DAMAGE;
-    const tuning = DIFFICULTY_TUNING[this.world.difficulty];
+    const tuning = this.difficultyTuning;
     b.hp = Math.ceil(b.hp * tuning.hp);
     b.maxHp = b.hp;
     b.dmg = Math.max(1, Math.round(b.dmg * tuning.damage));
@@ -803,7 +808,7 @@ export class Game {
       const harm = hazardDamageAt(this.map.tiles[standingOn], p.invuln);
       if (harm > 0) {
         p.hp -= harm;
-        p.invuln = DIFFICULTY_TUNING[this.world.difficulty].hitInvulnerability;
+        p.invuln = this.difficultyTuning.hitInvulnerability;
         p.hurtFlash = 0.35;
         this.addText(p.x, p.y, `-${harm}`, "#ff8a5c", 13);
         if (p.hp <= 0) p.dying = PLAYER_INVULN_HIT;
@@ -898,7 +903,7 @@ export class Game {
     const p = this.player;
     if (p.invuln > 0 || p.dashing || this.ended || p.dying > 0) return;
     p.hp -= dmg;
-    p.invuln = DIFFICULTY_TUNING[this.world.difficulty].hitInvulnerability;
+    p.invuln = this.difficultyTuning.hitInvulnerability;
     p.hurtFlash = PLAYER_HURT_FLASH;
     const a = Math.atan2(p.y - fy, p.x - fx);
     p.kx += Math.cos(a) * 300;
@@ -999,7 +1004,7 @@ export class Game {
       onText: (x, y, text, color, size) => this.addText(x, y, text, color, size),
       onShake: (mag) => this.shake(mag),
       random: () => this.world.nextRandom(),
-      engagementMultiplier: this.playerInTownSafeZone() ? 0 : DIFFICULTY_TUNING[this.world.difficulty].awareness,
+      engagementMultiplier: this.playerInTownSafeZone() ? 0 : this.difficultyTuning.awareness,
     });
 
     this.moveEntity(e, e.vx * dt, e.vy * dt);
