@@ -1,4 +1,4 @@
-import type { JournalEntry } from "./types";
+import type { JournalEntry, SettlementState } from "./types";
 
 export interface QuestProgress {
   facts: string[];
@@ -11,6 +11,126 @@ export interface QuestDefinition {
   lead: string;
   evidence: { fact: string; title: string; text: string }[];
   choices: { id: string; label: string; text: string; reward?: { stat: "health" | "stamina" | "blade" | "dash"; amount: number } }[];
+}
+
+export interface TownProject {
+  id: string;
+  townId: string;
+  title: string;
+  request: string;
+  requirements: string[];
+  reward: { stat: "health" | "stamina" | "blade" | "dash"; amount: number };
+  safeRadiusBonus: number;
+}
+
+export const TOWN_PROJECTS: TownProject[] = [
+  {
+    id: "ilyarael:ledger-room",
+    townId: "ilyarael-township",
+    title: "Recover the missing ledger",
+    request: "Althea needs the courier comparison returned from the Glass Reliquary so she can finish the township's first honest register.",
+    requirements: ["pilgrim-ledger", "pilgrim-reflection"],
+    reward: { stat: "stamina", amount: 8 },
+    safeRadiusBonus: 40,
+  },
+  {
+    id: "ilyarael:wayfire-stones",
+    townId: "ilyarael-township",
+    title: "Reset the wayfire stones",
+    request: "Mirene can keep the sanctuary open longer if the old courier stones are relit with ash from a recovered vessel.",
+    requirements: ["courier-orders", "courier-memory"],
+    reward: { stat: "health", amount: 1 },
+    safeRadiusBonus: 40,
+  },
+  {
+    id: "cinder-haven:kiln",
+    townId: "cinder-haven",
+    title: "Reopen the east kiln",
+    request: "Vance wants the sealed kiln opened again. The delivery record and the shrine's surviving memory tell him what fuel was used last time.",
+    requirements: ["town:cinderwild:kilnmaster", "courier-memory"],
+    reward: { stat: "blade", amount: 1 },
+    safeRadiusBonus: 40,
+  },
+  {
+    id: "cinder-haven:watch-road",
+    townId: "cinder-haven",
+    title: "Clear the watch road",
+    request: "Elodie can reopen the southern road once the ruined watchpost has been heard and the warden's circuit is finally ended.",
+    requirements: ["warden:fortress.cinderwild-watchpost", "courier-orders"],
+    reward: { stat: "dash", amount: 4 },
+    safeRadiusBonus: 40,
+  },
+  {
+    id: "oarsmans-bight:ferry",
+    townId: "oarsmans-bight",
+    title: "Restore the rope ferry",
+    request: "Kieran can restring the ferry if the two coast accounts are brought back together. The crossing would spare the southern flats.",
+    requirements: ["salt-graves", "salt-beacon"],
+    reward: { stat: "stamina", amount: 10 },
+    safeRadiusBonus: 40,
+  },
+  {
+    id: "oarsmans-bight:names",
+    townId: "oarsmans-bight",
+    title: "Hang the names again",
+    request: "Morveth wants the erased names hung above the bight before the next tide. The graves and the beacon together make the list complete.",
+    requirements: ["warden:fortress.moonlit-salt-graves", "warden:fortress.moonlit-beacon"],
+    reward: { stat: "health", amount: 1 },
+    safeRadiusBonus: 40,
+  },
+  {
+    id: "crater-watch:path",
+    townId: "crater-watch",
+    title: "Clear the crater path",
+    request: "Mina has mapped a safe path through the eastern glass, but the astronomer's watch must be quiet before anyone can walk it.",
+    requirements: ["dawn-record", "warden:fortress.starfall-watch"],
+    reward: { stat: "dash", amount: 4 },
+    safeRadiusBonus: 40,
+  },
+  {
+    id: "crater-watch:lens",
+    townId: "crater-watch",
+    title: "Tune the old lens",
+    request: "Toran can turn the fallen lens toward the crater again if the observatory's record and its warden's testimony are both known.",
+    requirements: ["dawn-record", "warden:fortress.starfall-observatory"],
+    reward: { stat: "blade", amount: 1 },
+    safeRadiusBonus: 40,
+  },
+];
+
+export function townProjects(townId: string): TownProject[] {
+  return TOWN_PROJECTS.filter((project) => project.townId === townId);
+}
+
+export function settlementState(progress: QuestProgress, townId: string, shards: number): SettlementState {
+  const projects = townProjects(townId);
+  const completedProjects = projects.filter((project) => townProjectComplete(progress, project.id)).length;
+  const relevantFacts = progress.facts.filter((fact) => !fact.startsWith("lead:")).length;
+  const refugees = Math.min(3, Math.floor(shards / 3) + completedProjects);
+  const guarded = shards >= 6 && completedProjects === 0;
+  return {
+    townId,
+    refugees,
+    lamps: Math.min(3, completedProjects + (relevantFacts > 0 ? 1 : 0)),
+    guarded,
+    closedBusinesses: guarded ? 1 : 0,
+    completedProjects,
+  };
+}
+
+export function townProjectComplete(progress: QuestProgress, projectId: string): boolean {
+  return progress.resolutions[`town:${projectId}`] === "completed";
+}
+
+export function canCompleteTownProject(progress: QuestProgress, project: TownProject): boolean {
+  return !townProjectComplete(progress, project.id) && project.requirements.every((fact) => progress.facts.includes(fact));
+}
+
+export function completeTownProject(progress: QuestProgress, projectId: string): TownProject | null {
+  const project = TOWN_PROJECTS.find((entry) => entry.id === projectId);
+  if (!project || !canCompleteTownProject(progress, project)) return null;
+  progress.resolutions[`town:${project.id}`] = "completed";
+  return project;
 }
 
 /** Authored knowledge, not coordinates: the journal only exposes learned facts. */
@@ -91,7 +211,7 @@ export function resolveQuest(progress: QuestProgress, id: string, choiceId: stri
 }
 
 export function questJournal(progress: QuestProgress): JournalEntry[] {
-  return QUESTS.filter((quest) => questKnown(progress, quest)).flatMap((quest) => {
+  const investigationEntries = QUESTS.filter((quest) => questKnown(progress, quest)).flatMap((quest) => {
     const entries: JournalEntry[] = [];
     if (progress.facts.includes(`lead:${quest.id}`)) entries.push({ id: `${quest.id}:lead`, title: quest.title, text: quest.lead, questId: quest.id, source: "Orithel · Ilyarael" });
     for (const clue of quest.evidence) if (progress.facts.includes(clue.fact)) entries.push({ id: clue.fact, title: clue.title, text: clue.text, questId: quest.id, source: "Firsthand discovery" });
@@ -99,4 +219,12 @@ export function questJournal(progress: QuestProgress): JournalEntry[] {
     if (choice) entries.push({ id: `${quest.id}:resolved`, title: "A decision made", text: choice.text, questId: quest.id, resolved: true, source: "Orithel · Ilyarael" });
     return entries;
   });
+  const projectEntries = TOWN_PROJECTS.filter((project) => townProjectComplete(progress, project.id)).map((project) => ({
+    id: `town-project:${project.id}`,
+    title: project.title,
+    text: `${project.request} Completed. The town's sanctuary now reaches farther along the road.`,
+    source: "Town Project",
+    resolved: true,
+  }));
+  return [...investigationEntries, ...projectEntries];
 }

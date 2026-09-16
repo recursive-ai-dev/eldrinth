@@ -27,7 +27,7 @@ import { createRegionRepository, type RegionRepository } from "./regions";
 import { isInteriorRegion } from "./map";
 import { applyHarvestCost, fortressShardIntakeEntry, fortressWardenEntry, shardBleedEntry, shardPickupMessage, wardDialogue, wardenFact, wardUnlockMessage } from "./escalation";
 import { hazardDamageAt } from "./hazard";
-import { QUESTS, learnFact, canResolve, questKnown, questJournal, resolveQuest } from "./quests";
+import { QUESTS, TOWN_PROJECTS, canCompleteTownProject, completeTownProject, learnFact, canResolve, questKnown, questJournal, resolveQuest, settlementState, townProjectComplete, townProjects } from "./quests";
 import { AISystem } from "./systems/AISystem";
 import { CombatSystem } from "./systems/CombatSystem";
 import { GameFlowSystem } from "./systems/GameFlowSystem";
@@ -249,6 +249,7 @@ export class Game {
   set bossSpawned(value: boolean) { this.world.bossSpawned = value; }
   get shards() { return this.world.shards; }
   set shards(value: number) { this.world.shards = value; }
+  get settlementStates() { return this.map.towns.map((town) => settlementState(this.world.quests, town.id, this.shards)); }
   get totalShards() { return this.world.totalShards; }
   set totalShards(value: number) { this.world.totalShards = value; }
   get message() { return this.world.message; }
@@ -968,7 +969,10 @@ export class Game {
 
   private playerInTownSafeZone(): boolean {
     for (const town of this.map.towns) {
-      if (Math.hypot(this.player.x - town.x, this.player.y - town.y) < town.safeRadius) return true;
+      const projectBonus = townProjects(town.id)
+        .filter((project) => townProjectComplete(this.world.quests, project.id))
+        .reduce((bonus, project) => bonus + project.safeRadiusBonus, 0);
+      if (Math.hypot(this.player.x - town.x, this.player.y - town.y) < town.safeRadius + projectBonus) return true;
     }
     return false;
   }
@@ -1143,6 +1147,29 @@ export class Game {
     this.cb.onDialogue({ ...this.dialogue! });
   }
 
+  private openTownProjects(townId: string) {
+    const town = this.map.towns.find((entry) => entry.id === townId);
+    const projects = townProjects(townId);
+    if (!town || projects.length === 0) return;
+    this.openDialogue(
+      [
+        `${town.name}'s notice board is written in three hands. Each request has been left open because no one here can spare the people to finish it.`,
+      ],
+      `${town.name} Notice Board`,
+      "#d7b978",
+      undefined,
+      "LOCAL REQUESTS · TOWN PROJECTS",
+    );
+    this.dialogue!.choices = [
+      ...projects.map((project) => ({
+        id: `project:${project.id}`,
+        label: `${project.title}${townProjectComplete(this.world.quests, project.id) ? " · completed" : canCompleteTownProject(this.world.quests, project) ? " · ready" : " · request"}`,
+      })),
+      { id: "leave", label: "Leave the requests for now" },
+    ];
+    this.cb.onDialogue({ ...this.dialogue! });
+  }
+
   private openWardChoice() {
     const { lines, choices } = wardDialogue();
     this.pendingChoices = choices;
@@ -1171,6 +1198,32 @@ export class Game {
       this.pendingChoices = null;
       this.cb.onDialogue(null);
       this.endRun("refusal");
+      return;
+    }
+    if (id.startsWith("project:")) {
+      const projectId = id.slice("project:".length);
+      const project = TOWN_PROJECTS.find((entry) => entry.id === projectId);
+      if (!project) return;
+      if (townProjectComplete(this.world.quests, project.id)) {
+        this.openDialogue([`${project.title} is done. The road beyond the sanctuary is quieter now, and people have started using it again.`], "Town Notice Board", "#d7b978");
+        return;
+      }
+      if (!canCompleteTownProject(this.world.quests, project)) {
+        const missing = project.requirements.filter((fact) => !this.world.quests.facts.includes(fact));
+        this.openDialogue([project.request, `The request is still waiting on: ${missing.join(", ")}.`], "Town Notice Board", "#d7b978");
+        return;
+      }
+      const completed = completeTownProject(this.world.quests, project.id);
+      if (!completed) return;
+      const p = this.player;
+      const { stat, amount } = completed.reward;
+      if (stat === "health") { p.maxHp += amount; p.hp = Math.min(p.maxHp, p.hp + amount); }
+      if (stat === "stamina") { p.maxStamina += amount; p.stamina = p.maxStamina; }
+      if (stat === "blade") p.attackBonus += amount;
+      if (stat === "dash") p.dashCostDiscount += amount;
+      this.publishJournal();
+      this.openDialogue([`${completed.title} is complete. The sanctuary reaches farther along the road now. ${completed.reward.stat === "health" ? `Maximum health +${amount}.` : completed.reward.stat === "stamina" ? `Maximum stamina +${amount}.` : completed.reward.stat === "blade" ? `Blade damage +${amount}.` : `Dash cost −${amount}.`}`], "Town Notice Board", "#d7b978");
+      this.msg("Town project completed. The settlement has changed.");
       return;
     }
     if (id === "spire") {
@@ -1285,6 +1338,10 @@ export class Game {
       const sx = s.x * TILE + TILE / 2;
       const sy = s.y * TILE + TILE / 2;
       if (Math.hypot(p.x - sx, p.y - sy) < INTERACT_SIGN_DISTANCE) {
+        if (s.townId) {
+          this.openTownProjects(s.townId);
+          return;
+        }
         this.discoverNote(s);
         this.openDialogue([s.text], s.title ?? "Unmarked Field Note", "#cdbf9a");
         return;
@@ -1293,7 +1350,29 @@ export class Game {
   }
 
   private openNpcDialogue(npc: NpcData, lines: string[]) {
-    this.openDialogue(lines, npc.name, npc.color, npc.portrait, NPC_ROLE_LABEL[npc.role]);
+    const reaction = typeof (this as any).townReaction === "function" ? this.townReaction(npc.id) : null;
+    this.openDialogue(reaction ? [...lines, reaction] : lines, npc.name, npc.color, npc.portrait, NPC_ROLE_LABEL[npc.role]);
+  }
+
+  private townReaction(npcId: string): string | null {
+    const townId = npcId.startsWith("town:ilyarael:")
+      ? "ilyarael-township"
+      : npcId.startsWith("town:cinderwild:")
+        ? "cinder-haven"
+        : npcId.startsWith("town:moonlit:")
+          ? "oarsmans-bight"
+          : npcId.startsWith("town:starfall:")
+            ? "crater-watch"
+            : null;
+    if (!townId) return null;
+    const state = this.settlementStates.find((entry) => entry.townId === townId);
+    if (!state) return null;
+    if (state.guarded) return "The watch has doubled. Six shards make every road look like an approach, and we will not be caught waiting again.";
+    if (state.completedProjects > 0) return `The town is different since the work was finished. ${state.refugees ? `${state.refugees} newcomers have found a place by our lamps.` : "People have started using the road again."}`;
+    if (state.refugees > 0) return `${state.refugees} people came in behind you from the frontier. We have put them near the lamps and told them the sanctuary is real.`;
+    if (this.world.quests.facts.length > 2) return "The records are moving faster now. Every account you bring back gives the town one more thing it can name aloud.";
+    if (this.shards > 0) return "The shard-light reaches this far. We have begun leaving a lamp lit after dusk, in case someone else comes home carrying one.";
+    return null;
   }
 
   private speakWithTownNpc(npc: NpcData) {
@@ -1414,7 +1493,13 @@ export class Game {
       } else {
         this.usedTownServices.add(npc.id);
         const entry = this.townLoreEntry(npc.id);
-        const fact = npc.id === "town:ilyarael:scrivener" ? "pilgrim-ledger" : null;
+        const loreFacts: Record<string, string> = {
+          "town:ilyarael:scrivener": "pilgrim-ledger",
+          "town:cinderwild:kilnmaster": "town:cinderwild:kilnmaster",
+          "town:moonlit:dredger": "town:moonlit:dredger",
+          "town:starfall:stargazer": "town:starfall:stargazer",
+        };
+        const fact = loreFacts[npc.id] ?? null;
         const learned = fact ? learnFact(this.world.quests, fact) : false;
         if (entry && !this.world.journal.some((existing) => entry.id === existing.id)) this.world.journal.push(entry);
         if (entry || learned) this.publishJournal();
