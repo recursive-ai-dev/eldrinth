@@ -1,4 +1,6 @@
+import { useState } from "react";
 import type { NpcPortrait } from "@/game/types";
+import { PORTRAIT_IMAGES } from "@/assets/portraits";
 
 export const KNOWN_PORTRAIT_IDS = [
   "orithel-the-last-watcher",
@@ -30,6 +32,8 @@ export default function NpcPortraitView({
   color = "#ffb259",
 }: NpcPortraitViewProps) {
   const { id, description } = portrait;
+  const [imageError, setImageError] = useState(false);
+  const imageSrc = PORTRAIT_IMAGES[id];
 
   return (
     <div
@@ -39,7 +43,17 @@ export default function NpcPortraitView({
       className="relative flex h-32 w-24 shrink-0 flex-col overflow-hidden rounded-lg border border-amber-200/30 bg-[#0c0a12] shadow-lg sm:w-32"
     >
       <div className="absolute inset-0">
-        <PortraitSvg id={id} />
+        {imageSrc && !imageError ? (
+          <img
+            src={imageSrc}
+            alt={description}
+            onError={() => setImageError(true)}
+            className="h-full w-full object-cover object-top transition-opacity duration-300"
+            loading="eager"
+          />
+        ) : (
+          <PortraitSvg id={id} />
+        )}
       </div>
 
       {/* Frame border highlight & subtle ID label at bottom */}
