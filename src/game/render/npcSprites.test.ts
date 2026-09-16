@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { KNOWN_PORTRAIT_IDS } from "../../components/NpcPortraitView";
+import { PORTRAIT_IMAGES } from "../../assets/portraits";
 import { TILE, tileDefinition } from "../constants";
 import { TOWN_RESIDENTS, generateMap } from "../map";
 import { drawNpc } from "./renderer";
@@ -101,6 +102,12 @@ describe("NPC Portraits and Registry", () => {
     expect(rolesFound.healer).toBe(4);
     expect(rolesFound.scout).toBe(4);
     expect(portraitIds.size).toBe(12);
+  });
+
+  it("provides high-resolution portrait image assets for all 13 characters", () => {
+    for (const id of KNOWN_PORTRAIT_IDS) {
+      expect(PORTRAIT_IMAGES[id], `Missing image asset for ${id}`).toBeDefined();
+    }
   });
 });
 
