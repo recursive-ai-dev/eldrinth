@@ -48,6 +48,10 @@ export const ENTITY_SPRITE_KEY: Record<string, string> = {
   potion: "item.potion",
   campfire: "prop.campfire",
   sign: "prop.sign",
+  lantern: "prop.lantern",
+  brazier: "prop.brazier",
+  guard: "guard",
+  refugee: "refugee",
   "house.oldstone": "prop.house.oldstone",
   "house.cinder": "prop.house.cinder",
   "house.coastal": "prop.house.coastal",
@@ -79,9 +83,25 @@ function entityAtlasFor(key: string): SpriteAtlas {
 }
 
 export function preloadGameSprites(): Promise<void> {
+  const npcKeys = [
+    "npc.orithel-the-last-watcher",
+    "npc.scribe-althea",
+    "npc.sister-mirene",
+    "npc.barris-the-smith",
+    "npc.kiln-master-vance",
+    "npc.cinder-nurse-greta",
+    "npc.elodie-outrunner",
+    "npc.mistress-morveth",
+    "npc.sister-lyra",
+    "npc.kieran-blind-oar",
+    "npc.reeve-toran",
+    "npc.hermit-cassian",
+    "npc.mina-drift-child",
+  ];
   return preloadAtlases([
     ...Object.values(TILE_SPRITE_KEY),
     ...new Set(Object.values(ENTITY_SPRITE_KEY)),
+    ...npcKeys,
   ]);
 }
 
@@ -739,15 +759,23 @@ function drawSettlementState(g: RenderState, ctx: CanvasRenderingContext2D) {
       const [ox, oy] = lampOffsets[index];
       const x = town.x + ox;
       const y = town.y + oy;
-      const glow = ctx.createRadialGradient(x, y, 3, x, y, 22);
-      glow.addColorStop(0, "rgba(255,224,143,0.8)");
+      const flicker = 0.9 + 0.1 * Math.sin(g.time * 5 + index * 1.7);
+      const glow = ctx.createRadialGradient(x, y - 6, 2, x, y - 6, 26 * flicker);
+      glow.addColorStop(0, "rgba(255,224,143,0.85)");
+      glow.addColorStop(0.4, "rgba(255,181,72,0.3)");
       glow.addColorStop(1, "rgba(255,181,72,0)");
       ctx.fillStyle = glow;
       ctx.beginPath();
-      ctx.arc(x, y, 22, 0, Math.PI * 2);
+      ctx.arc(x, y - 6, 26 * flicker, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = "#ffe49a";
-      ctx.fillRect(x - 2, y - 2, 4, 4);
+
+      ctx.save();
+      ctx.translate(x, y);
+      if (!drawEntitySprite(ctx, "lantern", "front", "idle", g.time * 2 + index * 0.5, 24)) {
+        ctx.fillStyle = "#ffe49a";
+        ctx.fillRect(-2, -2, 4, 4);
+      }
+      ctx.restore();
     }
 
     const refugeeOffsets = [[-48, 44], [0, 48], [48, 44]];
@@ -755,12 +783,17 @@ function drawSettlementState(g: RenderState, ctx: CanvasRenderingContext2D) {
       const [ox, oy] = refugeeOffsets[index];
       const x = town.x + ox;
       const y = town.y + oy;
-      ctx.fillStyle = "#c9d6cf";
-      ctx.beginPath();
-      ctx.arc(x, y - 7, 3, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#6c8b82";
-      ctx.fillRect(x - 4, y - 4, 8, 10);
+      ctx.save();
+      ctx.translate(x, y);
+      if (!drawEntitySprite(ctx, "refugee", "front", "walk", g.time * 0.3 + index, 28)) {
+        ctx.fillStyle = "#c9d6cf";
+        ctx.beginPath();
+        ctx.arc(0, -7, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#6c8b82";
+        ctx.fillRect(-4, -4, 8, 10);
+      }
+      ctx.restore();
     }
 
     if (state.closedBusinesses > 0) {
@@ -782,17 +815,22 @@ function drawSettlementState(g: RenderState, ctx: CanvasRenderingContext2D) {
     if (state.guarded) {
       const x = town.x - 88;
       const y = town.y + 4;
-      ctx.fillStyle = "#8b98a0";
-      ctx.beginPath();
-      ctx.arc(x, y - 12, 5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillRect(x - 6, y - 7, 12, 18);
-      ctx.strokeStyle = "#c7a56b";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(x + 8, y - 12);
-      ctx.lineTo(x + 8, y + 16);
-      ctx.stroke();
+      ctx.save();
+      ctx.translate(x, y);
+      if (!drawEntitySprite(ctx, "guard", "front", "walk", g.time * 0.35, 32)) {
+        ctx.fillStyle = "#8b98a0";
+        ctx.beginPath();
+        ctx.arc(0, -12, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillRect(-6, -7, 12, 18);
+        ctx.strokeStyle = "#c7a56b";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(8, -12);
+        ctx.lineTo(8, 16);
+        ctx.stroke();
+      }
+      ctx.restore();
     }
   }
 }
@@ -986,6 +1024,15 @@ function drawCampfire(g: RenderState, ctx: CanvasRenderingContext2D, x: number, 
 
   ctx.translate(ix, iy);
   if (drawEntitySprite(ctx, "campfire", "front", "idle", g.time, 32)) {
+    ctx.globalCompositeOperation = "lighter";
+    for (let i = 0; i < 4; i++) {
+      const sparkT = (g.time * 2.5 + i * 0.7) % 2.0;
+      const sparkY = -6 - sparkT * 14;
+      const sparkX = Math.sin(g.time * 3 + i * 2.1) * (3 + sparkT * 3);
+      const alpha = Math.max(0, 1 - sparkT / 2.0);
+      ctx.fillStyle = `rgba(255,${Math.floor(180 + 60 * Math.sin(i))},80,${alpha})`;
+      ctx.fillRect(sparkX - 0.5, sparkY - 0.5, 1.5, 1.5);
+    }
     ctx.restore();
     return;
   }
@@ -1031,6 +1078,55 @@ export function drawNpc(
   ctx.fill();
 
   ctx.translate(ix, iy + floatY);
+
+  const npcKey = portraitId ? `npc.${portraitId}` : undefined;
+  let facingDir = "down";
+  if (player) {
+    const dx = player.x - x;
+    const dy = player.y - y;
+    if (Math.abs(dx) > Math.abs(dy)) {
+      facingDir = dx < 0 ? "left" : "right";
+    } else {
+      facingDir = dy < 0 ? "up" : "down";
+    }
+  }
+
+  if (npcKey && entityAtlasFor(npcKey).ready) {
+    if (isOrithel) {
+      // Ethereal projection aura
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      const rad = ctx.createRadialGradient(0, -10, 2, 0, -10, 26);
+      rad.addColorStop(0, "rgba(118,242,223,0.35)");
+      rad.addColorStop(0.7, "rgba(60,168,154,0.12)");
+      rad.addColorStop(1, "rgba(60,168,154,0)");
+      ctx.fillStyle = rad;
+      ctx.beginPath();
+      ctx.arc(0, -10, 26, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Fractured Spire Halo shards rotating
+      ctx.fillStyle = "#a8f5ea";
+      for (let i = 0; i < 4; i++) {
+        const angle = time * 0.8 + (i * Math.PI) / 2;
+        const hx = Math.cos(angle) * 12;
+        const hy = -18 + Math.sin(angle) * 6;
+        ctx.beginPath();
+        ctx.moveTo(hx, hy - 3);
+        ctx.lineTo(hx + 2, hy);
+        ctx.lineTo(hx, hy + 3);
+        ctx.lineTo(hx - 2, hy);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    if (drawEntitySprite(ctx, npcKey, facingDir, "walk", time * 0.5, 32)) {
+      ctx.restore();
+      return;
+    }
+  }
 
   if (isOrithel) {
     // Ethereal projection aura

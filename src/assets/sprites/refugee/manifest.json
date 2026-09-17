@@ -1,0 +1,39 @@
+{
+  "actions": {
+    "walk": {
+      "fps": 8,
+      "frames": 4,
+      "row": 0
+    }
+  },
+  "cellH": 32,
+  "cellW": 32,
+  "directions": [
+    "front",
+    "right",
+    "back",
+    "left"
+  ],
+  "kind": "human",
+  "pixelHashes": {
+    "walk": [
+      "66d3da1088ab22baf20042c6b68160e5",
+      "6def6ae7c998a0c34ef47d6339f84ebc",
+      "66d3da1088ab22baf20042c6b68160e5",
+      "f1f64721e8c50c29ed570df5f259e227",
+      "9ee14f10ca28fa001f2b107a45010b99",
+      "114c0ddf00869f6f27a06105a5505e86",
+      "9ee14f10ca28fa001f2b107a45010b99",
+      "7ed73076d257a7c5bde3a736395280f7",
+      "ed205803dcb046e5293b5108a885a1e3",
+      "07996243578e655c887ad53162f2fa0e",
+      "ed205803dcb046e5293b5108a885a1e3",
+      "5fd7dfb82525a9730af13c4f3b724741",
+      "e41c6d59bdb2c0d5a888d8e1f73e94fd",
+      "1b10d76383d888a5efc95b6f719f3a5f",
+      "e41c6d59bdb2c0d5a888d8e1f73e94fd",
+      "b26d27f1f8f7c084236d36a190cb34dc"
+    ]
+  },
+  "static": false
+}

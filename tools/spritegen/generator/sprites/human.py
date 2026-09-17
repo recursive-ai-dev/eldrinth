@@ -69,6 +69,32 @@ _AGE_RANGES = [
 _CLASSES = ["poor", "working", "middle", "upper", "rich"]
 
 
+NPC_ROLES = {
+    "orithel-the-last-watcher",
+    "scribe-althea",
+    "sister-mirene",
+    "barris-the-smith",
+    "kiln-master-vance",
+    "cinder-nurse-greta",
+    "elodie-outrunner",
+    "mistress-morveth",
+    "sister-lyra",
+    "kieran-blind-oar",
+    "reeve-toran",
+    "hermit-cassian",
+    "mina-drift-child",
+}
+
+
+def normalize_role(role: str | None) -> str | None:
+    if not role:
+        return None
+    r = role.lower().strip()
+    if r.startswith("npc."):
+        r = r[4:]
+    return r
+
+
 def _hex(rgb) -> str:
     return color.rgb_to_hex(rgb)
 
@@ -133,6 +159,114 @@ class HumanSpriteGenerator(SpriteGenerator):
             if rng.random() < 0.35:
                 facial_hair = rng.choice(["mustache", "goatee", "full_beard", "stubble"])
 
+        norm_role = normalize_role(role)
+        if norm_role == "orithel-the-last-watcher":
+            gender = "female"
+            skin = (186, 245, 238)
+            hair = (235, 250, 248)
+            hair_style = "long"
+            top = (24, 75, 82)
+            bottom = (18, 55, 62)
+            has_glasses = False
+            has_hat = False
+            has_jewelry = True
+            facial_hair = None
+        elif norm_role == "scribe-althea":
+            gender = "female"
+            age_category = "older_adult"
+            actual_age = 58
+            hair = (210, 214, 220)
+            hair_style = "bun"
+            top = (181, 132, 52)
+            bottom = (138, 97, 34)
+            has_glasses = True
+            has_hat = False
+            facial_hair = None
+        elif norm_role == "sister-mirene":
+            gender = "female"
+            hair = (45, 40, 42)
+            top = (38, 79, 67)
+            bottom = (26, 56, 47)
+            skin = (232, 215, 200)
+            has_hat = False
+            facial_hair = None
+        elif norm_role == "barris-the-smith":
+            gender = "male"
+            age_category = "middle_aged"
+            hair = (140, 144, 150)
+            facial_hair = "full_beard"
+            top = (92, 58, 36)
+            bottom = (48, 38, 32)
+            has_hat = False
+        elif norm_role == "kiln-master-vance":
+            gender = "male"
+            top = (45, 45, 48)
+            bottom = (32, 30, 34)
+            has_hat = False
+        elif norm_role == "cinder-nurse-greta":
+            gender = "female"
+            hair = (40, 32, 28)
+            hair_style = "curly"
+            top = (145, 52, 42)
+            bottom = (180, 175, 165)
+            facial_hair = None
+        elif norm_role == "elodie-outrunner":
+            gender = "female"
+            hair = (45, 35, 30)
+            hair_style = "ponytail"
+            top = (135, 42, 48)
+            bottom = (60, 55, 52)
+            facial_hair = None
+        elif norm_role == "mistress-morveth":
+            gender = "female"
+            hair = (235, 235, 240)
+            hair_style = "braid"
+            top = (32, 44, 54)
+            bottom = (24, 32, 40)
+            facial_hair = None
+        elif norm_role == "sister-lyra":
+            gender = "female"
+            hair_style = "buzzcut"
+            top = (42, 88, 64)
+            bottom = (30, 65, 48)
+            facial_hair = None
+        elif norm_role == "kieran-blind-oar":
+            gender = "male"
+            hair = (110, 105, 100)
+            facial_hair = "stubble"
+            top = (52, 78, 105)
+            bottom = (38, 48, 58)
+        elif norm_role == "reeve-toran":
+            gender = "male"
+            hair = (28, 25, 30)
+            top = (82, 42, 105)
+            bottom = (36, 28, 44)
+            has_glasses = False
+            facial_hair = None
+        elif norm_role == "hermit-cassian":
+            gender = "male"
+            hair = (200, 202, 205)
+            facial_hair = "full_beard"
+            top = (75, 38, 70)
+            bottom = (48, 32, 44)
+        elif norm_role == "mina-drift-child":
+            gender = "female"
+            age_category = "teenager"
+            actual_age = 10
+            hair = (220, 222, 228)
+            hair_style = "braid"
+            top = (48, 46, 52)
+            bottom = (36, 34, 40)
+            facial_hair = None
+        elif norm_role == "guard":
+            top = (42, 60, 92)
+            bottom = (75, 78, 85)
+            has_hat = False
+        elif norm_role == "refugee":
+            top = (68, 60, 52)
+            bottom = (52, 46, 42)
+            has_hat = False
+
         spec = {
             "gender": gender,
             "social_class": social_class,
@@ -191,10 +325,18 @@ class HumanSpriteGenerator(SpriteGenerator):
         # suitable for civilian sprites, but it turns one-pixel armor and
         # weapon edges brown during finalization. Combat roles use their own
         # dark equipment ink so steel and ritual silhouettes stay readable.
-        if role == "player":
+        if norm_role == "player":
             outline = (10, 9, 13)
-        elif role == "adept":
+        elif norm_role == "adept":
             outline = (10, 6, 12)
+        elif norm_role == "guard":
+            outline = (12, 14, 18)
+        elif norm_role == "refugee":
+            outline = (22, 18, 16)
+        elif norm_role == "orithel-the-last-watcher":
+            outline = (18, 60, 66)
+        elif norm_role in NPC_ROLES:
+            outline = (16, 14, 18)
         else:
             outline = color.darken(skin, 0.55)
         canvas = finalize(
@@ -489,10 +631,23 @@ class HumanSpriteGenerator(SpriteGenerator):
         hx = (layout["head_w"] * 0.48) if not side else (layout["head_w"] * 0.46)
         hy = layout["head_h"] * 0.48
 
-        if role == "player":
+        norm_role = normalize_role(role)
+        if norm_role == "player":
             self._knight_equipment(canvas, rig, direction, action, frame, layout, cx)
-        elif role == "adept":
+        elif norm_role == "adept":
             self._adept_equipment(canvas, rig, direction, action, frame, layout, cx)
+        elif norm_role == "guard":
+            self._guard_equipment(canvas, rig, direction, action, frame, layout, cx)
+        elif norm_role == "refugee":
+            self._refugee_equipment(canvas, rig, direction, action, frame, layout, cx)
+        elif norm_role == "orithel-the-last-watcher":
+            self._orithel_equipment(canvas, rig, direction, action, frame, layout, cx)
+        elif norm_role in NPC_ROLES:
+            ell(hd[0], hd[1], hx, hy, skin_b, skin_hi, skin_sh, TAG_SKIN)
+            self._hair(canvas, hd, hx, hy, hair_b, hair_hi, hair_sh, hair_style, direction, side, back)
+            if not back:
+                self._face(canvas, rig, direction, cx, skin_b, eye, facial_hair, hair_b, gender, side)
+            self._npc_equipment(canvas, rig, direction, action, frame, layout, cx, norm_role)
         else:
             ell(hd[0], hd[1], hx, hy, skin_b, skin_hi, skin_sh, TAG_SKIN)
             self._hair(canvas, hd, hx, hy, hair_b, hair_hi, hair_sh, hair_style, direction, side, back)
@@ -505,8 +660,8 @@ class HumanSpriteGenerator(SpriteGenerator):
             if has_jewelry and not back:
                 self._jewelry(canvas, nk, hd, gender)
 
-        if role in ("player", "adept"):
-            self._weapon(canvas, hr, direction, action, frame, role)
+        if norm_role in ("player", "adept", "guard"):
+            self._weapon(canvas, hr, direction, action, frame, norm_role)
 
         return canvas
 
@@ -524,6 +679,21 @@ class HumanSpriteGenerator(SpriteGenerator):
                           shaft, color.lighten(shaft, 0.2), color.darken(shaft, 0.3), TAG_METAL)
             rasterize_sdf(canvas, lambda px, py: sd_circle(px, py, tx, ty, 2.0),
                           glow, color.lighten(glow, 0.35), color.darken(glow, 0.25), TAG_ACCENT)
+            return
+
+        if role == "guard":
+            shaft = (100, 75, 52)
+            steel = named_palette("grim_steel", 0.75)
+            if impact and direction in ("left", "right"):
+                tx, ty = hx + sign * 11, hy - 1
+                bx, by = hx - sign * 5, hy + 2
+            else:
+                tx, ty = hx + (sign * 2 if direction in ("left", "right") else 1), hy - 11
+                bx, by = hx - (sign * 1 if direction in ("left", "right") else 0), hy + 7
+            rasterize_sdf(canvas, lambda px, py: sd_capsule(px, py, bx, by, tx, ty, 0.95),
+                          shaft, color.lighten(shaft, 0.25), color.darken(shaft, 0.35), TAG_METAL)
+            rasterize_sdf(canvas, lambda px, py: sd_capsule(px, py, tx, ty, tx + (sign * 2 if impact else 0), ty - 3, 1.2),
+                          steel, color.lighten(steel, 0.35), color.darken(steel, 0.25), TAG_METAL)
             return
 
         steel = named_palette("grim_steel", 0.78)
@@ -737,6 +907,385 @@ class HumanSpriteGenerator(SpriteGenerator):
                 canvas.set(bx, by + dy, (170, 32, 45), TAG_ACCENT)
             for dx in (-1, 1):
                 canvas.set(bx + dx, by, (170, 32, 45), TAG_ACCENT)
+
+    def _guard_equipment(self, canvas, rig, direction, action, frame, layout, cx):
+        side = direction in ("left", "right")
+        back = direction == "back"
+        sign = 1 if direction == "right" else -1
+
+        def P(name):
+            return self._pj(rig, name, direction, cx)
+
+        hd = P("head"); nk = P("neck"); ts = P("torso"); hp = P("hip")
+        sl = P("shoulder_l"); sr = P("shoulder_r")
+        el = P("elbow_l"); er = P("elbow_r")
+        hl = P("hand_l"); hr = P("hand_r")
+        kl = P("knee_l"); kr = P("knee_r")
+        fl = P("foot_l"); fr = P("foot_r")
+
+        steel = named_palette("grim_steel", 0.68)
+        steel_hi, steel_b, steel_sh = shade_triplet(steel, 0.25, 0.30)
+        gold = (195, 160, 68)
+        surcoat = (42, 60, 92)
+        surcoat_hi, surcoat_b, surcoat_sh = shade_triplet(surcoat, 0.20, 0.28)
+        ink = (10, 10, 14)
+
+        def cap(ax, ay, bx, by, r, fill, hi, sh, tag, ink=None):
+            def sdf(px, py):
+                return sd_capsule(px, py, ax, ay, bx, by, r)
+            rasterize_sdf(canvas, sdf, fill, hi, sh, tag, ink=ink, ink_width=0.55)
+
+        def rbox(cx_, cy_, hx, hy, rad, fill, hi, sh, tag, ink=None):
+            def sdf(px, py):
+                return sd_round_box(px, py, cx_, cy_, hx, hy, rad)
+            rasterize_sdf(canvas, sdf, fill, hi, sh, tag, ink=ink, ink_width=0.55)
+
+        # 1. Surcoat over chainmail
+        torso_hx = 3.8 if not side else 3.4
+        torso_hy = layout["torso_h"] * 0.55
+        rbox(ts[0], (ts[1] + hp[1]) * 0.5, torso_hx, max(torso_hy, abs(hp[1] - ts[1]) * 0.55 + 1.2),
+             1.0, surcoat_b, surcoat_hi, surcoat_sh, TAG_CLOTH, ink=ink)
+
+        # Surcoat heraldic cross stripe
+        if not back:
+            mx = int(round(ts[0] if not side else ts[0] + sign * 1.2))
+            my = int(round((ts[1] + hp[1]) * 0.5))
+            for dy in range(-2, 3):
+                canvas.set(mx, my + dy, gold, TAG_ACCENT)
+            if not side:
+                for dx in range(-2, 3):
+                    canvas.set(mx + dx, my, gold, TAG_ACCENT)
+
+        # 2. Steel pauldrons & chain sleeves
+        p_hx = 2.4 if not side else 2.0
+        rbox(sl[0], sl[1] - 0.4, p_hx, 1.8, 0.7, steel_b, steel_hi, steel_sh, TAG_METAL, ink=ink)
+        rbox(sr[0], sr[1] - 0.4, p_hx, 1.8, 0.7, steel_b, steel_hi, steel_sh, TAG_METAL, ink=ink)
+        cap(sl[0], sl[1], el[0], el[1], 1.35, steel_b, steel_hi, steel_sh, TAG_METAL, ink=ink)
+        cap(sr[0], sr[1], er[0], er[1], 1.35, steel_b, steel_hi, steel_sh, TAG_METAL, ink=ink)
+        cap(el[0], el[1], hl[0], hl[1], 1.25, steel_b, steel_hi, steel_sh, TAG_METAL, ink=ink)
+        cap(er[0], er[1], hr[0], hr[1], 1.25, steel_b, steel_hi, steel_sh, TAG_METAL, ink=ink)
+
+        # Greaves & boots
+        cap(kl[0], kl[1], fl[0], fl[1], 1.45, steel_b, steel_hi, steel_sh, TAG_METAL, ink=ink)
+        cap(kr[0], kr[1], fr[0], fr[1], 1.45, steel_b, steel_hi, steel_sh, TAG_METAL, ink=ink)
+
+        # 3. Guard Helmet (Iron kettle/nasal helm)
+        helm_y = hd[1] + 0.3
+        def helm_sdf(px, py):
+            d_dome = sd_round_box(px, py, hd[0], helm_y - 0.8, 3.2 if not side else 2.8, 2.3, 1.0)
+            d_brim = sd_capsule(px, py, hd[0] - 3.8, helm_y + 1.2, hd[0] + 3.8, helm_y + 1.2, 0.8)
+            return min(d_dome, d_brim)
+        rasterize_sdf(canvas, helm_sdf, steel_b, steel_hi, steel_sh, TAG_METAL, ink=ink, ink_width=0.55)
+
+        if not back:
+            ey = int(round(helm_y + 0.2))
+            if not side:
+                ex = int(round(hd[0]))
+                canvas.set(ex - 1, ey, (35, 30, 32), TAG_EYE)
+                canvas.set(ex + 1, ey, (35, 30, 32), TAG_EYE)
+                canvas.set(ex, ey, steel_hi, TAG_METAL)
+                canvas.set(ex, ey + 1, steel_sh, TAG_METAL)
+            else:
+                ex = int(round(hd[0] + sign * 1.5))
+                canvas.set(ex, ey, (35, 30, 32), TAG_EYE)
+                canvas.set(ex + sign, ey, steel_hi, TAG_METAL)
+
+    def _refugee_equipment(self, canvas, rig, direction, action, frame, layout, cx):
+        side = direction in ("left", "right")
+        back = direction == "back"
+        sign = 1 if direction == "right" else -1
+
+        def P(name):
+            return self._pj(rig, name, direction, cx)
+
+        hd = P("head"); nk = P("neck"); ts = P("torso"); hp = P("hip")
+        hl = P("hand_l"); hr = P("hand_r")
+        fl = P("foot_l"); fr = P("foot_r")
+
+        cloak_b = (68, 60, 52)
+        cloak_hi, cloak_b, cloak_sh = shade_triplet(cloak_b, 0.18, 0.26)
+        patch = (95, 82, 68)
+        wood = (88, 62, 40)
+        ink = (14, 12, 10)
+
+        def rbox(cx_, cy_, hx, hy, rad, fill, hi, sh, tag, ink=None):
+            def sdf(px, py):
+                return sd_round_box(px, py, cx_, cy_, hx, hy, rad)
+            rasterize_sdf(canvas, sdf, fill, hi, sh, tag, ink=ink, ink_width=0.55)
+
+        # 1. Ragged traveler cloak
+        bot_y = max(fl[1], fr[1]) - 1.0
+        rbox(ts[0], (ts[1] + bot_y) * 0.5, 3.6 if not side else 3.0, (bot_y - ts[1]) * 0.5 + 0.8,
+             1.2, cloak_b, cloak_hi, cloak_sh, TAG_CLOTH, ink=ink)
+
+        # Patches on cloak
+        py = int(round((ts[1] + hp[1]) * 0.5 + 1.0))
+        px = int(round(ts[0] - 1.2 if not side else ts[0] - sign * 0.8))
+        canvas.set(px, py, patch, TAG_CLOTH)
+        canvas.set(px + 1, py, patch, TAG_CLOTH)
+        canvas.set(px, py + 1, patch, TAG_CLOTH)
+
+        # 2. Traveler's Hood/Cowl
+        def cowl_sdf(px, py):
+            d1 = sd_round_box(px, py, hd[0], hd[1] + 0.5, 3.3 if not side else 2.9, 2.6, 0.9)
+            d2 = sd_capsule(px, py, hd[0], hd[1] - 0.5, hd[0] - (sign * 1.5 if side else 0), hd[1] - 2.8, 2.0)
+            return min(d1, d2)
+        rasterize_sdf(canvas, cowl_sdf, cloak_b, cloak_hi, cloak_sh, TAG_CLOTH, ink=ink, ink_width=0.55)
+
+        # Shaded eyes inside cowl
+        if not back:
+            ey = int(round(hd[1] + 0.4))
+            eye_c = (220, 205, 190)
+            if not side:
+                ex = int(round(hd[0]))
+                canvas.set(ex - 1, ey, eye_c, TAG_EYE)
+                canvas.set(ex + 1, ey, eye_c, TAG_EYE)
+                canvas.set(ex - 1, ey - 1, (24, 20, 18), TAG_CLOTH)
+                canvas.set(ex + 1, ey - 1, (24, 20, 18), TAG_CLOTH)
+            else:
+                ex = int(round(hd[0] + sign * 1.4))
+                canvas.set(ex, ey, eye_c, TAG_EYE)
+                canvas.set(ex, ey - 1, (24, 20, 18), TAG_CLOTH)
+
+        # 3. Simple wooden walking stick
+        sx, sy = hr[0], hr[1]
+        staff_x = sx + (sign * 1.5 if side else 2.0)
+        staff_top = sy - 7.0
+        staff_bot = bot_y + 1.0
+        rasterize_sdf(canvas, lambda px, py: sd_capsule(px, py, staff_x, staff_top, staff_x, staff_bot, 0.75),
+                      wood, color.lighten(wood, 0.2), color.darken(wood, 0.3), TAG_CLOTH)
+
+    def _orithel_equipment(self, canvas, rig, direction, action, frame, layout, cx):
+        side = direction in ("left", "right")
+        back = direction == "back"
+        sign = 1 if direction == "right" else -1
+
+        def P(name):
+            return self._pj(rig, name, direction, cx)
+
+        hd = P("head"); nk = P("neck"); ts = P("torso"); hp = P("hip")
+        fl = P("foot_l"); fr = P("foot_r")
+
+        teal_deep = (20, 62, 68)
+        teal_b = (32, 102, 110)
+        teal_hi = (118, 242, 223)
+        teal_glow = (186, 245, 238)
+        gold = (224, 196, 121)
+        gold_hi = (248, 232, 175)
+
+        def rbox(cx_, cy_, hx, hy, rad, fill, hi, sh, tag):
+            rasterize_sdf(canvas, lambda px, py: sd_round_box(px, py, cx_, cy_, hx, hy, rad), fill, hi, sh, tag)
+
+        # 1. Translucent teal projection robes
+        bot_y = max(fl[1], fr[1]) + 0.5
+        rbox(ts[0], (ts[1] + bot_y) * 0.5, 3.8 if not side else 3.2, (bot_y - ts[1]) * 0.5 + 1.0,
+             1.4, teal_b, teal_hi, teal_deep, TAG_CLOTH)
+
+        for dx in range(-3, 4):
+            canvas.set(int(round(ts[0] + dx)), int(round(bot_y)), teal_hi, TAG_ACCENT)
+
+        # 2. Severe gold-and-ivory collar / mantle
+        collar_y = (hd[1] + ts[1]) * 0.5
+        rbox(hd[0], collar_y, 3.4 if not side else 2.8, 1.6, 0.6, gold, gold_hi, color.darken(gold, 0.3), TAG_ACCENT)
+        if not back:
+            canvas.set(int(round(hd[0])), int(round(collar_y)), gold_hi, TAG_ACCENT)
+
+        # 3. Ethereal head & white drifting hair
+        hx = (layout["head_w"] * 0.46) if not side else (layout["head_w"] * 0.44)
+        hy = layout["head_h"] * 0.46
+        rasterize_sdf(canvas, lambda px, py: sd_ellipse(px, py, hd[0], hd[1], hx, hy),
+                      teal_glow, (235, 255, 252), teal_b, TAG_SKIN)
+
+        hair_c = (235, 248, 246)
+        hair_hi = (255, 255, 255)
+        for h_off in ((-2.5, 0.0, 2.5) if not side else (-1.5, 1.5)):
+            h_bx = hd[0] + h_off
+            h_by = hd[1] - 3.2
+            rasterize_sdf(canvas, lambda px, py: sd_capsule(px, py, h_bx, h_by, h_bx - (sign * 1.2 if side else 0), h_by + 6.0, 0.9),
+                          hair_c, hair_hi, teal_b, TAG_HAIR)
+
+        if not back:
+            ey = int(round(hd[1]))
+            if not side:
+                canvas.set(int(round(hd[0] - 1.5)), ey, (255, 255, 255), TAG_EYE)
+                canvas.set(int(round(hd[0] + 1.5)), ey, (255, 255, 255), TAG_EYE)
+            else:
+                canvas.set(int(round(hd[0] + sign * 1.5)), ey, (255, 255, 255), TAG_EYE)
+
+        # 4. Fractured Spire Halo shards floating overhead
+        shards = [
+            (hd[0] - 3.8, hd[1] - 5.5),
+            (hd[0], hd[1] - 7.0),
+            (hd[0] + 3.8, hd[1] - 5.5),
+            (hd[0] - 2.0, hd[1] - 6.2),
+            (hd[0] + 2.0, hd[1] - 6.2),
+        ]
+        for sx, sy in shards:
+            canvas.set(int(round(sx)), int(round(sy)), teal_hi, TAG_ACCENT)
+            canvas.set(int(round(sx)), int(round(sy - 1)), (255, 255, 255), TAG_ACCENT)
+
+    def _npc_equipment(self, canvas, rig, direction, action, frame, layout, cx, npc: str):
+        side = direction in ("left", "right")
+        back = direction == "back"
+        sign = 1 if direction == "right" else -1
+
+        def P(name):
+            return self._pj(rig, name, direction, cx)
+
+        hd = P("head"); nk = P("neck"); ts = P("torso"); hp = P("hip")
+        sl = P("shoulder_l"); sr = P("shoulder_r")
+        hl = P("hand_l"); hr = P("hand_r")
+        fl = P("foot_l"); fr = P("foot_r")
+
+        def cap(ax, ay, bx, by, r, fill, hi, sh, tag):
+            rasterize_sdf(canvas, lambda px, py: sd_capsule(px, py, ax, ay, bx, by, r), fill, hi, sh, tag)
+
+        def rbox(cx_, cy_, hx, hy, rad, fill, hi, sh, tag):
+            rasterize_sdf(canvas, lambda px, py: sd_round_box(px, py, cx_, cy_, hx, hy, rad), fill, hi, sh, tag)
+
+        if npc == "scribe-althea":
+            ochre = (181, 132, 52)
+            hi_o, b_o, sh_o = shade_triplet(ochre, 0.22, 0.25)
+            rbox(hd[0], hd[1] - 2.0, 3.4 if not side else 3.0, 1.8, 0.8, b_o, hi_o, sh_o, TAG_CLOTH)
+            qx = int(round(hd[0] + (sign * 2.5 if side else 2.5)))
+            qy = int(round(hd[1] - 3.5))
+            canvas.set(qx, qy, (252, 250, 245), TAG_ACCENT)
+            canvas.set(qx, qy - 1, (252, 250, 245), TAG_ACCENT)
+            canvas.set(qx - 1, qy + 1, (220, 215, 205), TAG_ACCENT)
+            lx = int(round((hl[0] + hr[0]) * 0.5))
+            ly = int(round((hl[1] + hr[1]) * 0.5))
+            rbox(lx, ly, 2.2, 2.6, 0.5, (84, 52, 26), (110, 72, 38), (55, 34, 18), TAG_ACCENT)
+            canvas.set(lx, ly, (201, 168, 108), TAG_ACCENT)
+
+        elif npc == "sister-mirene":
+            veil = (38, 79, 67)
+            hi_v, b_v, sh_v = shade_triplet(veil, 0.22, 0.28)
+            rbox(hd[0], hd[1] - 1.5, 3.6 if not side else 3.2, 2.5, 0.9, b_v, hi_v, sh_v, TAG_CLOTH)
+            by = int(round(ts[1] + 1.0))
+            bx = int(round(ts[0]))
+            for dy in range(0, 4):
+                canvas.set(bx, by + dy, (20, 22, 24), TAG_ACCENT)
+            canvas.set(bx, by + 4, (90, 210, 160), TAG_ACCENT)
+
+        elif npc == "barris-the-smith":
+            apron = (92, 58, 36)
+            hi_a, b_a, sh_a = shade_triplet(apron, 0.18, 0.28)
+            rbox(ts[0], (ts[1] + hp[1]) * 0.5 + 0.5, 3.6, 3.5, 0.8, b_a, hi_a, sh_a, TAG_CLOTH)
+            hx, hy = hr[0], hr[1]
+            cap(hx, hy + 2.0, hx, hy - 4.5, 0.7, (90, 65, 45), (120, 90, 60), (60, 42, 28), TAG_CLOTH)
+            rbox(hx, hy - 5.0, 1.8, 1.2, 0.4, (110, 115, 120), (160, 165, 172), (70, 72, 78), TAG_METAL)
+            canvas.set(int(round(hx + 1.2)), int(round(hy - 5.0)), (255, 145, 35), TAG_ACCENT)
+
+        elif npc == "kiln-master-vance":
+            if not back:
+                gy = int(round(hd[1]))
+                gx = int(round(hd[0] if not side else hd[0] + sign * 1.5))
+                g_c = (255, 140, 30)
+                g_hi = (255, 210, 90)
+                if not side:
+                    canvas.set(gx - 2, gy, (160, 90, 45), TAG_METAL)
+                    canvas.set(gx - 1, gy, g_c, TAG_ACCENT)
+                    canvas.set(gx, gy, (160, 90, 45), TAG_METAL)
+                    canvas.set(gx + 1, gy, g_c, TAG_ACCENT)
+                    canvas.set(gx + 2, gy, (160, 90, 45), TAG_METAL)
+                else:
+                    canvas.set(gx, gy, g_c, TAG_ACCENT)
+                    canvas.set(gx + sign, gy, g_hi, TAG_ACCENT)
+                    canvas.set(gx - sign, gy, (160, 90, 45), TAG_METAL)
+            hx, hy = hr[0], hr[1]
+            cap(hx, hy + 3.0, hx, hy - 7.0, 0.7, (60, 62, 68), (110, 115, 122), (38, 40, 45), TAG_METAL)
+            canvas.set(int(round(hx)), int(round(hy - 8.0)), (245, 120, 25), TAG_ACCENT)
+
+        elif npc == "cinder-nurse-greta":
+            cap_c = (215, 210, 195)
+            rbox(hd[0], hd[1] - 2.8, 2.6 if not side else 2.2, 1.2, 0.5, cap_c, (245, 242, 235), (170, 165, 150), TAG_CLOTH)
+            rbox(ts[0], (ts[1] + hp[1]) * 0.5 + 0.5, 2.8, 3.0, 0.7, cap_c, (245, 242, 235), (170, 165, 150), TAG_CLOTH)
+            vx, vy = int(round(hr[0])), int(round(hr[1]))
+            canvas.set(vx, vy, (48, 140, 220), TAG_ACCENT)
+            canvas.set(vx, vy - 1, (130, 205, 255), TAG_ACCENT)
+            canvas.set(vx, vy + 1, (24, 75, 145), TAG_ACCENT)
+
+        elif npc == "elodie-outrunner":
+            scarf = (145, 140, 148)
+            rbox(nk[0], nk[1], 3.0 if not side else 2.6, 1.4, 0.5, scarf, (185, 180, 188), (105, 100, 108), TAG_CLOTH)
+            hx, hy = hr[0], hr[1]
+            bot_y = max(fl[1], fr[1]) + 0.5
+            cap(hx, bot_y, hx, hy - 6.5, 0.75, (95, 75, 55), (135, 110, 85), (65, 50, 35), TAG_CLOTH)
+            canvas.set(int(round(hx + sign)), int(round(hy - 7.0)), (170, 175, 182), TAG_METAL)
+            canvas.set(int(round(hx + sign * 2)), int(round(hy - 6.0)), (170, 175, 182), TAG_METAL)
+
+        elif npc == "mistress-morveth":
+            gy = int(round(hd[1] - 2.2))
+            gx = int(round(hd[0] if not side else hd[0] + sign * 1.0))
+            brass = (195, 155, 65)
+            lens = (120, 210, 215)
+            if not side:
+                canvas.set(gx - 2, gy, brass, TAG_METAL)
+                canvas.set(gx - 1, gy, lens, TAG_ACCENT)
+                canvas.set(gx, gy, brass, TAG_METAL)
+                canvas.set(gx + 1, gy, lens, TAG_ACCENT)
+                canvas.set(gx + 2, gy, brass, TAG_METAL)
+            else:
+                canvas.set(gx, gy, brass, TAG_METAL)
+                canvas.set(gx + sign, gy, lens, TAG_ACCENT)
+            canvas.set(int(round(sl[0])), int(round(sl[1] + 2.0)), (230, 225, 215), TAG_ACCENT)
+            canvas.set(int(round(sr[0])), int(round(sr[1] + 2.0)), (230, 225, 215), TAG_ACCENT)
+
+        elif npc == "sister-lyra":
+            pearl = (235, 240, 245)
+            canvas.set(int(round(hd[0] - 2.8)), int(round(hd[1])), pearl, TAG_ACCENT)
+            canvas.set(int(round(hd[0] + 2.8)), int(round(hd[1])), pearl, TAG_ACCENT)
+            sx = int(round(hp[0] + (sign * 2.5 if side else 2.5)))
+            sy = int(round(hp[1]))
+            canvas.set(sx, sy, (120, 240, 180), TAG_ACCENT)
+            canvas.set(sx, sy - 1, (200, 255, 230), TAG_ACCENT)
+
+        elif npc == "kieran-blind-oar":
+            if not back:
+                wy = int(round(hd[1]))
+                wrap_c = (185, 180, 170)
+                if not side:
+                    for dx in range(-2, 3):
+                        canvas.set(int(round(hd[0] + dx)), wy, wrap_c, TAG_CLOTH)
+                else:
+                    for dx in range(0, 3):
+                        canvas.set(int(round(hd[0] + sign * dx)), wy, wrap_c, TAG_CLOTH)
+            hx, hy = hr[0], hr[1]
+            bot_y = max(fl[1], fr[1]) + 1.0
+            cap(hx, bot_y, hx, hy - 8.0, 0.8, (115, 80, 50), (150, 110, 75), (75, 50, 32), TAG_CLOTH)
+            rbox(hx, hy - 9.0, 1.6, 2.0, 0.4, (115, 80, 50), (150, 110, 75), (75, 50, 32), TAG_CLOTH)
+
+        elif npc == "reeve-toran":
+            if not back:
+                my = int(round(hd[1]))
+                mx = int(round(hd[0] + 1.2 if not side else hd[0] + sign * 1.5))
+                canvas.set(mx, my, (180, 225, 245), TAG_ACCENT)
+                canvas.set(mx + 1, my, (215, 175, 75), TAG_METAL)
+                canvas.set(mx, my - 1, (215, 175, 75), TAG_METAL)
+            rbox(nk[0], nk[1], 3.2 if not side else 2.8, 1.3, 0.5, (105, 55, 135), (145, 85, 180), (68, 32, 90), TAG_CLOTH)
+
+        elif npc == "hermit-cassian":
+            moss = (75, 140, 55)
+            moss_hi = (115, 185, 85)
+            canvas.set(int(round(hl[0])), int(round(hl[1] - 1)), moss, TAG_ACCENT)
+            canvas.set(int(round(hl[0] + 1)), int(round(hl[1] - 1)), moss_hi, TAG_ACCENT)
+            canvas.set(int(round(hr[0])), int(round(hr[1] - 1)), moss, TAG_ACCENT)
+            canvas.set(int(round(hr[0] - 1)), int(round(hr[1] - 1)), moss_hi, TAG_ACCENT)
+            bx = int(round((hl[0] + hr[0]) * 0.5))
+            by = int(round((hl[1] + hr[1]) * 0.5 + 1.0))
+            rbox(bx, by, 2.0, 1.2, 0.4, (55, 60, 70), (85, 92, 105), (35, 38, 45), TAG_METAL)
+            canvas.set(bx, by, (90, 160, 220), TAG_ACCENT)
+
+        elif npc == "mina-drift-child":
+            fork_x = int(round(hr[0] + (sign * 1.5 if side else 2.0)))
+            fork_y = int(round(hr[1] - 2.0))
+            silver = (210, 215, 225)
+            canvas.set(fork_x, fork_y + 2, silver, TAG_METAL)
+            canvas.set(fork_x - 1, fork_y, silver, TAG_METAL)
+            canvas.set(fork_x + 1, fork_y, silver, TAG_METAL)
+            canvas.set(fork_x - 1, fork_y - 2, silver, TAG_METAL)
+            canvas.set(fork_x + 1, fork_y - 2, silver, TAG_METAL)
+            canvas.set(fork_x, fork_y - 3, (180, 240, 255), TAG_ACCENT)
 
     def _hair(self, canvas, hd, hx, hy, hair_b, hair_hi, hair_sh, style, direction, side, back):
         cx, cy = hd[0], hd[1]

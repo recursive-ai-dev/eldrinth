@@ -31,9 +31,10 @@ from .sprites import (
     ItemSpriteGenerator,
     TileSpriteGenerator,
     DungeonSpriteGenerator,
+    SettlementSpriteGenerator,
+    PropSpriteGenerator,
     DIRECTIONS,
     WALK_FRAMES,
-    SettlementSpriteGenerator,
 )
 from . import pipeline
 
@@ -63,6 +64,7 @@ __all__ = [
     "TileSpriteGenerator",
     "DungeonSpriteGenerator",
     "SettlementSpriteGenerator",
+    "PropSpriteGenerator",
     "DIRECTIONS",
     "WALK_FRAMES",
     "pipeline",

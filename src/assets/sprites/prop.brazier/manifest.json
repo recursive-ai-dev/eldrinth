@@ -1,0 +1,24 @@
+{
+  "actions": {
+    "idle": {
+      "fps": 8,
+      "frames": 4,
+      "row": 0
+    }
+  },
+  "cellH": 32,
+  "cellW": 32,
+  "directions": [
+    "front"
+  ],
+  "kind": "prop",
+  "pixelHashes": {
+    "idle": [
+      "ccf76ecdbe02a331f1619583ab68d5a2",
+      "3f87ce728524a78457fd2ea71ddfff11",
+      "034eef99c96a9bb20891aa62f02a0455",
+      "4061c9f2c9007ba28a7985e8163d3fe1"
+    ]
+  },
+  "static": false
+}
