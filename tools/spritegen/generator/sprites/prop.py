@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Deterministic world prop generator (campfire, signposts, interactive relics).
+Deterministic world prop generator (campfire, signposts, lanterns, braziers).
 =============================================================================
 
 Props provide high-visibility world anchors (safe resting zones, landmark
-navigation posts). Like human and creature sprites, they are rendered with
-integer-coordinate pixel math and cosine/named palettes.
+navigation posts, regional settlement fixtures). Like human and creature sprites,
+they are rendered with integer-coordinate pixel math and cosine/named palettes.
 """
 
 from __future__ import annotations
@@ -55,6 +55,8 @@ class PropSpriteGenerator(SpriteGenerator):
             "frame": frame,
             "size": [w, h],
         }
+
+        rng = self.rng(seed, prop_type)
 
         if prop_type == "campfire":
             # 1. Hearth stone ring (depth-sorted)
@@ -127,29 +129,90 @@ class PropSpriteGenerator(SpriteGenerator):
 
         elif prop_type == "sign":
             # 1. Sturdy wooden post
-            d.rectangle((14, 8, 17, 30), fill=ink)
-            d.rectangle((15, 9, 16, 29), fill=wood_mid)
-            d.line((15, 9, 15, 29), fill=wood_hi)
-            d.line((16, 9, 16, 29), fill=wood_dark)
+            post_x = 14 + (rng.next_u64() % 3) - 1
+            d.rectangle((post_x, 8, post_x + 3, 30), fill=ink)
+            d.rectangle((post_x + 1, 9, post_x + 2, 29), fill=wood_mid)
+            d.line((post_x + 1, 9, post_x + 1, 29), fill=wood_hi)
+            d.line((post_x + 2, 9, post_x + 2, 29), fill=wood_dark)
 
             # Ground support stones
-            d.ellipse((11, 28, 15, 31), fill=ink)
-            d.ellipse((12, 28, 14, 30), fill=steel)
-            d.ellipse((16, 28, 20, 31), fill=ink)
-            d.ellipse((17, 28, 19, 30), fill=steel_hi)
+            num_stones = 2 + (rng.next_u64() % 3)
+            for i in range(num_stones):
+                gx = 8 + int(rng.uniform(0, 13))
+                d.ellipse((gx, 28, gx + 4, 31), fill=ink)
+                d.ellipse((gx + 1, 28, gx + 3, 30), fill=steel_hi if i % 2 == 0 else steel)
 
             # 2. Carved signboard with waypoint chevron
-            d.polygon([(6, 7), (23, 7), (26, 12), (23, 17), (6, 17)], fill=ink)
-            d.polygon([(7, 8), (22, 8), (25, 12), (22, 16), (7, 16)], fill=board_mid)
-            d.line((7, 8, 22, 8, 25, 12), fill=board_hi)
-            d.line((7, 16, 22, 16, 25, 12), fill=wood_dark)
+            pointing_left = (rng.next_u64() % 2) == 1
+            sign_y = 7 + (rng.next_u64() % 3)
+            if pointing_left:
+                d.polygon([(6, sign_y + 5), (9, sign_y), (26, sign_y), (26, sign_y + 10), (9, sign_y + 10)], fill=ink)
+                d.polygon([(7, sign_y + 5), (10, sign_y + 1), (25, sign_y + 1), (25, sign_y + 9), (10, sign_y + 9)], fill=board_mid)
+                d.line((7, sign_y + 5, 10, sign_y + 1, 25, sign_y + 1), fill=board_hi)
+            else:
+                d.polygon([(6, sign_y), (23, sign_y), (26, sign_y + 5), (23, sign_y + 10), (6, sign_y + 10)], fill=ink)
+                d.polygon([(7, sign_y + 1), (22, sign_y + 1), (25, sign_y + 5), (22, sign_y + 9), (7, sign_y + 9)], fill=board_mid)
+                d.line((7, sign_y + 1, 22, sign_y + 1, 25, sign_y + 5), fill=board_hi)
 
             # 3. Weathered rune / direction notches
-            d.line((9, 11, 20, 11), fill=wood_dark)
-            d.line((9, 13, 17, 13), fill=wood_dark)
+            notch_count = 1 + (rng.next_u64() % 4)
+            for k in range(notch_count):
+                ny = sign_y + 3 + (k % 3) * 2
+                nx0 = 9 + (k * 3)
+                d.line((nx0, ny, nx0 + 2, ny), fill=wood_dark)
 
             # 4. Iron mounting rivet
-            d.rectangle((15, 11, 16, 12), fill=ink)
-            d.point((15, 11), fill=steel_hi)
+            rivet_x = post_x + 1
+            d.rectangle((rivet_x, sign_y + 4, rivet_x + 1, sign_y + 5), fill=ink)
+            d.point((rivet_x, sign_y + 4), fill=steel_hi)
+
+            # Subtle wood grain / moss pixel based on seed
+            for _ in range(4):
+                mx = int(rng.uniform(7, 24))
+                my = int(rng.uniform(sign_y + 1, sign_y + 8))
+                d.point((mx, my), fill=(68, 114, 46, 255) if rng.random() < 0.4 else wood_hi)
+
+        elif prop_type == "lantern":
+            # Town lantern post
+            d.rectangle((14, 12, 17, 30), fill=ink)
+            d.rectangle((15, 13, 16, 29), fill=steel)
+            d.line((15, 13, 15, 29), fill=steel_hi)
+            # Stone pedestal base
+            d.rectangle((12, 28, 19, 31), fill=ink)
+            d.rectangle((13, 29, 18, 30), fill=shade)
+            # Ornate cross arm & lantern cage
+            d.line((12, 12, 19, 12), fill=ink, width=2)
+            d.line((13, 12, 18, 12), fill=steel_hi)
+            # Glass housing
+            d.rectangle((13, 5, 18, 11), fill=ink)
+            d.rectangle((14, 6, 17, 10), fill=(255, 220, 120, 240))
+            d.point((15, 7 + (frame % 2)), fill=(255, 255, 220, 255))
+            d.point((16, 8), fill=(255, 180, 50, 255))
+            # Pagoda hood
+            d.polygon([(11, 6), (16, 2), (20, 6)], fill=ink)
+            d.polygon([(12, 5), (16, 3), (19, 5)], fill=steel_hi)
+
+        elif prop_type == "brazier":
+            # Stone dungeon brazier with arcane embers
+            d.rectangle((11, 20, 20, 30), fill=ink)
+            d.rectangle((12, 21, 19, 29), fill=shade)
+            d.line((12, 21, 19, 21), fill=steel_hi)
+            # Bowl rim
+            d.polygon([(8, 15), (23, 15), (20, 21), (11, 21)], fill=ink)
+            d.polygon([(9, 16), (22, 16), (19, 20), (12, 20)], fill=steel)
+            # Arcane glowing flame tongues (animated)
+            c_hi = (185, 245, 235, 255)
+            c_mid = (55, 195, 190, 255)
+            c_dark = (24, 75, 82, 255)
+            tongues = [
+                [(11, 16), (15, 8), (17, 12), (20, 16)],
+                [(12, 16), (16, 7), (18, 11), (21, 16)],
+                [(10, 16), (14, 10), (16, 6), (20, 16)],
+                [(11, 16), (15, 7), (18, 13), (21, 16)],
+            ]
+            tg = tongues[frame % 4]
+            d.polygon(tg, fill=c_dark)
+            d.polygon([(tg[0][0] + 1, 16), (tg[1][0], tg[1][1] + 2), (tg[2][0], tg[2][1] + 2), (tg[3][0] - 1, 16)], fill=c_mid)
+            d.point((tg[1][0], tg[1][1] + 1), fill=c_hi)
 
         return spec, image

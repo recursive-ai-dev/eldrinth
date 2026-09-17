@@ -26,7 +26,7 @@ from .base import SpriteGenerator
 
 _CATEGORIES = [
     "sword", "dagger", "axe", "hammer", "bow", "staff", "shield",
-    "potion", "gem", "coin", "key", "scroll", "ring", "book",
+    "potion", "gem", "coin", "key", "scroll", "ring", "book", "shard",
 ]
 
 _TIERS = [
@@ -134,6 +134,8 @@ class ItemSpriteGenerator(SpriteGenerator):
             self._potion(canvas, cx, cy, mat, accent)
         elif category == "gem":
             self._gem(canvas, cx, cy, mat, accent)
+        elif category == "shard":
+            self._shard(canvas, cx, cy, mat, accent)
         elif category == "coin":
             self._coin(canvas, cx, cy, mat, accent)
         elif category == "key":
@@ -194,19 +196,56 @@ class ItemSpriteGenerator(SpriteGenerator):
         self._fill(canvas, lambda px, py: sd_rhombus(px, py, cx, cy - 1, 3.2, 4.0) * 3.2, accent, TAG_ACCENT)
 
     def _potion(self, canvas, cx, cy, mat, accent):
-        glass = color.mix(mat, (180, 220, 230), 0.25)
-        self._fill(canvas, lambda px, py: sd_circle(px, py, cx, cy + 3, 6.2), glass, TAG_BODY)
-        self._fill(canvas, lambda px, py: sd_capsule(px, py, cx, cy - 4, cx, cy - 8, 1.5), glass, TAG_BODY)
-        self._fill(canvas, lambda px, py: sd_round_box(px, py, cx, cy - 9, 2.2, 1.1, 0.3),
-                   named_palette("wood", 0.4), TAG_CLOTH)
-        # liquid
-        self._fill(canvas, lambda px, py: sd_circle(px, py, cx, cy + 4.2, 4.6), mat, TAG_ACCENT)
-        canvas.set(int(cx - 2), int(cy + 1), color.lighten(glass, 0.5), TAG_EYE)
+        glass_rim = (220, 235, 245)
+        glass_sh = (40, 55, 65)
+        # flask body (rounded base + slender neck)
+        self._fill(canvas, lambda px, py: op_union(
+            sd_circle(px, py, cx, cy + 3.5, 7.5),
+            sd_capsule(px, py, cx, cy - 4, cx, cy - 8, 2.0),
+        ), glass_sh, TAG_BODY)
+        # wood cork stopper & neck cord
+        self._fill(canvas, lambda px, py: sd_round_box(px, py, cx, cy - 9.5, 2.4, 1.4, 0.3),
+                   (125, 75, 45), TAG_CLOTH)
+        self._fill(canvas, lambda px, py: sd_capsule(px, py, cx - 3, cy - 7, cx + 3, cy - 7, 0.8),
+                   (75, 45, 25), TAG_CLOTH)
+        # glowing liquid with meniscus curve
+        self._fill(canvas, lambda px, py: op_sub(
+            sd_circle(px, py, cx, cy + 3.5, 5.8),
+            sd_round_box(px, py, cx, cy - 3.0, 7.0, 4.0, 0.2),
+        ), mat, TAG_ACCENT)
+        # liquid core glow
+        self._fill(canvas, lambda px, py: sd_ellipse(px, py, cx, cy + 4.5, 3.8, 2.8),
+                   color.lighten(mat, 0.35), TAG_EYE)
+        # Glass reflections (left curve highlight & glint)
+        canvas.set(int(cx - 4), int(cy + 1), glass_rim, TAG_EYE)
+        canvas.set(int(cx - 5), int(cy + 2), glass_rim, TAG_EYE)
+        canvas.set(int(cx - 5), int(cy + 3), glass_rim, TAG_EYE)
+        canvas.set(int(cx - 4), int(cy + 4), color.lighten(mat, 0.5), TAG_EYE)
+        canvas.set(int(cx + 4), int(cy + 5), color.lighten(mat, 0.4), TAG_EYE)
 
     def _gem(self, canvas, cx, cy, mat, accent):
         self._fill(canvas, lambda px, py: sd_rhombus(px, py, cx, cy, 7.0, 9.5) * 7.0, mat, TAG_ACCENT)
         self._fill(canvas, lambda px, py: sd_rhombus(px, py, cx - 1, cy - 2, 2.4, 3.0) * 2.4,
                    color.lighten(mat, 0.45), TAG_EYE)
+
+    def _shard(self, canvas, cx, cy, mat, accent):
+        # Ethereal, multifaceted Anima Shard: crystalline diamond geometry with inner soul core
+        soul_core = (245, 255, 250)
+        soul_teal = (55, 220, 205)
+        # Main crystal silhouette
+        self._fill(canvas, lambda px, py: sd_rhombus(px, py, cx, cy, 6.5, 10.5) * 6.5, mat, TAG_ACCENT)
+        # Upper facet left
+        self._fill(canvas, lambda px, py: sd_triangle(px, py, cx, cy - 10.0, cx - 6.0, cy, cx, cy),
+                   color.lighten(mat, 0.45), TAG_EYE)
+        # Lower facet right
+        self._fill(canvas, lambda px, py: sd_triangle(px, py, cx, cy + 10.0, cx + 6.0, cy, cx, cy),
+                   color.darken(mat, 0.25), TAG_ACCENT)
+        # Inner living soul spark
+        self._fill(canvas, lambda px, py: sd_rhombus(px, py, cx, cy, 2.8, 4.2) * 2.8, soul_teal, TAG_ACCENT)
+        self._fill(canvas, lambda px, py: sd_circle(px, py, cx, cy, 1.4), soul_core, TAG_EYE)
+        # Specular glint
+        canvas.set(int(cx - 1), int(cy - 4), (255, 255, 255), TAG_EYE)
+        canvas.set(int(cx), int(cy - 5), (255, 255, 255), TAG_EYE)
 
     def _coin(self, canvas, cx, cy, mat, accent):
         self._fill(canvas, lambda px, py: sd_circle(px, py, cx, cy, 8.0), mat, TAG_METAL)

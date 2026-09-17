@@ -6,10 +6,10 @@
   "kind": "tile",
   "masks": 1,
   "pixelHashes": [
-    "049ef206deb4bb080d39ce28b44e10cf",
-    "64e394fface8d56b2ec11db048e19c53",
-    "2c83ec42edc5f7102a9348e1353191e5",
-    "da22bea8baf1d59331942ea891103a8d"
+    "6786cb959fa2e104c15ee13d2baeac2f",
+    "0e6dd96853471c50c15f947129fe69bd",
+    "51e3649cca2da8e135d1f663d3d527c2",
+    "bea2c9e9b553194e91640b7068d0de92"
   ],
   "static": true,
   "variants": 4
