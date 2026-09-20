@@ -34,6 +34,11 @@ export interface PlayerCombatState {
   swingDmg?: number;
 }
 
+export interface SwingOptions {
+  /** True when terrain blocks the line between the swinger and a target. */
+  occluded?: (fromX: number, fromY: number, toX: number, toY: number) => boolean;
+}
+
 export class CombatSystem {
   attackBox(player: PlayerCombatState): RectHitbox {
     const L = 42;
@@ -60,15 +65,19 @@ export class CombatSystem {
     player: PlayerCombatState,
     enemies: CombatTarget[],
     onHit: (enemy: CombatTarget, dmg: number, dir: Dir) => void,
+    options?: SwingOptions,
   ) {
     const box = this.attackBox(player);
     for (const enemy of enemies) {
       if (!enemy.alive) continue;
       if (player.swingHit?.has(enemy.id ?? -1)) continue;
-      if (this.rectCircle(box, enemy.x, enemy.y, enemy.r + 2)) {
-        player.swingHit?.add(enemy.id ?? -1);
-        onHit(enemy, player.swingDmg ?? 1, player.dir);
-      }
+      if (!this.rectCircle(box, enemy.x, enemy.y, enemy.r + 2)) continue;
+      // The swing box is 42px long and an enemy body stopped against a wall
+      // still presents a surface 32px from the player's centre, so the box
+      // reaches a full tile through solid rock without a terrain test.
+      if (options?.occluded?.(player.x, player.y, enemy.x, enemy.y)) continue;
+      player.swingHit?.add(enemy.id ?? -1);
+      onHit(enemy, player.swingDmg ?? 1, player.dir);
     }
   }
 
@@ -92,15 +101,17 @@ export class CombatSystem {
         continue;
       }
 
-      if (Math.hypot(pr.x - player.x, pr.y - player.y) < pr.r + player.r && player.dying <= 0 && player.invuln <= 0 && !player.dashing) {
-        onPlayerHit(pr);
+      // Terrain is resolved before the player. Checked the other way round, a
+      // bolt travelling through a wall was consumed by the wall only after it
+      // had already been tested against anyone standing flush on the far side,
+      // which let it graze them through solid rock.
+      if (onSolidHit(pr)) {
         projectiles.splice(i, 1);
         continue;
       }
 
-      // keep the engine's collision behavior: projectiles are removed when they hit a solid tile,
-      // but the actual map membership check remains owned by the game subsystem.
-      if (onSolidHit(pr)) {
+      if (Math.hypot(pr.x - player.x, pr.y - player.y) < pr.r + player.r && player.dying <= 0 && player.invuln <= 0 && !player.dashing) {
+        onPlayerHit(pr);
         projectiles.splice(i, 1);
       }
     }

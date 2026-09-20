@@ -1,5 +1,5 @@
 import type { HudData, DialogueData } from "../types";
-import { TILE } from "../constants";
+import { TILE, SIGN_READ_RADIUS } from "../constants";
 
 export interface GameFlowState {
   player: {
@@ -81,7 +81,9 @@ export class GameFlowSystem {
     for (const s of state.map.signs) {
       const sx = s.x * TILE + TILE / 2;
       const sy = s.y * TILE + TILE / 2;
-      if (Math.hypot(p.x - sx, p.y - sy) < 44) {
+      // Must agree with the engine's own reading radius, or the prompt offers a
+      // note the interaction then refuses to open.
+      if (Math.hypot(p.x - sx, p.y - sy) < SIGN_READ_RADIUS) {
         return "Press E to read note";
       }
     }

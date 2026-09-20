@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 export default function PauseOverlay({
   onResume,
   onRestart,
@@ -5,6 +7,17 @@ export default function PauseOverlay({
   onResume: () => void;
   onRestart: () => void;
 }) {
+  // Abandoning a pilgrimage is unrecoverable, so the destructive button asks
+  // once before it fires. The step also decays back to the menu on its own so
+  // a pause screen left open does not stay armed.
+  const [confirming, setConfirming] = useState(false);
+
+  useEffect(() => {
+    if (!confirming) return;
+    const timer = window.setTimeout(() => setConfirming(false), 6000);
+    return () => window.clearTimeout(timer);
+  }, [confirming]);
+
   return (
     <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/70 backdrop-blur-sm">
       <div className="w-[min(440px,90vw)] rounded-2xl border border-amber-200/20 bg-[#0c0a12]/95 p-8 text-center shadow-2xl">
@@ -19,12 +32,39 @@ export default function PauseOverlay({
           >
             RESUME
           </button>
-          <button
-            onClick={onRestart}
-            className="w-full rounded-lg border border-amber-200/20 bg-white/5 px-4 py-3 font-title tracking-widest text-amber-100/80 transition hover:bg-white/10"
-          >
-            ABANDON &amp; RESTART
-          </button>
+          {confirming ? (
+            <>
+              <p
+                data-testid="abandon-warning"
+                className="rounded-lg border border-rose-400/30 bg-rose-950/25 px-3 py-2 font-serif text-xs leading-relaxed text-rose-100/80"
+              >
+                This pilgrimage ends here. Your recorded slot keeps whatever was last
+                written to it, and everything since is lost.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setConfirming(false)}
+                  className="flex-1 rounded-lg border border-white/20 bg-white/5 px-4 py-3 font-title tracking-widest text-amber-100/80 transition hover:bg-white/10"
+                >
+                  KEEP PLAYING
+                </button>
+                <button
+                  data-testid="abandon-confirm"
+                  onClick={onRestart}
+                  className="flex-1 rounded-lg border border-rose-400/50 bg-rose-500/15 px-4 py-3 font-title tracking-widest text-rose-100 transition hover:bg-rose-500/25"
+                >
+                  ABANDON
+                </button>
+              </div>
+            </>
+          ) : (
+            <button
+              onClick={() => setConfirming(true)}
+              className="w-full rounded-lg border border-amber-200/20 bg-white/5 px-4 py-3 font-title tracking-widest text-amber-100/80 transition hover:bg-white/10"
+            >
+              ABANDON &amp; RESTART
+            </button>
+          )}
         </div>
         <div className="mt-6 font-serif text-xs leading-relaxed text-amber-100/40">
           MOVE WASD/Arrows · ATTACK J/Space · DASH Shift · SPEAK/READ E · PAUSE Esc
