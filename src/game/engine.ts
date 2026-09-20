@@ -1,4 +1,4 @@
-import { TILE, MAP_W, MAP_H } from "./constants";
+import { TILE, MAP_W, MAP_H, SIGN_READ_RADIUS } from "./constants";
 import {
   type Dir,
   type Vec,
@@ -96,7 +96,7 @@ const DIFFICULTY_TUNING = {
 
 // Interaction distances
 const INTERACT_NPC_DISTANCE = 48;
-const INTERACT_SIGN_DISTANCE = 44;
+const INTERACT_SIGN_DISTANCE = SIGN_READ_RADIUS;
 
 const ORITHEL_PORTRAIT: NpcPortrait = {
   id: "orithel-the-last-watcher",
@@ -862,7 +862,25 @@ export class Game {
   }
   doAttackHit() {
     const p = this.player;
-    this.combat.resolvePlayerSwing(p, this.enemies, (enemy, dmg, dir) => this.hitEnemy(enemy as Enemy, dmg, dir));
+    this.combat.resolvePlayerSwing(
+      p,
+      this.enemies,
+      (enemy, dmg, dir) => this.hitEnemy(enemy as Enemy, dmg, dir),
+      { occluded: (ax, ay, bx, by) => !this.losClear(ax, ay, bx, by) },
+    );
+  }
+  /**
+   * True when no solid tile lies on the segment between two points. Sampled at
+   * half-tile intervals and strictly between the endpoints, so neither body
+   * centre can be mistaken for an obstruction.
+   */
+  losClear(ax: number, ay: number, bx: number, by: number): boolean {
+    const steps = Math.max(2, Math.ceil(Math.hypot(bx - ax, by - ay) / (TILE / 2)));
+    for (let i = 1; i < steps; i++) {
+      const t = i / steps;
+      if (this.solidAtIdx(this.tileAtPx(ax + (bx - ax) * t, ay + (by - ay) * t))) return false;
+    }
+    return true;
   }
   hitEnemy(e: Enemy, dmg: number, dir: Dir) {
     e.hp -= dmg;
@@ -987,11 +1005,15 @@ export class Game {
 
   /* ----------------------------- enemies ----------------------------- */
   updateEnemy(e: Enemy, dt: number) {
-    if (Math.abs(e.vx) > 1 || Math.abs(e.vy) > 1) this.moveEntity(e, e.vx * dt, e.vy * dt);
-    e.vx -= e.vx * Math.min(1, dt * 8);
-    e.vy -= e.vy * Math.min(1, dt * 8);
     e.hurt = Math.max(0, e.hurt - dt);
-    if (!e.alive) return;
+    // A corpse keeps sliding out the remainder of its knockback, but the AI has
+    // stopped driving it, so the impulse decays here instead of in steering.
+    if (!e.alive) {
+      this.moveEntity(e, e.vx * dt, e.vy * dt);
+      e.vx -= e.vx * Math.min(1, dt * 8);
+      e.vy -= e.vy * Math.min(1, dt * 8);
+      return;
+    }
 
     const p = this.player;
     this.ai.updateEnemy(e, dt, {
@@ -1010,6 +1032,11 @@ export class Game {
       engagementMultiplier: this.playerInTownSafeZone() ? 0 : this.difficultyTuning.awareness,
     });
 
+    // Exactly one integration of e.vx/e.vy per step. This method used to also
+    // move the enemy by its pre-AI velocity before the AI ran, so locomotion
+    // landed near 1.27x whatever the SPEED constants declare. Steering already
+    // pulls a hit impulse back toward the desired velocity, so knockback still
+    // reads without a second move.
     this.moveEntity(e, e.vx * dt, e.vy * dt);
   }
   bossBurst(e: Enemy) {
@@ -1377,18 +1404,28 @@ export class Game {
       this.openWatcherTopics();
       return;
     }
+    // Nearest sign wins rather than whichever happens to come first in the
+    // array. Two signs inside reading distance of the same tile used to make
+    // the second one permanently unreadable, which buried hand-written evidence
+    // notes under the generic road markers generated on fortress gates.
+    let nearestSign: import("./types").SignData | null = null;
+    let nearestSignDist = INTERACT_SIGN_DISTANCE;
     for (const s of this.map.signs) {
       const sx = s.x * TILE + TILE / 2;
       const sy = s.y * TILE + TILE / 2;
-      if (Math.hypot(p.x - sx, p.y - sy) < INTERACT_SIGN_DISTANCE) {
-        if (s.townId) {
-          this.openTownProjects(s.townId);
-          return;
-        }
-        this.discoverNote(s);
-        this.openDialogue([s.text], s.title ?? "Unmarked Field Note", "#cdbf9a");
+      const dist = Math.hypot(p.x - sx, p.y - sy);
+      if (dist >= nearestSignDist) continue;
+      nearestSign = s;
+      nearestSignDist = dist;
+    }
+    if (nearestSign) {
+      if (nearestSign.townId) {
+        this.openTownProjects(nearestSign.townId);
         return;
       }
+      this.discoverNote(nearestSign);
+      this.openDialogue([nearestSign.text], nearestSign.title ?? "Unmarked Field Note", "#cdbf9a");
+      return;
     }
   }
 

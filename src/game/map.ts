@@ -1,4 +1,4 @@
-import { MAP_W, MAP_H, TILE, T } from "./constants";
+import { MAP_W, MAP_H, TILE, T, SIGN_READ_RADIUS } from "./constants";
 import type { MapData, Vec, EnemySpawn, SignData, RegionExit, CampfireData, TownData, TownBuildingData, NpcData } from "./types";
 import { parseFortressLayout } from "./fortress";
 import { FORTRESS_LAYOUTS } from "./fortressLayouts";
@@ -1195,12 +1195,12 @@ function generateFrontierMap(regionId: string): MapData {
     buildFortressExterior(tiles, x, y, theme);
   }
 
-  const signs: SignData[] = config.exits.map((exit) => ({
-    x: exit.x,
-    y: exit.y,
-    title: "Road of Wayfarers",
-    text: `The road leads toward ${exit.label}. Old wheel-ruts, mostly. They run deeper going east than coming back, which tells you what the traffic was and which direction it was carrying.`,
-  }));
+  // Authored records are collected first and the generic road markers are only
+  // laid down afterwards (see `roadMarkers` below). A single tile can only ever
+  // be read once, so whichever sign is written first owns it; letting the
+  // boilerplate claim the fortress gates made the hand-written evidence notes
+  // standing on those same tiles permanently unreadable.
+  const signs: SignData[] = [];
 
   const surveys: Record<string, string> = {
     cinderwild:
@@ -1261,6 +1261,28 @@ function generateFrontierMap(regionId: string): MapData {
     ],
   };
   signs.push(...records[regionId]);
+
+  /**
+   * "Moonlit Coast" reads bare after "toward"; "The Broken Shrine" already
+   * carries its own article and must not gain a second one.
+   */
+  const roadDestination = (label: string) =>
+    /^(the|a|an)\s/i.test(label) ? label.charAt(0).toLowerCase() + label.slice(1) : `the ${label}`;
+
+  // Only gates that no authored record already speaks for get the boilerplate
+  // marker, so a fortress approach keeps its own hand-written account.
+  for (const exit of config.exits) {
+    const claimed = signs.some(
+      (entry) => Math.hypot((entry.x - exit.x) * TILE, (entry.y - exit.y) * TILE) < SIGN_READ_RADIUS,
+    );
+    if (claimed) continue;
+    signs.push({
+      x: exit.x,
+      y: exit.y,
+      title: "Road of Wayfarers",
+      text: `The road leads toward ${roadDestination(exit.label)}. Old wheel-ruts, mostly. They run deeper going east than coming back, which tells you what the traffic was and which direction it was carrying.`,
+    });
+  }
 
   const towns: TownData[] = [];
   if (config.townConfig) {

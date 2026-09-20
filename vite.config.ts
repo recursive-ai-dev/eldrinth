@@ -10,6 +10,13 @@ const __dirname = path.dirname(__filename);
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  server: {
+    host: "0.0.0.0",
+    // Vite rejects unknown Host headers by default, which breaks hosted
+    // previews. Allow the preview domain's subdomains rather than disabling the
+    // check outright.
+    allowedHosts: [".e2b.app"],
+  },
   build: {
     // Sprite atlases stay as cacheable files instead of swelling the JS bundle
     // with base64 data URLs. Python remains entirely outside the browser build.

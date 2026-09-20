@@ -62,14 +62,16 @@ export default function Journal({
     return TABS.filter((t) => t.id === "all" || entries.some(t.filter));
   }, [entries]);
 
-  const activeFilter = useMemo(() => {
-    const found = TABS.find((t) => t.id === activeTab);
-    return found ? found.filter : () => true;
-  }, [activeTab]);
+  // A category hides itself once it is empty, so the selected tab is always
+  // resolved against the ones still on offer rather than trusted blindly.
+  const activeTabDef = useMemo(
+    () => availableTabs.find((t) => t.id === activeTab) ?? availableTabs[0] ?? TABS[0],
+    [availableTabs, activeTab],
+  );
 
   const displayedEntries = useMemo(() => {
-    return entries.filter(activeFilter);
-  }, [entries, activeFilter]);
+    return entries.filter(activeTabDef.filter);
+  }, [entries, activeTabDef]);
 
   return (
     <div
@@ -99,7 +101,7 @@ export default function Journal({
           <div className="mb-4 flex flex-wrap gap-1.5 border-b border-amber-200/10 pb-2">
             {availableTabs.map((tab) => {
               const count = entries.filter(tab.filter).length;
-              const isActive = activeTab === tab.id;
+              const isActive = activeTabDef.id === tab.id;
               return (
                 <button
                   key={tab.id}
