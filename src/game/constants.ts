@@ -86,3 +86,10 @@ export const TILE_DEFINITIONS: Readonly<Record<number, TileDefinition>> = {
 export function tileDefinition(tile: number): TileDefinition {
   return TILE_DEFINITIONS[tile] ?? PASSABLE;
 }
+
+/**
+ * Reading distance for field signs, in world pixels. Map generation uses it to
+ * keep two signs from claiming the same spot, and interaction uses it to decide
+ * which sign the pilgrim is actually standing in front of.
+ */
+export const SIGN_READ_RADIUS = 44;

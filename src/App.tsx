@@ -131,7 +131,7 @@ export default function App() {
         <VirtualControls
           onInput={(key, isDown) => gameRef.current?.setVirtualKey(key, isDown)}
           onToggleJournal={() => setJournalVisibility(!journalOpen)}
-          onTogglePause={() => setPaused(!paused)}
+          onTogglePause={() => gameRef.current?.togglePause()}
         />
       )}
 

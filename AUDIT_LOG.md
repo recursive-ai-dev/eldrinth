@@ -362,3 +362,123 @@ Post-audit state: verification harness deleted; `npx vitest run` re-run clean (4
 
 
 
+
+---
+
+# Polish pass — 2026-09-20 (branch `arena/01a0bda1-eldrinth`, base `e0c24e5`)
+
+**Method:** baseline `tsc --noEmit` (clean) and `vitest run` (30 files / 197 tests, all passing),
+then a headless harness (`src/game/headlessGame.ts`) that boots the real `Game` — real map, real
+collision, real AI, real combat — under vitest, so findings below are measured rather than inferred.
+Every fix carries a regression test that was confirmed to fail against the unfixed code.
+
+## Findings and fixes
+
+### P-01 · CRITICAL · Four authored evidence notes were permanently unreadable
+**Location:** `src/game/map.ts` (frontier sign generation), `src/game/engine.ts` `tryInteract`
+
+The frontier generator wrote a generic `Road of Wayfarers` sign on **every** exit tile first, then
+appended the hand-written records. Six of those records sit on the *same tile* as a fortress gate,
+and `tryInteract` returned the **first** sign within reading distance — so the boilerplate always won.
+
+Measured by simulating the real selection rule on every tile of all 13 walkable regions:
+
+```
+[REACH] facts defined on signs: courier-orders, courier-memory, salt-graves, salt-beacon, dawn-record
+[REACH] facts actually readable: courier-orders
+```
+
+Four quest-critical facts (`courier-memory`, `salt-graves`, `salt-beacon`, `dawn-record`) could never
+be learned. Because `canResolve` requires *every* evidence fact, this blocked 3 of the 4 investigations
+— the game's headline feature — plus 4 of 8 town projects. `src/game/map.test.ts` asserted only that
+the facts existed in `map.signs`, never that they were reachable, so the suite stayed green.
+
+**Fix:** authored records are collected first; road markers are laid down afterwards and skipped for
+any tile already within `SIGN_READ_RADIUS`. `tryInteract` now opens the *nearest* sign instead of the
+first in array order, so readability can no longer depend on insertion order.
+**Test:** `src/game/signReadability.test.ts` (verified failing before the fix).
+
+### P-02 · HIGH · One town project required a fact nothing ever grants
+**Location:** `src/game/quests.ts:86`
+
+`crater-watch:path` required `warden:fortress.starfall-watch`, but `FORTRESS_WARDEN_FACTS` remaps that
+fortress to grant `warden:starfall-moors` (`escalation.ts:114`). The required string existed nowhere
+else in the source, so the project was uncompletable by any route. Fixed to require `warden:starfall-moors`,
+the fact the same fortress's quest evidence already uses.
+
+### P-03 · MEDIUM · Enemies moved at ~1.27× their configured speed
+**Location:** `src/game/engine.ts` `updateEnemy`
+
+The same `e.vx`/`e.vy` was integrated twice per step — once before the AI ran, once after. Measured over
+one second of real fixed-step simulation:
+
+| enemy | configured | before | after |
+|---|---|---|---|
+| sentinel | 90 px/s | **114.7** | **87.0** |
+| adept (0.7× approach) | 49 px/s | **62.4** | **47.4** |
+
+The residual ~3% is the steering ramp; at 30 fps the figure is now 87.8 vs 87.0 at 60 fps.
+**Correction to F-02 above:** that finding claimed speed "varies with frame rate". It does not — `FixedStepLoop`
+advances at a fixed 1/60 regardless of display rate. The overshoot was real; the frame-rate claim was not.
+**Note for tuning:** enemies are now ~21% slower than they were. That is what the `*_SPEED` constants
+always declared; raise them if the previous pace is preferred.
+**Test:** `src/game/enemyMotion.test.ts` (sentinel measured 117.4 against a 94.5 bound when reverted).
+
+### P-04 · MEDIUM · Melee swings reached a full tile through solid rock
+**Location:** `src/game/systems/CombatSystem.ts` `resolvePlayerSwing`, `src/game/engine.ts` `doAttackHit`
+
+The 42px swing box has no terrain test. An enemy stopped by a wall presents its surface 32px from the
+player's centre, so the box connected. Measured: enemy flush against the far face, `hp 5 -> 4`.
+**Fix:** added `Game.losClear` (half-tile sampling strictly between the endpoints) and a `SwingOptions.occluded`
+hook; occluded targets are skipped. Confirmed `hp 5 -> 5` after, with same-side hits still landing.
+**Test:** `src/game/combatOcclusion.test.ts` (fails when the occlusion check is neutralised).
+
+### P-05 · LOW · Touch pause never paused the simulation
+**Location:** `src/App.tsx`
+
+`VirtualControls.onTogglePause` called the **store** action `setPaused`, not the engine's. The overlay
+appeared while `engine.paused` stayed false. Measured: with `engine.paused === false`, 60 steps advanced
+`simulationTime` by 1.000s; with `engine.setPaused(true)`, 0.000s. Now routed through
+`game.togglePause()`, which flips the engine *and* publishes `onPause`, keeping one authority.
+**Test:** `src/game/pauseControl.test.ts`.
+
+### P-06 · LOW · "ABANDON & RESTART" fired on a single tap
+**Location:** `src/components/PauseOverlay.tsx`
+
+An unrecoverable action behind one button with no confirmation. Now a two-step confirm that decays back
+to the menu after 6s. (React-only; verified by typecheck, build and Vite transform, not by a test.)
+
+### P-07 · LOW · Road signs read as broken prose
+**Location:** `src/game/map.ts`
+
+All 12 generated markers rendered as `The road leads toward The Old Lands.` (capitalised article) or
+`toward Starfall Moors.` (no article). A `roadDestination` helper now lowercases an existing article and
+supplies one where missing. Covered by `signReadability.test.ts`.
+
+### P-08 · LOW · Journal could sit on a hidden tab
+**Location:** `src/components/Journal.tsx`
+
+`availableTabs` hides empty categories but `activeTab` was resolved against the full `TABS` list, so a
+selected category could vanish and leave the panel showing an unselected filter. The active tab is now
+resolved against the tabs actually on offer. (React-only; no test.)
+
+## Corrections to earlier findings in this log
+
+- **F-02** — the double integration was real; the "speed varies with frame rate" claim was not (fixed-step loop). Fixed as P-03.
+- **F-07** — projectile player-hit before solid-hit: **not reproducible on any real trajectory.** `processProjectiles` integrates position first, and the bolt is consumed the frame its centre enters the wall — 43px from a player standing flush on the far side. I kept the reorder (terrain now resolves before the player) as defensive precedence, but it changes no observable behaviour. Verified by running the same trajectory against both orderings: identical result.
+- **F-01 / F-03 / F-08** — already fixed at base `e0c24e5` (verified: `key={sessionId}` remount, `summonAdd` radial walkability search, clean `tsc --noEmit`).
+
+## What was checked and found sound
+
+- **9000-frame seeded random-input soak** across >4 regions including fortress and town interiors:
+  no exceptions, no non-finite coordinates, no map escapes, no particle/text/projectile leaks.
+  Kept as `src/game/simulationSoak.test.ts`.
+- **Renderer allocation:** `drawSortedWorldObjects` builds 38 closures/frame on the overworld — not a
+  bottleneck; no optimisation attempted.
+- **Save payload:** 13 KB fresh, 41 KB after a long run (~55 KB base64), so the sql.js → localStorage
+  round-trip is far from quota. Saves do fail silently in private windows; left alone as out of scope.
+
+## Post-pass state
+
+`tsc --noEmit` clean · `vitest run` 35 files / 213 tests passing · `npm run build` succeeds ·
+`dist/` regenerated to match.

@@ -83,7 +83,7 @@ export const TOWN_PROJECTS: TownProject[] = [
     townId: "crater-watch",
     title: "Clear the crater path",
     request: "Mina has mapped a safe path through the eastern glass, but the astronomer's watch must be quiet before anyone can walk it.",
-    requirements: ["dawn-record", "warden:fortress.starfall-watch"],
+    requirements: ["dawn-record", "warden:starfall-moors"],
     reward: { stat: "dash", amount: 4 },
     safeRadiusBonus: 40,
   },
