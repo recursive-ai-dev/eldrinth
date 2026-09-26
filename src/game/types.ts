@@ -190,7 +190,14 @@ export interface GameCallbacks {
   onHud: (d: HudData) => void;
   onDialogue: (d: DialogueData | null) => void;
   onPause: (paused: boolean) => void;
-  onEnd: (ending: EndingId) => void;
+  onEnd: (ending: EndingId, epilogue: string[]) => void;
   onJournal: (entries: JournalEntry[]) => void;
   onInterior: (inside: boolean) => void;
+  /**
+   * The simulation threw and the loop has stopped. This is terminal for the
+   * session: without it the player is left looking at a frozen final frame with
+   * no indication anything went wrong, since a crash inside the canvas engine
+   * never reaches a React error boundary.
+   */
+  onFatal?: (error: unknown) => void;
 }

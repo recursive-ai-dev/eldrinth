@@ -26,7 +26,8 @@ import {
 import type { EndingId } from "./core/SceneStack";
 import { createRegionRepository, type RegionRepository } from "./regions";
 import { isInteriorRegion, TOWN_RESIDENTS } from "./map";
-import { applyHarvestCost, fortressShardIntakeEntry, fortressWardenEntry, shardBleedEntry, shardPickupMessage, wardDialogue, wardenFact, wardUnlockMessage } from "./escalation";
+import { applyHarvestCost, fortressShardIntakeEntry, fortressWardenEntry, shardBleedEntry, shardBladeBonus, shardPickupMessage, unfinishedWardDialogue, wardDialogue, wardenFact, wardUnlockMessage } from "./escalation";
+import { epilogueLines } from "./epilogue";
 import { hazardDamageAt } from "./hazard";
 import { QUESTS, TOWN_PROJECTS, canCompleteTownProject, completeTownProject, learnFact, canResolve, questKnown, questJournal, resolveQuest, settlementState, townProjectComplete, townProjects } from "./quests";
 import { AISystem } from "./systems/AISystem";
@@ -97,6 +98,8 @@ const DIFFICULTY_TUNING = {
 // Interaction distances
 const INTERACT_NPC_DISTANCE = 48;
 const INTERACT_SIGN_DISTANCE = SIGN_READ_RADIUS;
+/** Walk-through region gates fire when the player is this close to the threshold. */
+const REGION_GATE_RADIUS = TILE * 1.35;
 
 const ORITHEL_PORTRAIT: NpcPortrait = {
   id: "orithel-the-last-watcher",
@@ -175,6 +178,20 @@ export class Game {
   /** Set when the player dies somewhere whose half-cleared state must not persist. */
   private discardCurrentRegion = false;
   private regionGateCooldown = 0;
+  /**
+   * Whether a walk-through region gate may fire. Disarmed on arrival and re-armed
+   * only once the player is clear of every gate, because fortress gates sit one
+   * tile from their arrival point — inside the trigger radius. Without this a
+   * player who stopped to look around was ejected again, then ejected straight
+   * back, oscillating across the boundary and building a fresh region each time.
+   */
+  private gateArmed = true;
+  /**
+   * Whether Orithel's "you are short of nine" offer has already been made on this
+   * visit to the Spire. Session-scoped, not saveable: it is a conversation, not a
+   * state change, and re-offering it after a reload costs nothing.
+   */
+  private unfinishedWardAsked = false;
   /** Town services that have been used since entering this region. Cleared on region change. */
   private usedTownServices = new Set<string>();
   journalOpen = false;
@@ -183,7 +200,13 @@ export class Game {
   private readonly gameLoop = new FixedStepLoop({
     simulate: (stepSeconds) => this.simulateStep(stepSeconds),
     render: () => renderGame(this),
-    onError: (error) => console.error("Game loop error:", error),
+    // A throw here has already stopped the loop, so the world is frozen on its
+    // last frame. Tell the shell: a crash inside the engine never reaches a
+    // React error boundary, and without this the player just sees a still image.
+    onError: (error) => {
+      console.error("Game loop error:", error);
+      this.cb.onFatal?.(error);
+    },
   });
   movement = new MovementSystem({
     width: MAP_W,
@@ -323,6 +346,13 @@ export class Game {
 
       this.restoreOrPopulateRegion();
 
+      // Anchor the run at the arrival road. Without a starting checkpoint the
+      // only way to set one was to rest at a wayfire, which is optional — so a
+      // player who read the first fortress gate as a challenge, died inside it,
+      // and had never sat down lost the entire run to the "spent" ending. The
+      // wayfires still upgrade the anchor; this only removes the trap.
+      this.world.checkpoint = { regionId: this.world.regionId, x: s.x, y: s.y, name: "the arrival road" };
+
       this.input.bind({
         onKeyDown: this.onKeyDown,
         onKeyUp: this.onKeyUp,
@@ -374,8 +404,14 @@ export class Game {
       }
       this.enemies.push(enemy);
     }
-    for (const shard of this.map.shards)
-      this.items.push({ x: shard.x, y: shard.y, type: "shard", t: this.world.nextRandom() * 6, taken: false });
+    // Only vessels that have not been emptied yet. Dying inside a fortress
+    // discards that region's saved state, so without this the shard re-seeds on
+    // re-entry and the counter can be farmed past nine — which also breaks the
+    // "nine people" premise the whole story rests on.
+    if (!this.world.harvestedShards.has(this.world.regionId)) {
+      for (const shard of this.map.shards)
+        this.items.push({ x: shard.x, y: shard.y, type: "shard", t: this.world.nextRandom() * 6, taken: false });
+    }
     this.rememberRegion();
   }
 
@@ -415,6 +451,9 @@ export class Game {
       this.centerCam();
       this.tileRenderer.warm(this.cam, this.viewW, this.viewH);
       this.regionGateCooldown = 1.25;
+      // The arrival point may itself be inside a gate's trigger radius, so the
+      // next gate cannot fire until the player walks clear of it.
+      this.gateArmed = false;
       this.msg(`You arrive in ${this.map.regionName}.`);
       this.pushHud();
     } catch (error) {
@@ -748,6 +787,7 @@ export class Game {
     if (p.dying > 0) {
       p.dying -= dt;
       if (p.dying <= 0 && !this.ended) {
+        this.world.deaths++;
         if (this.world.checkpoint) {
           if (this.map.resetOnDeath) this.discardCurrentRegion = true;
           this.respawnAtCheckpoint();
@@ -821,13 +861,30 @@ export class Game {
     this.checkPickups();
 
     if (this.regionGateCooldown <= 0 && !this.changingRegion) {
-      const exit = this.map.exits.find((gate) => !gate.requiresInteraction && Math.hypot(p.x - (gate.x * TILE + TILE / 2), p.y - (gate.y * TILE + TILE / 2)) < TILE * 1.35);
-      if (exit) void this.changeRegion(exit);
+      const gateDistance = (gate: { x: number; y: number }) => Math.hypot(p.x - (gate.x * TILE + TILE / 2), p.y - (gate.y * TILE + TILE / 2));
+      const nearby = this.map.exits.some((gate) => !gate.requiresInteraction && gateDistance(gate) < REGION_GATE_RADIUS);
+      if (!nearby) this.gateArmed = true;
+      else if (this.gateArmed) {
+        this.gateArmed = false;
+        void this.changeRegion(this.map.exits.find((gate) => !gate.requiresInteraction && gateDistance(gate) < REGION_GATE_RADIUS)!);
+      }
     }
 
-    if (this.world.regionId === "overworld" && !this.changingRegion && !this.bossSpawned && this.wardUnlocked && !this.dialogue && !this.ended) {
-      if (Math.hypot(p.x - this.map.bossCenter.x, p.y - this.map.bossCenter.y) < TILE * 5)
-        this.openWardChoice();
+    if (this.world.regionId === "overworld" && !this.changingRegion && !this.bossSpawned && !this.dialogue && !this.ended) {
+      const atSpire = Math.hypot(p.x - this.map.bossCenter.x, p.y - this.map.bossCenter.y) < TILE * 5;
+      if (atSpire) {
+        if (this.wardUnlocked) this.openWardChoice();
+        // Walking up to the Spire short of nine used to do nothing at all, so a
+        // run could neither be finished nor stopped. Offer the choice to go
+        // back out — but only once per visit, so passing the arena is not a
+        // dialogue trap.
+        else if (this.shards > 0 && !this.unfinishedWardAsked) {
+          this.unfinishedWardAsked = true;
+          this.openUnfinishedWardChoice();
+        }
+      } else if (this.unfinishedWardAsked) {
+        this.unfinishedWardAsked = false;
+      }
     }
   }
 
@@ -946,7 +1003,15 @@ export class Game {
       if (Math.hypot(p.x - it.x, p.y - it.y) < p.r + 15) {
         it.taken = true;
         if (it.type === "shard") {
-          this.shards++;
+          const vessel = this.world.regionId;
+          // Identity, not count, is what makes a shard takeable once. A stale
+          // item from a region restored before this was recorded, or a shard in
+          // a region that already yielded one, must not re-award.
+          if (this.world.harvestedShards.has(vessel)) continue;
+          this.world.harvestedShards.add(vessel);
+          this.shards = this.world.harvestedShards.size;
+          // Carrying them makes the blade cut deeper. See shardBladeBonus().
+          p.attackBonus += shardBladeBonus(this.shards) - shardBladeBonus(this.shards - 1);
           const harvested = applyHarvestCost(p.maxHp, p.hp, this.shards);
           p.maxHp = harvested.maxHp;
           p.hp = harvested.hp;
@@ -1226,9 +1291,21 @@ export class Game {
   }
 
   private openWardChoice() {
-    const { lines, choices } = wardDialogue();
+    // Warn when the pilgrim emptied all nine and investigated nothing: the
+    // harvest curve puts them on five maximum health, which is a real and
+    // intended price but was never survivable, and the objective text gave no
+    // hint of it. The blade bonus earned by carrying the shards closes most of
+    // the gap; this closes the rest by making it a choice.
+    const underprepared = this.player.attackBonus <= shardBladeBonus(this.shards);
+    const { lines, choices } = wardDialogue(underprepared);
     this.pendingChoices = choices;
     this.openDialogue(lines, "Orithel, the Architect", "#9ff7e6", ORITHEL_PORTRAIT, "THE ARCHITECT · FINAL AUDIENCE");
+  }
+
+  private openUnfinishedWardChoice() {
+    const { lines, choices } = unfinishedWardDialogue(this.shards, this.totalShards);
+    this.pendingChoices = choices;
+    this.openDialogue(lines, "Orithel, the Architect", "#9ff7e6", ORITHEL_PORTRAIT, "THE ARCHITECT · AN INCOMPLETE COUNT");
   }
 
   chooseDialogue(id: string) {
@@ -1253,6 +1330,21 @@ export class Game {
       this.pendingChoices = null;
       this.cb.onDialogue(null);
       this.endRun("refusal");
+      return;
+    }
+    if (id === "ending:withdraw") {
+      this.dialogue = null;
+      this.pendingChoices = null;
+      this.cb.onDialogue(null);
+      this.endRun("spent");
+      return;
+    }
+    if (id === "ending:decline") {
+      // Back out to the world rather than ending the run.
+      this.dialogue = null;
+      this.pendingChoices = null;
+      this.cb.onDialogue(null);
+      this.msg(`You leave the ward road with ${this.shards} of ${this.totalShards}. The Spire says nothing.`);
       return;
     }
     if (id.startsWith("project:")) {
@@ -1869,7 +1961,15 @@ export class Game {
       p.y = point.y;
       this.centerCam();
       this.msg(`The wayfire draws you back: ${point.name}.`);
-      this.discardCurrentRegion = false;
+      if (this.discardCurrentRegion) {
+        // Respawning inside the region that has to be reset. Drop the stored
+        // snapshot first, or the half-cleared state is kept and the discard is
+        // silently dropped with it. Unreachable while fortresses stay
+        // wayfire-free, which is why it went unnoticed.
+        delete this.world.regions[this.world.regionId];
+        this.discardCurrentRegion = false;
+        this.restoreOrPopulateRegion();
+      }
       return;
     }
     void this.changeRegion({ x: 0, y: 0, targetRegion: point.regionId, destination: { x: point.x, y: point.y }, label: point.name });
@@ -1879,7 +1979,25 @@ export class Game {
     if (this.ended) return;
     this.ended = true;
     if (ending === "silence") this.msg("The Unbound stops. All of it, at once.");
-    this.cb.onEnd(ending);
+    this.cb.onEnd(ending, this.buildEpilogue());
+  }
+
+  /**
+   * What the run added up to, read off the player's actual decisions. The three
+   * investigations, the town requests, the warden accounts and the deaths are
+   * all recorded during play, so the closing text can say what this particular
+   * pilgrim did rather than congratulating every pilgrim identically.
+   */
+  private buildEpilogue(): string[] {
+    return epilogueLines({
+      progress: this.world.quests,
+      wardenAccounts: this.world.journal.filter((entry) => entry.id.startsWith("warden:")).length,
+      townProjects: TOWN_PROJECTS.filter((project) => townProjectComplete(this.world.quests, project.id)).length,
+      deaths: this.world.deaths,
+      shards: this.shards,
+      totalShards: this.totalShards,
+      difficulty: this.world.difficulty,
+    });
   }
 
   msg(text: string) {

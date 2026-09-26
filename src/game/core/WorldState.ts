@@ -1,6 +1,7 @@
 import { type DialogueData, type Difficulty, type Dir, type EnemyType, type ItemType, type JournalEntry, type MapData, normalizeDifficulty } from "../types";
 import type { QuestProgress } from "../quests";
 import { cumulativeHarvestCost } from "../escalation";
+import { FORTRESS_LAYOUTS } from "../fortressLayouts";
 
 export interface RegionSnapshot {
   enemies: EnemyState[];
@@ -121,6 +122,13 @@ export interface WorldSnapshot {
   quests?: QuestProgress;
   regions?: Record<string, RegionSnapshot>;
   checkpoint?: WayfireCheckpoint | null;
+  /**
+   * Region ids whose shard has already been taken. Optional because v4 saves
+   * predate it; those are backfilled from the shard count on restore.
+   */
+  harvestedShards?: string[];
+  /** Optional: pre-v1.0 saves did not count deaths. */
+  deaths?: number;
 }
 
 /**
@@ -142,6 +150,15 @@ export class WorldState {
   bossSpawned = false;
   shards = 0;
   totalShards = 9;
+  /**
+   * Region ids whose Anima Shard has already been taken. Each fortress holds
+   * exactly one shard, so this is the authority on which vessels are emptied:
+   * `shards` is the count, this is the identity. It has to be persisted because
+   * dying inside a fortress discards that region's saved state, which
+   * otherwise re-seeds the shard and lets the count be farmed past nine.
+   */
+  harvestedShards = new Set<string>();
+  deaths = 0;
   message = "";
   messageId = 0;
   nextEnemyId = 1;
@@ -180,6 +197,8 @@ export class WorldState {
       bossSpawned: this.bossSpawned,
       shards: this.shards,
       totalShards: this.totalShards,
+      harvestedShards: [...this.harvestedShards],
+      deaths: this.deaths,
       message: this.message,
       messageId: this.messageId,
       nextEnemyId: this.nextEnemyId,
@@ -215,6 +234,11 @@ export class WorldState {
     this.bossSpawned = snapshot.bossSpawned;
     this.shards = snapshot.shards;
     this.totalShards = snapshot.totalShards;
+    // v4 saves recorded only a count, not which vessels were emptied. Backfill
+    // from the canonical fortress order so a carried save cannot farm the
+    // fortresses it already cleared.
+    this.harvestedShards = new Set(snapshot.harvestedShards ?? Object.keys(FORTRESS_LAYOUTS).slice(0, snapshot.shards));
+    this.deaths = Math.max(0, snapshot.deaths ?? 0);
     this.message = snapshot.message;
     this.messageId = snapshot.messageId;
     this.nextEnemyId = snapshot.nextEnemyId;
@@ -235,6 +259,11 @@ export class WorldState {
       this.player.maxHp += 12 - snapshot.shards - cumulativeHarvestCost(snapshot.shards);
       this.player.hp = Math.min(this.player.hp, this.player.maxHp);
     }
+    // The harvest rule floors maxHp at 1, so the migration above must too.
+    // Without the floor a corrupt or hand-edited save lands on maxHp <= 0 and
+    // the player walks around alive at 0/0 until the next hit.
+    this.player.maxHp = Math.max(1, this.player.maxHp);
+    this.player.hp = Math.min(Math.max(0, this.player.hp), this.player.maxHp);
     if (legacySave) this.migrateLegacyPopulation();
     this.boss = snapshot.bossId === null ? null : this.enemies.find((enemy) => enemy.id === snapshot.bossId) ?? null;
     this.dialogue = null;

@@ -187,6 +187,53 @@ describe("authored settlements", () => {
     }
   });
 
+  /**
+   * Every region transition has to land the player on a tile they can stand on.
+   *
+   * Both halves of this shipped broken: a lamp glyph had been authored directly
+   * above a cellar door, so `townInteriorSpawn` placed the player inside a solid
+   * crystal, and a settlement had a stray wall row under one cottage, so the
+   * trip back out of that house deposited the player inside a house wall. BFS
+   * reachability from the spawn catches neither case — the player is *on* the
+   * bad tile — so the arrival tile itself has to be asserted.
+   *
+   * Both directions are covered because the walk in and the walk out are exits
+   * of *different* maps: the exterior holds the entrance, the interior holds the
+   * return. Every map's exits are therefore checked against their targets.
+   */
+  it("lands every region transition on a walkable tile", () => {
+    const FRONTIER = ["overworld", "cinderwild", "moonlit-coast", "starfall-moors"];
+    const maps = new Map<string, MapData>();
+    for (const regionId of FRONTIER) maps.set(regionId, generateMap(regionId));
+    // Interiors and fortresses are only reachable through the frontier's exits,
+    // so discovering them transitively covers the whole world graph.
+    for (let i = 0; i < maps.size; i++) {
+      for (const exit of [...maps.values()][i].exits) {
+        if (!maps.has(exit.targetRegion)) maps.set(exit.targetRegion, generateMap(exit.targetRegion));
+      }
+    }
+
+    const problems: string[] = [];
+    for (const [regionId, map] of maps) {
+      if (regionId !== "overworld") {
+        const spawnTile = { x: Math.floor(map.spawn.x / TILE), y: Math.floor(map.spawn.y / TILE) };
+        if (!canWalk(map, spawnTile.x, spawnTile.y)) {
+          problems.push(`${regionId}: spawn (${spawnTile.x},${spawnTile.y}) is ${tileDefinition(map.tiles[spawnTile.y * map.width + spawnTile.x]).shape}`);
+        }
+      }
+      for (const exit of map.exits) {
+        const target = maps.get(exit.targetRegion);
+        if (!target) continue;
+        const tile = { x: Math.floor(exit.destination.x / TILE), y: Math.floor(exit.destination.y / TILE) };
+        if (!canWalk(target, tile.x, tile.y)) {
+          problems.push(`${regionId} -> ${exit.targetRegion} via "${exit.label}": arrival (${tile.x},${tile.y}) is ${tileDefinition(target.tiles[tile.y * target.width + tile.x]).shape}`);
+        }
+      }
+    }
+
+    expect(problems).toEqual([]);
+  });
+
   it("places authored settlements in all frontier regions with reachable building doors", () => {
     const regions = [
       { id: "cinderwild", townId: "cinder-haven" },

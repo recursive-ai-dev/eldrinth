@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyHarvestCost, cumulativeHarvestCost, fortressShardIntakeEntry, fortressWardenEntry, shardBleedEntry, shardCostSuffix, shardHarvestCost, shardPickupMessage, wardenFact, WARD_LINES, wardDialogue, wardUnlockMessage } from "./escalation";
+import { applyHarvestCost, cumulativeHarvestCost, fortressShardIntakeEntry, fortressWardenEntry, shardBleedEntry, shardBladeBonus, shardCostSuffix, shardHarvestCost, shardPickupMessage, wardenFact, WARD_LINES, wardDialogue, wardUnlockMessage } from "./escalation";
 import { FORTRESS_LAYOUTS } from "./fortressLayouts";
 
 describe("shard escalation", () => {
@@ -94,9 +94,9 @@ describe("harvest cost", () => {
   it("states the price only once there is one", () => {
     expect(shardCostSuffix(1)).toBe("");
     expect(shardCostSuffix(2)).toBe("");
-    expect(shardCostSuffix(3)).toBe(" Maximum health −1.");
-    expect(shardCostSuffix(6)).toBe(" Maximum health −2.");
-    expect(shardCostSuffix(9)).toBe(" Maximum health −3.");
+    expect(shardCostSuffix(3)).toContain("Maximum health −1.");
+    expect(shardCostSuffix(6)).toContain("Maximum health −2.");
+    expect(shardCostSuffix(9)).toContain("Maximum health −3.");
   });
 
   it("keeps the first two pickup messages exactly as they were", () => {
@@ -105,8 +105,29 @@ describe("harvest cost", () => {
   });
 
   it("appends the price to every costed pickup message", () => {
-    expect(shardPickupMessage(3, 9)).toBe("Anima Shard recovered (3/9). It was warm. Maximum health −1.");
+    expect(shardPickupMessage(3, 9)).toContain("Maximum health −1.");
     expect(shardPickupMessage(6, 9)).toContain("Maximum health −2.");
+  });
+
+  it("announces the blade gain only on the shard that grants it", () => {
+    // Shard 3 is the first that makes the blade cut deeper; 4 and 5 change
+    // nothing blade-wise, so the message must not claim they did.
+    expect(shardPickupMessage(3, 9)).toContain("Blade damage +1.");
+    expect(shardPickupMessage(4, 9)).not.toContain("Blade damage");
+    expect(shardPickupMessage(5, 9)).not.toContain("Blade damage");
+    expect(shardPickupMessage(6, 9)).toContain("Blade damage +2.");
+    expect(shardPickupMessage(7, 9)).not.toContain("Blade damage");
+  });
+
+  it("caps the blade bonus so carrying every shard is not the best build", () => {
+    // The investigations pay up to +5 on top of this. Without a cap, taking all
+    // nine would beat doing any of the reading.
+    expect(shardBladeBonus(0)).toBe(0);
+    expect(shardBladeBonus(2)).toBe(0);
+    expect(shardBladeBonus(3)).toBe(1);
+    expect(shardBladeBonus(5)).toBe(1);
+    expect(shardBladeBonus(6)).toBe(2);
+    expect(shardBladeBonus(9)).toBe(2);
   });
 
   it("sums the cumulative cost across a full run", () => {

@@ -2,9 +2,34 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <!-- viewport-fit=cover lets the HUD and touch controls inset themselves past
+         notches and home indicators. user-scalable is left alone: the journal
+         holds long prose and a note field that need to be zoomable. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="ELDRINTH: The Unbound Spire — a 2D open-world dark fantasy RPG where the machine that watches the world was built out of living minds, and they are still in there." />
     <title>ELDRINTH — The Unbound Spire</title>
+
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./favicon.svg" />
+    <meta name="theme-color" content="#04050a" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="ELDRINTH: The Unbound Spire" />
+    <meta property="og:title" content="ELDRINTH — The Unbound Spire" />
+    <meta
+      property="og:description"
+      content="A dark-fantasy action RPG in the browser. Nine Anima Shards will quiet the machine built out of living minds — and each one costs you."
+    />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="ELDRINTH — The Unbound Spire" />
+    <meta
+      name="twitter:description"
+      content="A dark-fantasy action RPG in the browser. Nine Anima Shards will quiet the machine built out of living minds — and each one costs you."
+    />
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -14,6 +39,16 @@
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <div style="max-width: 34rem; margin: 18vh auto; padding: 0 1.5rem; font-family: Georgia, serif; color: #e7e3d8; text-align: center; line-height: 1.6">
+        <h1 style="font-size: 1.5rem; letter-spacing: 0.2em; margin-bottom: 1rem">ELDRINTH</h1>
+        <p style="color: #b8b2a4">
+          The Unbound Spire is a game that runs entirely in your browser and needs
+          JavaScript enabled to draw its world. No plugin, download, or account is
+          required &mdash; just enable JavaScript and reload.
+        </p>
+      </div>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

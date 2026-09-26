@@ -1,6 +1,13 @@
 export type SceneId = "title" | "overworld" | "interior" | "menu" | "pause" | "cutscene" | "ending";
 
-/** Which ending a finished run reached. `silence` is the old "win". */
+/**
+ * Which ending a finished run reached. `silence` is the old "win".
+ *
+ * `spent` is a deliberate walk-away: reaching the Spire short of nine and
+ * choosing to stop. It used to mean "died with no wayfire lit", which was
+ * nearly unreachable (the first wayfire sits on the only road out of spawn) and
+ * punished a player for exploring early with the loss of a whole run.
+ */
 export type EndingId = "silence" | "refusal" | "spent";
 
 /** A small, explicit stack. Overlay scenes never replace the world beneath them. */

@@ -24,6 +24,45 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/*
+ * The game root. `100dvh` tracks the *dynamic* viewport, so the touch controls
+ * stay reachable when a mobile browser's URL bar collapses; `100vh` is the
+ * fallback for engines without dvh. Selection is disabled here (it is a game
+ * surface) but re-enabled on the journal, whose prose and note field are real
+ * text a player may need to copy.
+ */
+.app-root {
+  height: 100vh;
+  height: 100dvh;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+  touch-action: none;
+}
+
+.app-root .selectable,
+.app-root input,
+.app-root textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* Safe-area helpers. The viewport meta sets viewport-fit=cover, which is what
+   makes these resolve to non-zero values on notched devices. */
+.inset-safe-t {
+  top: max(1rem, env(safe-area-inset-top, 0px));
+}
+.inset-safe-b {
+  bottom: max(1.5rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem));
+}
+.inset-safe-l {
+  left: max(1.5rem, calc(env(safe-area-inset-left, 0px) + 0.5rem));
+}
+.inset-safe-r {
+  right: max(1.5rem, calc(env(safe-area-inset-right, 0px) + 0.5rem));
+}
+
 .font-title {
   font-family: "Cinzel", Georgia, serif;
   letter-spacing: 0.04em;
@@ -42,6 +81,13 @@ canvas {
 button {
   cursor: pointer;
   font-family: inherit;
+}
+
+/* A visible focus ring. Several overlays set `outline: none` on :focus-visible
+   and substitute colour alone, which is not a usable keyboard affordance. */
+:focus-visible {
+  outline: 2px solid #75f5df;
+  outline-offset: 3px;
 }
 
 /* Atmospheric UI animations */
@@ -652,4 +698,15 @@ button {
     animation-delay: 0ms !important;
   }
   .intro-noise { display: none; }
+
+  /* The intro is not the only animated surface. The looping decorative
+     animations below run forever and are suppressed for players who asked for
+     reduced motion. */
+  .glow-pulse,
+  .flick,
+  .msg-fade,
+  .intro-noise,
+  .intro-scanlines {
+    animation: none !important;
+  }
 }

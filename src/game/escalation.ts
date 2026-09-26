@@ -31,10 +31,28 @@ export function cumulativeHarvestCost(shards: number): number {
   return total;
 }
 
+/**
+ * Blade damage earned by carrying the shards, not by investigating.
+ *
+ * The nine are people, and the pilgrim is carrying them. Every third one taken
+ * cuts a little deeper for you. It exists because the harvest curve is the
+ * intended cost — a pilgrim who empties all nine and investigates nothing is at
+ * five maximum health — and at one damage per swing the Unbound took
+ * thirty-five seconds of uninterrupted swinging to kill, which no amount of
+ * skill makes survivable at that health. The investigations still pay far more
+ * (up to +5 on top of this), so doing the reading is still the better build;
+ * this only stops skipping it from being an unwinnable wall.
+ */
+export function shardBladeBonus(count: number): number {
+  return Math.min(2, Math.floor(count / 3));
+}
+
 /** The price, stated in the register the quest resolutions already use. */
 export function shardCostSuffix(count: number): string {
   const cost = shardHarvestCost(count);
-  return cost > 0 ? ` Maximum health −${cost}.` : "";
+  const blade = shardBladeBonus(count);
+  const gained = blade > shardBladeBonus(count - 1) ? ` Blade damage +${blade}.` : "";
+  return `${cost > 0 ? ` Maximum health −${cost}.` : ""}${gained}`;
 }
 
 /**
@@ -76,6 +94,32 @@ export const WARD_LINES = [
   "You have been extraordinary. I want you to understand that I mean that. I have said it before, and I have always meant it.",
 ];
 
+/**
+ * What Orithel says at the gate when the pilgrim emptied all nine fortresses and
+ * read none of the paperwork.
+ *
+ * The harvest curve is the intended price, so arriving here on five maximum
+ * health is a legitimate and thematically correct run. It was simply never
+ * survivable, and nothing in the game said so — the objective text only ever
+ * reported that the ward was open. Naming it turns an unexplained wall into a
+ * decision the player is actually making, and leaves "No." as a real option
+ * rather than the only survivable one.
+ */
+export const WARD_UNDERPREPARED = [
+  "Before you give them to me. I am going to say the part I do not say. You have taken all nine and you have read nothing I gave you, and the taking has cost you more than you think.",
+  "You are going in with a body that has been billed nine times and a blade that nine people are holding. You may well come out. I have watched stronger pilgrims than you not come out, and I would rather you heard that from me than from the thing under the floor.",
+  "If you want to go back and read the files, go back. There is a road, and it is the same road twice over. But do not walk in there believing it is a formality, because I cannot lie to you and you would know.",
+];
+
+/** The same threshold, reached on foot, without the full set. */
+export function unfinishedWardLines(shards: number, total: number): string[] {
+  return [
+    `You come up the ward road with ${shards} of ${total}. Orithel counts the light coming off you and does not ask you to come closer.`,
+    "He has been expecting someone to arrive here early. He has a form for it. The form assumes the person in front of him has not already decided to stop, and he is too tired to pretend otherwise.",
+    "The Spire makes no sound at all. That is the part I will remember: not a machine waking, not a voice. Nine hundred years of holding, and the only thing it does with a pilgrim who stops is nothing at all.",
+  ];
+}
+
 export interface DialogueChoice {
   id: string;
   label: string;
@@ -86,12 +130,27 @@ export interface DialogueChoice {
  * before the ending choice is offered. Kept separate from Game so it can be
  * unit-tested without pulling in the whole engine.
  */
-export function wardDialogue(): { lines: string[]; choices: DialogueChoice[] } {
+export function wardDialogue(underprepared = false): { lines: string[]; choices: DialogueChoice[] } {
   return {
-    lines: WARD_LINES.slice(),
+    lines: underprepared ? [...WARD_LINES.slice(0, 2), ...WARD_UNDERPREPARED, WARD_LINES[2]] : WARD_LINES.slice(),
     choices: [
       { id: "ending:surrender", label: "Give him the nine." },
       { id: "ending:refuse", label: "No." },
+    ],
+  };
+}
+
+/**
+ * Arriving at the Spire short of nine. Previously the ward simply stayed shut
+ * with no way to end a run, so a player who had collected fewer than nine could
+ * neither finish nor stop, and a player who wanted to walk away had to reload.
+ */
+export function unfinishedWardDialogue(shards: number, total: number): { lines: string[]; choices: DialogueChoice[] } {
+  return {
+    lines: unfinishedWardLines(shards, total),
+    choices: [
+      { id: "ending:decline", label: "Not yet. I will keep going." },
+      { id: "ending:withdraw", label: "Leave it. Walk away." },
     ],
   };
 }

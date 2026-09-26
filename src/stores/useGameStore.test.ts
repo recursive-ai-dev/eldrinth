@@ -7,20 +7,22 @@ describe("ending state", () => {
   it("records each ending and shows the ending scene", () => {
     for (const ending of ["silence", "refusal", "spent"] as const) {
       useGameStore.getState().startGame();
-      useGameStore.getState().endGame(ending);
+      useGameStore.getState().endGame(ending, [`${ending} happened`]);
 
       const state = useGameStore.getState();
       expect(state.scenes).toEqual(["ending"]);
       expect(state.ending).toBe(ending);
+      expect(state.epilogue).toEqual([`${ending} happened`]);
       expect(state.dialogue).toBeNull();
     }
   });
 
-  it("clears the previous ending when a new run starts", () => {
-    useGameStore.getState().endGame("silence");
+  it("clears the previous ending and epilogue when a new run starts", () => {
+    useGameStore.getState().endGame("silence", ["something"]);
     useGameStore.getState().startGame();
 
     expect(useGameStore.getState().ending).toBeNull();
+    expect(useGameStore.getState().epilogue).toEqual([]);
     expect(useGameStore.getState().scenes).toEqual(["overworld"]);
   });
 });

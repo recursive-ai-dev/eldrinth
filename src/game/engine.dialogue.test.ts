@@ -261,7 +261,7 @@ describe("shard intake recording in fortresses", () => {
   it("copies the specific intake docket into the journal when taking a shard inside a fortress", () => {
     const journal: any[] = [];
     const ctx = {
-      world: { regionId: "fortress.old-lands-archive", journal },
+      world: { regionId: "fortress.old-lands-archive", journal, harvestedShards: new Set<string>() },
       player: { x: 100, y: 100, r: 12, hp: 18, maxHp: 18 },
       items: [{ x: 100, y: 100, type: "shard", taken: false }],
       shards: 0,
@@ -273,8 +273,39 @@ describe("shard intake recording in fortresses", () => {
     };
     (Game.prototype as any).checkPickups.call(ctx);
     expect(ctx.shards).toBe(1);
+    expect(ctx.world.harvestedShards.has("fortress.old-lands-archive")).toBe(true);
     expect(journal.some((entry) => entry.id === "intake:vaelen")).toBe(true);
     expect(journal.find((entry) => entry.id === "intake:vaelen")?.title).toContain("Archivist Vaelen");
+  });
+
+  /**
+   * Dying inside a fortress discards that region's saved state, so the shard is
+   * re-seeded on re-entry. The count has to be keyed on the vessel rather than
+   * the pickup, or the counter farms past nine and the "nine people" premise
+   * stops meaning anything.
+   */
+  it("does not re-award a shard from a fortress that was already emptied", () => {
+    const journal: any[] = [];
+    const ctx = {
+      world: {
+        regionId: "fortress.old-lands-archive",
+        journal,
+        harvestedShards: new Set(["fortress.old-lands-archive"]),
+      },
+      player: { x: 100, y: 100, r: 12, hp: 18, maxHp: 18 },
+      items: [{ x: 100, y: 100, type: "shard", taken: false }],
+      shards: 1,
+      totalShards: 9,
+      shardsBurst() {},
+      addText() {},
+      publishJournal() {},
+      msg() {},
+    };
+    (Game.prototype as any).checkPickups.call(ctx);
+    expect(ctx.shards).toBe(1);
+    expect(journal).toEqual([]);
+    // The stale item is still cleared out of the region.
+    expect(ctx.items).toEqual([]);
   });
 });
 

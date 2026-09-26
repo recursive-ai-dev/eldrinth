@@ -699,8 +699,23 @@ function drawTallOverlay(
 }
 
 /* ----------------------------- render pipeline ----------------------------- */
+
+/**
+ * Per-stage frame-time probe. The stage profiler in `bench/` assigns `fn` to
+ * attribute a frame to individual pipeline stages; it is `undefined` during
+ * normal play, so each `stage()` call is one property read the JIT folds away.
+ * "pre" marks the frame start and is never accumulated, which lets the profiler
+ * treat the first real stage as a full interval rather than a delta.
+ */
+export const __stageHook: { fn: ((name: string) => void) | undefined } = { fn: undefined };
+
+function stage(name: string) {
+  if (__stageHook.fn) __stageHook.fn(name);
+}
+
 export function renderGame(g: RenderState) {
   const ctx = g.ctx;
+  stage("pre");
   ctx.setTransform(g.dpr, 0, 0, g.dpr, 0, 0);
   ctx.clearRect(0, 0, g.cssW, g.cssH);
 
@@ -719,18 +734,28 @@ export function renderGame(g: RenderState) {
   ctx.save();
   ctx.scale(CAMERA_ZOOM, CAMERA_ZOOM);
   ctx.translate(-Math.round(g.cam.x) + sx, -Math.round(g.cam.y) + sy);
+  stage("ground");
   g.tileRenderer.drawGround(ctx, g.cam, g.viewW, g.viewH);
+  stage("towns");
   drawTownBuildings(g, ctx);
   drawSettlementState(g, ctx);
+  stage("ward");
   drawWardBarrier(g, ctx);
+  stage("objects");
   drawSortedWorldObjects(g, ctx);
+  stage("projectiles");
   drawProjectiles(g, ctx);
+  stage("particles");
   drawParticles(g, ctx);
+  stage("texts");
   drawTexts(g, ctx);
+  stage("overlay");
   g.tileRenderer.drawOverlay(ctx, g.cam, g.viewW, g.viewH);
   ctx.restore();
 
+  stage("lighting");
   drawLighting(g);
+  stage("darkness");
   drawDarkness(g, ctx);
   // There is deliberately no quest compass. Roads, notes, and landmarks are
   // the navigation system.
