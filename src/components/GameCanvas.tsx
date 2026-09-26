@@ -27,6 +27,8 @@ export default function GameCanvas({
   cbRef.current = callbacks;
 
   const [initError, setInitError] = useState<string | null>(null);
+  const [fatalError, setFatalError] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
 
   useEffect(() => {
@@ -36,9 +38,16 @@ export default function GameCanvas({
       onHud: (d) => cbRef.current.onHud(d),
       onDialogue: (d) => cbRef.current.onDialogue(d),
       onPause: (p) => cbRef.current.onPause(p),
-      onEnd: (ending) => cbRef.current.onEnd(ending),
+      onEnd: (ending, epilogue) => cbRef.current.onEnd(ending, epilogue),
       onJournal: (entries) => cbRef.current.onJournal(entries),
       onInterior: (inside) => cbRef.current.onInterior(inside),
+      // The loop has already stopped by the time this fires, so nothing else
+      // will ever render or update. Latch it and cover the screen.
+      onFatal: (error) => {
+        console.error("Game loop error:", error);
+        onError?.(error);
+        setFatalError(error instanceof Error ? error.message : "The simulation stopped unexpectedly.");
+      },
     };
     const game = new Game(canvas, proxy, undefined, { difficulty });
     // Acquire the saved region before restoring its local entities. This keeps
@@ -58,6 +67,7 @@ export default function GameCanvas({
         if (disposed) return;
         if (initialSnapshot) game.loadWorld(initialSnapshot);
         game.start();
+        setReady(true);
         onReady?.(game);
       })
       .catch((error: unknown) => {
@@ -79,6 +89,8 @@ export default function GameCanvas({
 
   const handleRetry = () => {
     setInitError(null);
+    setFatalError(null);
+    setReady(false);
     setRetryNonce((n) => n + 1);
   };
 
@@ -92,7 +104,64 @@ export default function GameCanvas({
 
   return (
     <>
-      <canvas ref={ref} className="absolute inset-0 h-full w-full touch-none" />
+      <canvas
+        ref={ref}
+        role="img"
+        aria-label="Eldrinth game view: a top-down dark fantasy world. Movement and combat use the keyboard; press Escape to pause for the full control list."
+        className="absolute inset-0 h-full w-full touch-none"
+      >
+        Your browser does not support the canvas element this game requires.
+      </canvas>
+      {!ready && !initError && !fatalError && (
+        <div
+          data-testid="loading-screen"
+          className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-5 bg-[#04050a]"
+        >
+          <div
+            aria-hidden
+            className="h-10 w-10 animate-pulse border border-teal-300/50 bg-teal-400/10 [clip-path:polygon(50%_0,100%_25%,100%_75%,50%_100%,0_75%,0_25%)]"
+          />
+          <p className="font-serif text-xs uppercase tracking-[0.4em] text-amber-100/60">
+            Opening the way
+          </p>
+          <p className="max-w-xs text-center font-serif text-xs text-amber-100/40">
+            Generating the frontier and loading sprite atlases.
+          </p>
+        </div>
+      )}
+      {fatalError && (
+        <div
+          data-testid="fatal-error-screen"
+          className="absolute inset-0 z-50 flex items-center justify-center bg-black/85 p-6 backdrop-blur-md"
+        >
+          <div className="max-w-md w-full rounded-xl border border-rose-500/30 bg-[#0f0c13] p-8 text-center">
+            <h2 className="mb-2 font-serif text-xl font-bold tracking-widest text-rose-100 uppercase">
+              The Run Stopped
+            </h2>
+            <p className="mb-2 font-serif text-sm text-amber-100/75 leading-relaxed">
+              The simulation hit an error and could not continue. Your most recent
+              autosave is untouched.
+            </p>
+            <p className="mb-6 font-mono text-xs text-amber-100/50 break-words">{fatalError}</p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <button
+                type="button"
+                onClick={handleRetry}
+                className="cursor-pointer rounded border border-amber-400/40 bg-amber-500/20 px-5 py-2 font-serif text-xs uppercase tracking-widest text-amber-200 transition hover:border-amber-300 hover:bg-amber-500/30 active:scale-95"
+              >
+                Reload Region
+              </button>
+              <button
+                type="button"
+                onClick={handleReturnToTitle}
+                className="cursor-pointer rounded border border-white/20 bg-white/5 px-5 py-2 font-serif text-xs uppercase tracking-widest text-stone-300 transition hover:border-white/40 hover:bg-white/10 active:scale-95"
+              >
+                Return to Title
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {initError && (
         <div
           data-testid="init-error-screen"
@@ -107,9 +176,12 @@ export default function GameCanvas({
             <h2 className="mb-2 font-serif text-xl font-bold tracking-widest text-rose-100 uppercase">
               Initialization Failed
             </h2>
-            <p className="mb-6 font-serif text-sm text-amber-100/70 leading-relaxed">
-              {initError}
+            <p className="mb-2 font-serif text-sm text-amber-100/75 leading-relaxed">
+              The world could not be built. This usually means the game files did
+              not finish loading, or the page was opened straight from disk instead
+              of a web server.
             </p>
+            <p className="mb-6 font-mono text-xs text-amber-100/50 break-words">{initError}</p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <button
                 type="button"

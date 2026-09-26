@@ -1,13 +1,19 @@
 {
-  "name": "react-vite-tailwind",
+  "name": "eldrinth",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "ELDRINTH: The Unbound Spire — a 2D open-world dark-fantasy action RPG that runs entirely in the browser.",
+  "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=20.19"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "bench": "vitest run --config bench/vitest.config.ts",
     "preview": "vite preview",
     "gen:sprites": "python3 tools/spritegen/gen_sprites.py",
     "portraits:gen": "node tools/generate-portraits.mjs",
@@ -32,8 +38,5 @@
     "typescript": "5.9.3",
     "vite": "^7.3.6",
     "vitest": "^5.0.0"
-  },
-  "allowScripts": {
-    "esbuild@0.27.2": true
   }
 }

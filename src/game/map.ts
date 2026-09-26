@@ -143,7 +143,10 @@ const TOWN_LAYOUTS: Record<string, string[]> = {
     "#.......H.H...HHH.....#",
     "#.......HAH...H.H.....#",
     "#.............HB......#",
-    "D.............HHH.....#",
+    // Row below Toran's house. It must stay clear: the return tile from a
+    // building interior is the tile under its door glyph, so a stray wall here
+    // dropped the player inside solid stone on the way out of that house.
+    "D.....................#",
     "#.............C.......#",
     "#.....................#",
     "#######################",
@@ -334,7 +337,7 @@ const TOWN_INTERIORS: Record<string, TownInteriorDefinition> = {
   },
   "interior.crater-watch.b": {
     townId: "crater-watch", residentIndex: 1, name: "Cassian's Spring Cellar",
-    layout: ["###########", "#.........#", "#.~~~~~...#", "#.~...~...#", "#.~~~.~.N.#", "#.....~...#", "#.#####...#", "#....L....#", "#####D#####"],
+    layout: ["###########", "#.........#", "#.~~~~~...#", "#.~...~...#", "#.~~~.~.N.#", "#.....~...#", "#.#####...#", "#..L......#", "#####D#####"],
   },
   "interior.crater-watch.c": {
     townId: "crater-watch", residentIndex: 2, name: "Mina's Listening Tent",

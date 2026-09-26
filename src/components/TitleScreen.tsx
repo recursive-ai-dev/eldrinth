@@ -9,11 +9,32 @@ const DIFFICULTIES: { id: Difficulty; label: string; description: string }[] = [
   { id: "brutal", label: "Brutal", description: "Hardened, deadlier foes" },
 ];
 
-export default function TitleScreen({ onStart, onContinue, onErase, slots }: { onStart: (slot: number, difficulty: Difficulty) => void; onContinue: (slot: number) => void; onErase: (slot: number) => void; slots: SaveSlot[] }) {
+const INTERACTIVE = "button, input, select, textarea, a[href], [contenteditable]";
+
+export default function TitleScreen({
+  onStart,
+  onContinue,
+  onErase,
+  slots,
+  savingUnavailable = false,
+}: {
+  onStart: (slot: number, difficulty: Difficulty) => void;
+  onContinue: (slot: number) => void;
+  onErase: (slot: number) => void;
+  slots: SaveSlot[];
+  savingUnavailable?: boolean;
+}) {
   const firstEmpty = [1, 2, 3].find((id) => !slots.some((slot) => slot.id === id));
   const [difficulty, setDifficulty] = useState<Difficulty>("standard");
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
+      // A button's Enter/Space activation is the default action of keydown, so
+      // an unconditional preventDefault() here cancels it. That made the slot
+      // erase button unreachable by keyboard, and since the only remedy the
+      // screen offers for three occupied slots is "erase a slot", a
+      // keyboard-only player was locked out of starting a new run entirely.
+      const target = e.target as HTMLElement | null;
+      if (target?.closest?.(INTERACTIVE)) return;
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
         const existing = slots[0];
@@ -61,7 +82,7 @@ export default function TitleScreen({ onStart, onContinue, onErase, slots }: { o
         </p>
 
         <div className="mt-8 w-full max-w-xl rounded-xl border border-amber-100/15 bg-black/35 p-4 text-left backdrop-blur-sm">
-          <div className="font-title text-xs tracking-[0.25em] text-amber-100/60">PILGRIM RECORDS</div>
+          <div className="font-title text-xs tracking-[0.25em] text-amber-100/75">PILGRIM RECORDS</div>
           <div className="mt-3 grid grid-cols-3 gap-2">
             {[1, 2, 3].map((id) => {
               const slot = slots.find((entry) => entry.id === id);
@@ -69,19 +90,19 @@ export default function TitleScreen({ onStart, onContinue, onErase, slots }: { o
                 <div key={id} className="flex rounded border border-teal-300/35 bg-teal-400/10 transition hover:bg-teal-400/20">
                   <button onClick={() => onContinue(id)} className="min-w-0 flex-1 px-2 py-2 text-left">
                     <span className="block font-title text-xs tracking-wider text-teal-100">SLOT {id}</span>
-                    <span className="block font-serif text-[10px] text-amber-100/60">{slot.difficulty} · {slot.shards}/9 shards</span>
+                    <span className="block font-serif text-[10px] text-amber-100/75">{slot.difficulty} · {slot.shards}/9 shards</span>
                   </button>
-                  <button aria-label={`Erase slot ${id}`} onClick={() => onErase(id)} className="border-l border-teal-300/20 px-2 text-rose-200/60 hover:bg-rose-400/15 hover:text-rose-100">×</button>
+                  <button aria-label={`Erase slot ${id}`} onClick={() => onErase(id)} className="border-l border-teal-300/20 px-2 text-rose-200/80 hover:bg-rose-400/15 hover:text-rose-100">×</button>
                 </div>
-              ) : <div key={id} className="rounded border border-amber-100/10 px-2 py-2 font-title text-xs tracking-wider text-amber-100/30">SLOT {id}<br />EMPTY</div>;
+              ) : <div key={id} className="rounded border border-amber-100/20 px-2 py-2 font-title text-xs tracking-wider text-amber-100/70">SLOT {id}<br />EMPTY</div>;
             })}
           </div>
           <div className="mt-4 flex items-center justify-between gap-3">
-            <span className="font-title text-[10px] tracking-[0.2em] text-amber-100/60">NEW RUN DIFFICULTY</span>
+            <span className="font-title text-[10px] tracking-[0.2em] text-amber-100/75">NEW RUN DIFFICULTY</span>
             <input aria-label="Difficulty" type="range" min="0" max="2" step="1" value={DIFFICULTIES.findIndex((entry) => entry.id === difficulty)} onChange={(event) => setDifficulty(DIFFICULTIES[Number(event.target.value)].id)} className="accent-teal-300" />
             <span className="w-32 text-right font-serif text-xs text-teal-100">{DIFFICULTIES.find((entry) => entry.id === difficulty)?.label}</span>
           </div>
-          <p className="mt-1 text-right font-serif text-[10px] text-amber-100/45">{DIFFICULTIES.find((entry) => entry.id === difficulty)?.description}</p>
+          <p className="mt-1 text-right font-serif text-[10px] text-amber-100/70">{DIFFICULTIES.find((entry) => entry.id === difficulty)?.description}</p>
         </div>
         <div className="mt-4 flex flex-col items-center gap-3 sm:flex-row">
           <button
@@ -92,31 +113,42 @@ export default function TitleScreen({ onStart, onContinue, onErase, slots }: { o
             BEGIN NEW PILGRIMAGE
           </button>
         </div>
-        {!firstEmpty && <div className="mt-2 font-serif text-xs italic text-amber-100/40">All records are occupied. Erase a slot to begin anew.</div>}
-        <div className="mt-3 font-serif text-xs italic text-amber-100/40">
+        {!firstEmpty && <div className="mt-2 font-serif text-xs italic text-amber-100/75">All records are occupied. Erase a slot to begin anew.</div>}
+        <div className="mt-3 font-serif text-xs italic text-amber-100/70">
           press Enter · move with WASD · strike with J or Space
         </div>
 
-        <div className="mt-8 grid w-full max-w-xl grid-cols-2 gap-x-8 gap-y-1 text-left font-serif text-xs text-amber-100/40 sm:grid-cols-4">
+        <div className="mt-8 grid w-full max-w-xl grid-cols-2 gap-x-8 gap-y-1 text-left font-serif text-xs text-amber-100/70 sm:grid-cols-4">
           <div>
-            <span className="text-teal-200/70">WASD / Arrows</span> — Move
+            <span className="text-teal-200/80">WASD / Arrows</span> — Move
           </div>
           <div>
-            <span className="text-teal-200/70">J / Space</span> — Attack
+            <span className="text-teal-200/80">J / Space</span> — Attack
           </div>
           <div>
-            <span className="text-teal-200/70">Shift</span> — Dash
+            <span className="text-teal-200/80">Shift</span> — Dash
           </div>
           <div>
-            <span className="text-teal-200/70">E</span> — Speak / Read
+            <span className="text-teal-200/80">E</span> — Speak / Read
           </div>
           <div>
-            <span className="text-teal-200/70">L</span> — Field Journal
+            <span className="text-teal-200/80">L</span> — Field Journal
           </div>
         </div>
       </div>
 
-      <div className="absolute bottom-3 z-10 font-serif text-[10px] tracking-widest text-amber-100/25">
+      {savingUnavailable && (
+        <p
+          role="status"
+          data-testid="title-save-warning"
+          className="absolute inset-x-4 bottom-14 z-10 mx-auto max-w-lg rounded border border-amber-500/40 bg-[#1a1408]/95 px-4 py-2 text-center font-serif text-xs text-amber-100"
+        >
+          This browser is blocking local storage, so runs cannot be saved. Everything
+          else works, but progress will be lost when you close the page.
+        </p>
+      )}
+
+      <div className="absolute bottom-3 z-10 font-serif text-[10px] tracking-widest text-amber-100/60">
         ELVES MADE MINDS · MINDS WENT MAD · ONE BLADE REMAINS
       </div>
     </div>

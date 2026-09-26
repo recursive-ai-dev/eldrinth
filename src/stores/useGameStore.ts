@@ -11,6 +11,8 @@ interface GameState {
   dialogue: DialogueData | null;
   journal: JournalEntry[];
   ending: EndingId | null;
+  /** What the run added up to, assembled from the player's actual decisions. */
+  epilogue: string[];
 
   // Actions
   setPaused: (paused: boolean) => void;
@@ -21,7 +23,7 @@ interface GameState {
 
   // Derived
   startGame: () => void;
-  endGame: (ending: EndingId) => void;
+  endGame: (ending: EndingId, epilogue: string[]) => void;
   togglePause: () => void;
   reset: () => void;
 }
@@ -50,6 +52,7 @@ const initialState: Omit<GameState, "setPaused" | "setHud" | "setDialogue" | "se
   dialogue: null,
   journal: [],
   ending: null,
+  epilogue: [],
 };
 
 export const useGameStore = create<GameState>((set) => ({
@@ -82,13 +85,15 @@ export const useGameStore = create<GameState>((set) => ({
       journal: [],
       hud: initialHud,
       ending: null,
+      epilogue: [],
     }));
   },
 
-  endGame: (ending: EndingId) => {
+  endGame: (ending: EndingId, epilogue: string[]) => {
     set({
       scenes: ["ending"],
       ending,
+      epilogue,
       dialogue: null,
     });
   },
@@ -115,3 +120,4 @@ export const selectHud = (state: GameState) => state.hud;
 export const selectDialogue = (state: GameState) => state.dialogue;
 export const selectJournal = (state: GameState) => state.journal;
 export const selectEnding = (state: GameState) => state.ending;
+export const selectEpilogue = (state: GameState) => state.epilogue;
