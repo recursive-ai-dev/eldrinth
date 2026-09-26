@@ -47,11 +47,13 @@ export default function IntroSequence({ onComplete }: { onComplete: () => void }
   }, [advance, finish]);
 
   return (
+    // Not a dialog: nothing here is modal, and aria-live on the container made
+    // a screen reader read the whole twenty-five second cinematic as a single
+    // utterance. Each shot announces its own lines instead.
     <section
       className={`intro-root intro-shot-${shot}`}
-      role="dialog"
-      aria-label="The recovered memory"
-      aria-live="polite"
+      role="region"
+      aria-label={`The recovered memory, part ${shot + 1} of 5`}
     >
       <div className="intro-backdrop" aria-hidden="true">
         <img src={titleBg} alt="" className="intro-image intro-image-main" />

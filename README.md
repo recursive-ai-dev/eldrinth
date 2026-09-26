@@ -113,6 +113,13 @@ is load-bearing to the premise. The first-launch content warning discloses
 institutional violence and the killing of children. Walk-back of the rating
 should be a deliberate decision, not an accident.
 
+## Documentation
+
+- [CHANGELOG.md](CHANGELOG.md) — what shipped in 1.0.0, and what is still known-broken
+- [AUDIT_LOG.md](AUDIT_LOG.md) — the v1 release audit: every blocker, with evidence
+- [ROADMAP.md](ROADMAP.md) — milestones, including what is explicitly *not* shipped
+- [ONBOARDING.md](ONBOARDING.md) — the full contributor guide
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

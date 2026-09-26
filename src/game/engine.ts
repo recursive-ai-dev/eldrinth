@@ -2009,7 +2009,6 @@ export class Game {
       deaths: this.world.deaths,
       shards: this.shards,
       totalShards: this.totalShards,
-      difficulty: this.world.difficulty,
     });
   }
 

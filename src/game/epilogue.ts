@@ -21,7 +21,6 @@ export interface EpilogueInput {
   deaths: number;
   shards: number;
   totalShards: number;
-  difficulty: string;
 }
 
 /** The choice each investigation resolves to, in one flat lookup. */
