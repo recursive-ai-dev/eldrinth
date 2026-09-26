@@ -12,7 +12,10 @@ export default function DialogueBox({
 }) {
   return (
     <div
-      className="pointer-events-auto absolute inset-x-0 bottom-0 z-20 flex justify-center px-4 pb-5"
+      role="dialog"
+      aria-modal="false"
+      aria-label={`${data.speaker} speaks`}
+      className="pointer-events-auto absolute inset-x-0 bottom-0 z-20 flex justify-center px-4 pb-[max(1.25rem,env(safe-area-inset-bottom,0px))]"
       onClick={data.choices ? undefined : onAdvance}
     >
       <div className="w-[min(820px,94vw)] rounded-xl border border-amber-200/20 bg-linear-to-b from-[#15131c]/95 to-[#0a0810]/95 p-5 shadow-2xl backdrop-blur-md">
@@ -33,10 +36,14 @@ export default function DialogueBox({
                 {data.speaker}
               </div>
               {data.roleLabel && (
-                <span className="font-title text-[9px] tracking-[0.16em] text-amber-100/45">{data.roleLabel}</span>
+                <span className="font-title text-[11px] tracking-[0.16em] text-amber-100/75">{data.roleLabel}</span>
               )}
             </div>
-            <p className="min-h-[3.5rem] font-serif text-lg leading-relaxed text-amber-50/90">
+            <p
+              aria-live="polite"
+              aria-atomic="true"
+              className="min-h-[3.5rem] font-serif text-lg leading-relaxed text-amber-50/90"
+            >
               {data.text}
             </p>
           </div>
@@ -49,7 +56,7 @@ export default function DialogueBox({
                 onClick={(event) => { event.stopPropagation(); onChoice(choice.id); }}
                 className="rounded border border-teal-200/25 bg-teal-300/5 px-3 py-2 text-left font-serif text-sm text-teal-50/90 transition hover:border-teal-200/60 hover:bg-teal-300/15"
               >
-                <span className="mr-2 font-title text-xs tracking-wider text-teal-200/65">{index + 1}.</span>
+                <span className="mr-2 font-title text-xs tracking-wider text-teal-200/80">{index + 1}.</span>
                 {choice.label}
               </button>
             ))}
@@ -62,7 +69,7 @@ export default function DialogueBox({
               style={{ width: `${((data.index + 1) / data.total) * 100}%` }}
             />
           </div>
-          <span className="font-title flick text-xs tracking-widest text-amber-200/60">
+          <span className="font-title flick text-xs tracking-widest text-amber-200/80">
             {data.choices ? "1–9 / CLICK" : "▼ E / CLICK"}
           </span>
         </div>

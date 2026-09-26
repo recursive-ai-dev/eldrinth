@@ -237,7 +237,19 @@ export interface RenderState {
 const CHUNK_TILES = 16;
 const CHUNK_PIXELS = CHUNK_TILES * TILE;
 const CHUNK_GUARD = 1;
-const MAX_CACHED_CHUNKS = 128;
+/**
+ * Each chunk holds two 512x512 canvases, so one costs 2 MB of backing store.
+ *
+ * This was 128, which allowed 256 MB — and the 200x140 overworld is 117 chunks,
+ * so simply walking across the frontier filled the cache to 234 MB (measured,
+ * `npm run bench`) without ever triggering an eviction. iOS Safari enforces a
+ * far lower per-page canvas budget than that and will kill the tab.
+ *
+ * A 1280x720 view at CAMERA_ZOOM 1.2 shows about 12 chunks, so 32 keeps the
+ * visible set plus a generous guard ring while walking, and caps the cache at
+ * 64 MB.
+ */
+const MAX_CACHED_CHUNKS = 32;
 
 interface RenderChunk {
   ground: HTMLCanvasElement;
@@ -332,6 +344,19 @@ export class TileChunkRenderer {
     return made;
   }
 
+  /**
+   * Hand the backing store back immediately. Dropping the reference only makes
+   * the canvases collectable, so a burst of chunk turnover can hold hundreds of
+   * megabytes for a while after the entries are gone; zeroing the dimensions
+   * frees the pixels at once.
+   */
+  private static release(chunk: RenderChunk) {
+    chunk.ground.width = 0;
+    chunk.ground.height = 0;
+    chunk.overlay.width = 0;
+    chunk.overlay.height = 0;
+  }
+
   private evict() {
     while (this.chunks.size > MAX_CACHED_CHUNKS) {
       let oldestKey: string | undefined;
@@ -340,6 +365,7 @@ export class TileChunkRenderer {
         if (chunk.lastUsed < oldest) { oldest = chunk.lastUsed; oldestKey = key; }
       }
       if (!oldestKey) return;
+      TileChunkRenderer.release(this.chunks.get(oldestKey)!);
       this.chunks.delete(oldestKey);
     }
   }
@@ -348,6 +374,7 @@ export class TileChunkRenderer {
     const current = getAtlasRevision();
     if (current === this.atlasRevision) return;
     this.atlasRevision = current;
+    for (const chunk of this.chunks.values()) TileChunkRenderer.release(chunk);
     this.chunks.clear();
   }
 
@@ -991,8 +1018,33 @@ function drawItem(_g: RenderState, ctx: CanvasRenderingContext2D, it: ItemState)
 }
 
 /** A shared sort pass keeps items, actors, and tall map overlays coherent. */
+/** A fortress light source. Falls back to procedural flame if the atlas is absent. */
+function drawBrazier(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  const ix = Math.round(x);
+  const iy = Math.round(y);
+  if (drawStaticSprite(ctx, "brazier", ix, iy, 32)) return;
+  ctx.save();
+  ctx.fillStyle = "#2a2320";
+  ctx.fillRect(ix - 7, iy - 4, 14, 12);
+  ctx.fillStyle = "#ffb14d";
+  ctx.beginPath();
+  ctx.moveTo(ix, iy - 16);
+  ctx.quadraticCurveTo(ix + 6, iy - 6, ix, iy - 3);
+  ctx.quadraticCurveTo(ix - 6, iy - 6, ix, iy - 16);
+  ctx.fill();
+  ctx.restore();
+}
+
 function drawSortedWorldObjects(g: RenderState, ctx: CanvasRenderingContext2D) {
   const objects: { y: number; draw: () => void }[] = [];
+  // Braziers are the light sources in the fortresses, and the darkness pass
+  // already punches a hole for every entry in map.lights. They were preloaded
+  // and keyed but never actually drawn, so every fortress was lit by an
+  // invisible fire. Drawn here, in the depth-sorted pass, so a warden standing
+  // behind one is occluded by it.
+  for (const light of g.map.lights) {
+    objects.push({ y: light.y, draw: () => drawBrazier(ctx, light.x, light.y) });
+  }
   for (const sign of g.map.signs) {
     const x = sign.x * TILE + TILE / 2, y = sign.y * TILE + TILE / 2;
     objects.push({ y, draw: () => {

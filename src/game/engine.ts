@@ -179,11 +179,21 @@ export class Game {
   private discardCurrentRegion = false;
   private regionGateCooldown = 0;
   /**
-   * Whether a walk-through region gate may fire. Disarmed on arrival and re-armed
-   * only once the player is clear of every gate, because fortress gates sit one
-   * tile from their arrival point — inside the trigger radius. Without this a
-   * player who stopped to look around was ejected again, then ejected straight
-   * back, oscillating across the boundary and building a fresh region each time.
+   * Whether a walk-through region gate may fire.
+   *
+   * A fortress gate sits one tile (32px) from its arrival point and the trigger
+   * radius is 43.2px, so the arrival point is *inside* the radius. An unguarded
+   * check therefore ejects a player who has merely stopped — then, having put
+   * them 32px from the same gate, immediately ejects them straight back,
+   * rebuilding the region and its tile-chunk cache each time.
+   *
+   * A gate re-arms only once the player is clear of every gate. That is
+   * deliberately symmetric: arriving inside a fortress also leaves the player
+   * within the radius of the only door, so the way out is disarmed until they
+   * step off the threshold and come back — which is what walking through a
+   * doorway is. Nothing about the geometry distinguishes "stopped on the
+   * threshold" from "walked up to it", and no movement heuristic can either, so
+   * the rule stays positional and honest.
    */
   private gateArmed = true;
   /**
@@ -451,8 +461,8 @@ export class Game {
       this.centerCam();
       this.tileRenderer.warm(this.cam, this.viewW, this.viewH);
       this.regionGateCooldown = 1.25;
-      // The arrival point may itself be inside a gate's trigger radius, so the
-      // next gate cannot fire until the player walks clear of it.
+      // The arrival point may itself be inside a gate's trigger radius, so no
+      // gate may fire until the player has stepped clear of one.
       this.gateArmed = false;
       this.msg(`You arrive in ${this.map.regionName}.`);
       this.pushHud();
@@ -862,11 +872,14 @@ export class Game {
 
     if (this.regionGateCooldown <= 0 && !this.changingRegion) {
       const gateDistance = (gate: { x: number; y: number }) => Math.hypot(p.x - (gate.x * TILE + TILE / 2), p.y - (gate.y * TILE + TILE / 2));
-      const nearby = this.map.exits.some((gate) => !gate.requiresInteraction && gateDistance(gate) < REGION_GATE_RADIUS);
-      if (!nearby) this.gateArmed = true;
-      else if (this.gateArmed) {
-        this.gateArmed = false;
-        void this.changeRegion(this.map.exits.find((gate) => !gate.requiresInteraction && gateDistance(gate) < REGION_GATE_RADIUS)!);
+      const clearOfGates = !this.map.exits.some((gate) => !gate.requiresInteraction && gateDistance(gate) < REGION_GATE_RADIUS);
+      if (clearOfGates) this.gateArmed = true;
+      if (this.gateArmed) {
+        const exit = this.map.exits.find((gate) => !gate.requiresInteraction && gateDistance(gate) < REGION_GATE_RADIUS);
+        if (exit) {
+          this.gateArmed = false;
+          void this.changeRegion(exit);
+        }
       }
     }
 

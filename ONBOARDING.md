@@ -134,12 +134,13 @@ eldrinth/
 │   │   ├── EndScreen.tsx      # Ending screens
 │   │   ├── IntroSequence.tsx  # Opening cinematic
 │   │   ├── Journal.tsx        # Player journal / field notes
+│   │   ├── Modal.tsx         # Dialog semantics + focus trap for overlay panels
+│   │   ├── ErrorBoundary.tsx # Catches render-time throws in the shell
 │   │   └── ContentWarning.tsx # First-launch content warning
 │   ├── game/                  # Pure game engine (framework-agnostic TypeScript)
-│   │   ├── core/              # Lifecycle, scheduling, scene stack, world state, spatial index
+│   │   ├── core/              # Lifecycle, scheduling, scene stack, saveable world state
 │   │   │   ├── FixedStepLoop.ts
 │   │   │   ├── SceneStack.ts
-│   │   │   ├── SpatialGrid.ts
 │   │   │   └── WorldState.ts
 │   │   ├── systems/           # Single-responsibility simulation systems
 │   │   │   ├── AISystem.ts    # Enemy behavior steering & telegraphs
@@ -147,22 +148,17 @@ eldrinth/
 │   │   │   ├── GameFlowSystem.ts # Objectives, prompts, HUD assembly
 │   │   │   ├── InputSystem.ts
 │   │   │   └── MovementSystem.ts
-│   │   ├── entities/          # Entity component catalogue, factory, pool, registry
-│   │   │   ├── archetypes.ts
-│   │   │   ├── components.ts
-│   │   │   ├── EntityFactory.ts
-│   │   │   ├── EntityPool.ts
-│   │   │   ├── EntityRegistry.ts
-│   │   │   └── index.ts
 │   │   ├── render/            # Canvas rendering pipeline
-│   │   │   ├── renderer.ts
-│   │   │   ├── spriteAtlas.ts
-│   │   │   └── spriteCatalog.ts
+│   │   │   ├── renderer.ts    # renderGame, tile chunk cache, all draw passes
+│   │   │   └── spriteAtlas.ts # Atlas preloading + frame rect resolution
 │   │   ├── engine.ts          # Game class: orchestrates systems, callbacks, region transitions
 │   │   ├── map.ts             # Procedural overworld + fortress map generation -> MapData
 │   │   ├── fortress.ts        # Fortress layout parsing, validation, reachability checks
 │   │   ├── fortressLayouts.ts # The nine authored 26×19 fortress interiors
-│   │   ├── quests.ts          # Three investigations, evidence, choices, rewards
+│   │   ├── quests.ts          # Investigations, town projects, evidence, choices, rewards
+│   │   ├── escalation.ts      # Shard harvest costs, ward dialogue, warden + intake records
+│   │   ├── epilogue.ts        # Closing text assembled from the player's decisions
+│   │   ├── hazard.ts          # Environmental damage (embers, etc.)
 │   │   ├── regions.ts         # Region cache + web-worker source
 │   │   ├── escalation.ts      # Shard harvest costs, ward dialogue, warden journal entries
 │   │   ├── hazard.ts          # Environmental damage (embers, etc.)
@@ -383,7 +379,7 @@ Enemy behaviors live in `src/game/systems/AISystem.ts` and are registered per `E
 4. Draw atmospheric lighting and vignette effects.
 
 Tiles, the player, enemies, pickups, campfires, and signs use committed PNG sheets under
-`src/assets/sprites/`. `spriteAtlas.ts` / `spriteCatalog.ts` preload assets and resolve
+`src/assets/sprites/`. `spriteAtlas.ts` preloads assets and resolves
 direction/action/frame rectangles; nearest-neighbour Canvas drawing preserves crisp pixels. Procedural
 Canvas work remains for transient effects such as glow, attack arcs, projectiles, particles, telegraphs,
 shadows, and lighting. Catalog tests ensure every shipped visual is present.
@@ -470,7 +466,10 @@ Damage/knockback resolution is in `CombatSystem.ts`. Difficulty scaling is in `D
 
 ### Change an ending or add a new one
 Add the ending id to `EndingId` (`SceneStack.ts`), the copy to `ENDINGS` (`EndScreen.tsx`), and the trigger
-to `endRun()` / `chooseDialogue()` in `engine.ts`.
+to `endRun()` / `chooseDialogue()` in `engine.ts`. If the new ending should reflect what the player
+did, add the branch to `epilogueLines()` in `epilogue.ts` — every ending shares one epilogue,
+assembled from the investigations resolved, the choice made in each, the town requests completed,
+the warden accounts found, and the death count.
 
 ---
 
@@ -492,7 +491,8 @@ to `endRun()` / `chooseDialogue()` in `engine.ts`.
 - **Save compatibility**: `WorldState.restore()` migrates older snapshots; bump `WorldSnapshot.version`
   only when you must break old saves, and add a migration branch for the previous version.
 - **Tests are invoked directly**: run `npx vitest run`, `npx tsc --noEmit`, and the Python checks in
-  `tools/spritegen/*_test.py`. There is no lint script.
+  `tools/spritegen/*_test.py`, and `npm run bench` for the performance harnesses in `bench/`.
+  There is no lint script.
 
 ---
 

@@ -71,10 +71,10 @@ export default function VirtualControls({
   return (
     <div
       data-testid="virtual-controls"
-      className="pointer-events-none absolute inset-0 z-30 select-none touch-none overflow-hidden"
+      className="pointer-events-none absolute inset-0 z-30 select-none touch-none overflow-hidden [-webkit-touch-callout:none]"
     >
       {/* Top action shortcuts for Journal & Pause */}
-      <div className="pointer-events-auto absolute top-4 right-4 flex gap-2 sm:hidden">
+      <div className="pointer-events-auto absolute inset-safe-t inset-safe-r flex gap-2 sm:hidden">
         <button
           type="button"
           aria-label="Journal"
@@ -94,7 +94,7 @@ export default function VirtualControls({
       </div>
 
       {/* Bottom-left: Directional D-Pad */}
-      <div className="pointer-events-auto absolute bottom-8 left-6 flex h-36 w-36 items-center justify-center">
+      <div className="pointer-events-auto absolute inset-safe-b inset-safe-l flex h-36 w-36 items-center justify-center">
         <div className="relative h-32 w-32 rounded-full border border-amber-400/20 bg-black/40 backdrop-blur-md shadow-lg">
           {/* Up */}
           <button
