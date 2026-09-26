@@ -1,484 +1,218 @@
-# ELDRINTH — Code Audit Log
-
-**Repo:** `/home/damien/Projects/eldrinth` (branch `main`, commit `f37c438`)
-**Scope:** all 165 source files under `src/` (~14,000 lines incl. tests). Excludes `dist/`, image assets, lockfile.
-**Method:** full read of every file → cross-function trace (input → sink, callback → store, update-order → mutation) → runtime verification via a temporary vitest harness (real `AISystem`/`MovementSystem`/`CombatSystem`) → record. The verification file `src/game/systems/__audit_verify.test.ts` was used for measurement and removed after the audit; raw transcripts are in the appendix.
-**Rules applied:** every finding carries a verbatim quote + a `file:line` that was opened and confirmed. Severity requires a named trigger and a concrete bad outcome. Style/naming excluded. Confidence: `confirmed` (code-verified or measured) / `plausible` (mechanism verified, trigger narrow or environment-dependent).
-
-Runtime-check environment: vitest 5.0.0, `npx vitest run` — baseline suite 45 files / 240 tests, all passing, before any audit edits.
-
----
-
-## Findings
-
-### F-01 · HIGH · Restart never starts a new game — replays resume or freeze the old session
-**Confidence:** confirmed (code trace; React 18/19 automatic batching)
-**Location:** `src/App.tsx:22-25`, `src/App.tsx:46-51`, `src/components/GameCanvas.tsx:16-32`, `src/stores/useGameStore.ts:65-72,84`, `src/game/engine.ts:263,480,526`
-
-```tsx
-// App.tsx:22-25
-const start = useCallback(() => {
-  reset();
-  startGame();
-}, [reset, startGame]);
-```
-```tsx
-// App.tsx:46-51 — GameCanvas has no `key`; its position in the tree is stable
-{showGame && (
-  <GameCanvas
-    callbacks={callbacks}
-    onReady={(g) => setGameInstance(g)}
-  />
-)}
-```
-```ts
-// GameCanvas.tsx:26-30 — the Game is created exactly once per mount
-const game = new Game(canvas, proxy);
-game.init();
-game.start();
-onReady?.(game);
-return () => game.destroy();
-```
-```ts
-// useGameStore.ts:84
-reset: () => set({ ...initialState, screen: "title" }),
-```
-
-**Trigger:** click **ABANDON & RESTART** in the pause overlay, or press Enter / the restart button on the win/lose screen.
-**Impact:** `reset()` and `startGame()` are two synchronous store writes inside one event handler; React 18/19 batches them, so the intermediate `screen: "title"` never commits and `GameCanvas` never unmounts (`showGame = screen !== "title"` stays true). The `useEffect(..., [])` never re-runs, so **no new `Game` is created and the old engine keeps all state**. Consequences, all reachable from the UI:
-1. Restart from pause: `engine.paused` is still `true` and nothing calls `engine.setPaused(false)`, so `update(dt)` stays gated (`engine.ts:526`: `if (!this.paused && !this.dialogue && !this.ended) this.update(dt);`). The world is frozen; pressing Esc then *resumes the old run* (old HP, position, enemies) via `engine.ts:481-484` → `togglePause()`.
-2. Restart after win/lose: `engine.ended === true` makes `onKeyDown` return before any handling (`engine.ts:480`: `if (this.ended) return;`) — permanently frozen; even Esc is dead. Only a full page reload recovers.
-3. The store HUD reset in `startGame()` (`useGameStore.ts:70`: `hud: initialHud`) is overwritten within 0.1 s because the stale engine's loop keeps calling `pushHud` (`engine.ts:529-533`) through the still-live callbacks — the "new" run displays the old run's HP/shards.
-4. `reset()` nulls `gameInstance`, but `onReady` never fires again, so `gameRef.current` (`App.tsx:27-32`) keeps driving the stale engine from `DialogueBox`/`PauseOverlay`.
-**Suggested fix:** force a remount identity — e.g. `<GameCanvas key={runId} … />` with `runId` bumped in `start()` — or destroy the previous instance and null `gameInstance`/`gameRef` before remount; add an `engine.reset()` for defense in depth.
-
----
-
-### F-02 · MEDIUM · Enemy velocity is integrated twice per frame — enemies move ~24% faster than configured, and speed varies with frame rate
-**Confidence:** confirmed (measured with the real `AISystem` + `MovementSystem`)
-**Location:** `src/game/engine.ts:783` and `src/game/engine.ts:804`
-
-```ts
-// engine.ts:783 — first integration, pre-AI
-if (Math.abs(e.vx) > 1 || Math.abs(e.vy) > 1) this.moveEntity(e, e.vx * dt, e.vy * dt);
-```
-```ts
-// engine.ts:804 — second integration, post-AI (same velocity field)
-this.moveEntity(e, e.vx * dt, e.vy * dt);
-```
-**Trigger:** any moving enemy (a steady chase keeps `|vx| > 1`).
-**Impact (measured, 1 s steady-state window, sentinel `speed = 90`):**
-
-| integration | 60 fps | 30 fps |
-|---|---|---|
-| engine as written (two moves/frame) | **112.0 px/s** | **123.1 px/s** |
-| single-integration reference | 56.5 px/s | — |
-
-Configured speed is exceeded by 24% at 60 fps and 37% at 30 fps, and effective speed is frame-rate dependent (≈108–123 px/s across 10–144 fps). The same double integration applies to hit knockback (`engine.ts:709-710`: `e.vx += dx * 430 * f;`), roughly doubling fling distance versus the single-integration model. Concrete outcome: combat pacing silently differs from the tuned constants (`WRATH_SPEED`/`SENTINEL_SPEED`/`ADEPT_SPEED`/`BOSS_SPEED`, engine.ts:49-67) and differs between players at different frame rates.
-**Suggested fix:** remove the pre-AI move at line 783 and keep only line 804 (the post-AI velocity already carries the knockback impulse), or make exactly one of the two moves own AI motion and the other own knockback — never both integrating the same velocity in one frame.
-
----
-
-### F-03 · LOW · Boss summons can spawn inside solid rock and are permanently immobile
-**Confidence:** confirmed (mechanism measured; spawn-site geometry)
-**Location:** `src/game/engine.ts:815-819`; contrast `src/game/engine.ts:303-306`; arena geometry `src/game/map.ts:115-122`
-
-```ts
-// engine.ts:815-819 — no walkability check, unlike map spawns
-summonAdd(e: Enemy) {
-  const ang = Math.random() * Math.PI * 2;
-  const x = e.x + Math.cos(ang) * 60;
-  const y = e.y + Math.sin(ang) * 60;
-  const w = this.makeEnemy("wraith", x, y);
-```
-```ts
-// engine.ts:303-306 — map spawns DO resolve to walkable tiles
-for (const es of this.map.enemySpawns) {
-  const t = this.findWalkableTile(es.x, es.y);
-  this.enemies.push(this.makeEnemy(es.type, t.x, t.y));
-}
-```
-**Trigger:** boss below 45% HP (`AISystem.ts:152`) standing within ~60 px of the arena's rock ring (rock band at 6–8.4 tiles around `bossCenter`, map.ts:119-120) with the random summon angle pointing outward — the wraith lands 60 px from the boss, i.e. inside `T.ROCK`.
-**Impact (measured):** `moveEntity` cannot displace an entity whose body is inside solid tiles (verification: x/y unchanged after forced moves) — the summoned wraith is frozen for the rest of the fight. It is hittable only if within sword reach of the wall; deeper spawns sit as inert obstacles that still inflate the "The Sundered" counter (`GameFlowSystem.ts:49`). No win-condition dependency, hence LOW.
-**Suggested fix:** route the summon position through `findWalkableTile` (or re-roll the angle until `!hitsSolid(x, y, r)`), mirroring the map-spawn path.
-
----
-
-### F-04 · LOW · Melee swings hit through a full wall tile
-**Confidence:** confirmed (measured with the real `CombatSystem`)
-**Location:** `src/game/systems/CombatSystem.ts:38-51` (`attackBox`) and `:53-57` (`rectCircle`); call path `engine.ts:700-703`
-
-```ts
-// CombatSystem.ts:42-45 — "right" box extends L=42 px from the player's center
-case "right":
-  return { x: player.x, y: player.y - Wd / 2, w: L, h: Wd };
-```
-```ts
-// CombatSystem.ts:53-57 — closest-point circle test, no line-of-sight check
-rectCircle(b: RectHitbox, cx: number, cy: number, cr: number) {
-  const nx = Math.max(b.x, Math.min(cx, b.x + b.w));
-  const ny = Math.max(b.y, Math.min(cy, b.y + b.h));
-  return (cx - nx) ** 2 + (cy - ny) ** 2 < cr * cr;
-}
-```
-**Trigger (measured):** player at `x = 21` (r = 11, corner touching the wall tile spanning x ∈ [32, 64]) facing right; enemy at `x = 77` (pressed against the far face, r = 13). `attackBox` = `{x:21, w:42}` reaches x = 63; `rectCircle(box, 77, 100, 15)` returned **true** — a hit across the 32 px wall.
-**Impact:** the player can damage enemies they cannot see and that cannot reach them, on any 1-tile-thick ruin/spire wall. Minor unfairness/exploit, no crash.
-**Suggested fix:** before applying the hit, sample `hitsSolid` along the segment from player center to the enemy (or require `tileAtPx` of the box's leading edge to be non-solid).
-
----
-
-### F-05 · LOW · A game-loop exception freezes the game silently and leaves window listeners attached
-**Confidence:** confirmed (behavior read directly from the catch block)
-**Location:** `src/game/engine.ts:534-539`
-
-```ts
-    } catch (e) {
-      console.error("Game loop error:", e);
-      this.running = false;
-      cancelAnimationFrame(this.raf);
-      this.raf = 0;
-    }
-```
-**Trigger:** any exception thrown inside `update(dt)` or `renderGame(this)` during a frame (e.g. a renderer error or a future code change that throws mid-update).
-**Impact:** the error goes to the console only — no callback fires, `destroy()` is not called, so the window `keydown`/`keyup`/`blur` listeners bound by `InputSystem.bind` (`InputSystem.ts:20-22`) and the `resize` listener (`engine.ts:315`) remain attached and keep mutating engine state (`onKeyDown` runs `startAttack`/`tryInteract` regardless of `running`). The React app still shows the play screen over a frozen canvas with no user-visible error; the only recovery is pause-navigate or reload. The `Game` instance is retained by those listeners until unmount.
-**Suggested fix:** in the catch, call `this.destroy()` (removes listeners, stops RAF), surface the failure via a new `GameCallbacks.onFatalError` so the store can show an error/restart screen.
-
----
-
-### F-06 · LOW · `Game.init()` failures propagate uncaught out of a React effect — blank screen, no boundary
-**Confidence:** plausible (mechanism verified; trigger is environment-dependent)
-**Location:** `src/components/GameCanvas.tsx:26-28`; rethrow `src/game/engine.ts:329`; context-failure paths `src/game/engine.ts:254-257`, `src/game/render/renderer.ts:264-267`
-
-```tsx
-// GameCanvas.tsx:26-28 — init() may throw; there is no try/catch or error boundary upstream
-const game = new Game(canvas, proxy);
-game.init();
-game.start();
-```
-```ts
-// engine.ts:328-329
-this.destroy();
-throw e;
-```
-**Trigger:** `canvas.getContext("2d")` returning `null` (engine.ts:254-257) or the static canvas context failing (renderer.ts:264-267) — unsupported/limited browser environments.
-**Impact:** the exception escapes a passive effect; with no error boundary anywhere in `App.tsx`, React unmounts the tree → blank page with only a console error. The player gets no actionable feedback.
-**Suggested fix:** wrap effect body in try/catch and report via a callback/state (or add a top-level React error boundary) so the UI can show a "cannot start" screen.
-
----
-
-### F-07 · LOW · Projectile player-hit check runs before the solid-tile check — corner-graze damage through a wall
-**Confidence:** plausible (frame order read directly; face-on case measured impossible, corner case geometrically reachable)
-**Location:** `src/game/systems/CombatSystem.ts:95-99` vs `:103-105`
-
-```ts
-// CombatSystem.ts:95 — player hit is tested first, even inside a wall tile
-if (Math.hypot(pr.x - player.x, pr.y - player.y) < pr.r + player.r && player.dying <= 0 && player.invuln <= 0 && !player.dashing) {
-  onPlayerHit(pr);
-  projectiles.splice(i, 1);
-  continue;
-}
-```
-```ts
-// CombatSystem.ts:103 — solid consumption happens after
-if (onSolidHit(pr)) {
-  projectiles.splice(i, 1);
-}
-```
-**Trigger:** a projectile's *first* position inside a solid tile landing within `pr.r + player.r` = 17 px of the player — measured impossible face-on across a 1-tile wall (entry edge is 32 + 11 = 43 px from a far-side player), but reachable at corners: the player may hug a wall tile corner (center 11 px from one face) while a diagonal projectile clips that same tile within 17 px of them.
-**Impact:** 1 damage delivered in the same frame the projectile should have been destroyed by the wall — damage originating from inside a wall at a corner. Narrow alignment window; the burst effect also plays inside the wall.
-**Suggested fix:** run the `onSolidHit` check before the player-hit check inside `processProjectiles` (or skip the player test when the projectile's current tile is solid).
-
----
-
-### F-08 · LOW · Typecheck is red: `tsc --noEmit` fails with unused-import errors
-**Confidence:** confirmed (executed during this audit)
-**Location:** `src/game/engine.ts:9`, `src/game/systems/AISystem.ts:1`; gate `tsconfig.json:26`
-
-```ts
-// engine.ts:9
-  HudData,
-```
-```ts
-// AISystem.ts:1
-import type { Dir, EnemyType } from "../types";
-```
-**Trigger:** run `npx tsc --noEmit` (tsconfig enables `noUnusedLocals`, tsconfig.json:26). Measured output: `error TS6196: 'HudData' is declared but never used.` and `error TS6196: 'Dir' is declared but never used.`; exit code 2.
-**Impact:** the project's own type-quality gate fails; any CI or pre-commit typecheck blocks. Note `npm run build` runs only `vite build`, so the red gate is invisible in the default build path — type drift can accumulate unnoticed.
-**Suggested fix:** remove the two unused imports; wire `tsc --noEmit` into the `build` script so the gate actually runs.
-
----
-
-## Strengths (same evidence standard)
-
-### S-01 · Symmetric, leak-free listener and RAF lifecycle
-`InputSystem.bind` adds `keydown`/`keyup`/`blur` (`src/game/systems/InputSystem.ts:20-22`) and `destroy` removes exactly those plus clears state (`:25-33`); `engine.destroy()` cancels the RAF and removes the resize listener (`src/game/engine.ts:333-339`); `GameCanvas` returns `() => game.destroy()` as effect cleanup (`src/components/GameCanvas.tsx:30`). Verified compatible with React StrictMode double-mounting (`src/main.tsx:11`): the first instance is fully torn down before the second is created.
-
-### S-02 · Frame-loop hardening against tab switches and stalls
-```ts
-// engine.ts:521-522
-if (!isFinite(dt) || dt < 0) dt = 0;
-if (dt > 0.05) dt = 0.05;
-```
-Non-finite/negative delta is zeroed and the step is capped at 50 ms — returning to a backgrounded tab cannot teleport entities or explode physics. The next frame is requested before the update work (`engine.ts:517`) and cancelled deterministically in the catch path (`:537`).
-
-### S-03 · Init failure rolls back partial construction
-```ts
-// engine.ts:321-330 (excerpt)
-} catch (e) {
-  this.initialized = false;
-  this.enemies = [];
-  this.projectiles = [];
-  ...
-  this.destroy();
-  throw e;
-}
-```
-A failure mid-`init()` (map gen, static canvas, input binding) clears all partially populated arrays, unbinds listeners, marks the engine uninitialized, and rethrows — no half-initialized game is ever observable.
-
-### S-04 · Out-of-bounds is treated as solid — entities and projectiles cannot leave the world
-```ts
-// MovementSystem.ts:29-33
-solidAtIdx(i: number): boolean {
-  if (i < 0 || i >= this.map.solid.length) return true;
-  ...
-  if (!this.map.wardUnlocked && this.map.wardTiles.has(i)) return true;
-```
-`tileAtPx` returns `-1` outside the map (`MovementSystem.ts:25`), which `solidAtIdx` maps to solid — movement clamps to the world and stray projectiles die at the edge (`engine.ts:834-840`) instead of touching void indices.
-
-### S-05 · Sub-stepped, axis-separated collision prevents tunneling
-```ts
-// MovementSystem.ts:51-55 — ≤2 px per step, per axis
-const m = Math.min(2, rem);
-if (!this.hitsSolid(e.x + s * m, e.y, e.r)) e.x += s * m;
-else break;
-```
-Even the 520 px/s dash (~8.7 px/frame) is applied in ≤2 px increments with 5-point (corner + center) sampling (`MovementSystem.ts:36-46`), so no 32 px tile can be skipped at any supported speed.
-
-### S-06 · No injection surface — all dynamic text goes through React-escaped JSX
-Sign texts, dialogue, HUD messages, and float-text are rendered as JSX children (`src/components/DialogueBox.tsx:23`: `{data.text}`; `src/components/HUD.tsx:106`: `{hud.message}`). Repo-wide search found **no** `dangerouslySetInnerHTML`, `innerHTML`, `document.write`, `eval`, `localStorage`, `fetch`, `XMLHttpRequest`, or `WebSocket` anywhere under `src/`. Canvas `fillText` calls are paint-only sinks. No backend exists, so there are no auth surfaces to audit.
-
-### S-07 · HUD projection clamps hostile values
-```ts
-// GameFlowSystem.ts:39,41,51
-hp: Math.max(0, Math.ceil(state.player.hp)),
-stamina: Math.max(0, state.player.stamina),
-bossHp: state.boss && state.boss.alive && state.boss.maxHp > 0 ? Math.max(0, state.boss.hp / state.boss.maxHp) : 0,
-```
-Negative HP from damage overshoot and a zero-`maxHp` division are both guarded before reaching React.
-
-### S-08 · Deterministic world with an explicitly guarded ward gate
-Map generation is seeded (`src/game/map.ts:46`: `mulberry32(0x9e3779b1)`; PRNG at `:4-12`), producing an identical world every run — reproducible bug reports. Road carving refuses to touch ward tiles (`map.ts:131-132`: `if (!inB(x, y) || wardSet.has(idx(x, y))) return;`), so generated paths can never bypass the three-shard ward.
-
-### S-09 · Callback freshness pattern prevents stale closures
-`GameCanvas` mirrors the latest callbacks into `cbRef.current = callbacks` on every render (`src/components/GameCanvas.tsx:13-14`) and the engine calls a stable proxy object (`:19-25`), so engine→React callbacks always invoke current handlers even though the engine is constructed once.
-
-### S-10 · AI guards against divide-by-zero and hostile-state damage
-```ts
-// AISystem.ts:48
-const dist = Math.hypot(dx, dy) || 1;
-```
-and contact damage is gated on `ctx.player.dying <= 0 && ctx.player.invuln <= 0 && !ctx.player.dashing` (`AISystem.ts:103`, `:157`) — no NaN propagation from an exact-overlap chase, and no damage while the player is invulnerable, dashing, or dead.
-
-### S-11 · Test suite covers core system contracts (7/7 passing)
-`npx vitest run`: 4 files, 7 tests, all pass — adept/boss telegraph timing (`src/game/systems/AISystem.test.ts:48-77`), projectile solid-consumption (`src/game/systems/CombatSystem.test.ts:5-35`), HUD stamina projection (`src/game/systems/GameFlowSystem.test.ts:5-25`), spatial-grid query/rebuild (`src/game/core/SpatialGrid.test.ts:5-33`).
-
----
-
-## Excluded observations (not findings under the evidence rules)
-
-- `src/game/core/SpatialGrid.ts` is imported only by its own test — dead code in the app today (search: no other references). Recorded for the owner; no runtime impact, so not a finding.
-- Interact/prompt distances are duplicated as literals in `GameFlowSystem.updatePrompt` (`GameFlowSystem.ts:59,65`: `48`/`44`) and as engine constants (`engine.ts:73-74`). Currently identical; a drift would need a future edit, so no present trigger → excluded.
-- `openDialogue` (`engine.ts:930`) would read `lines[0]` of an empty array, but both call sites pass non-empty arrays (`engine.ts:956,963`), and sign texts are non-empty constants (`map.ts:200-213`) → no reachable trigger.
-- `engine.updatePrompt`'s dialogue guard (`engine.ts:582`) is unreachable (update is skipped while dialogue is open) — dead branch, no impact.
-- Keys are added to `InputSystem.keys` even while paused/in dialogue (`InputSystem.ts:43-46` runs before the engine's gate at `engine.ts:480-493`); audited end-to-end: `keyup`/`blur` always clean the set and `setPaused(true)`/`openDialogue` clear it, so no stale-movement state is reachable.
-
----
-
-## Coverage
-
-| File | Lines | Status |
-|---|---|---|
-| src/main.tsx | 14 | read |
-| src/App.tsx | 71 | read (F-01) |
-| src/index.css | 112 | read |
-| src/components/GameCanvas.tsx | 35 | read (F-01, F-06) |
-| src/components/HUD.tsx | 112 | read (S-06) |
-| src/components/DialogueBox.tsx | 39 | read (S-06) |
-| src/components/PauseOverlay.tsx | 35 | read |
-| src/components/TitleScreen.tsx | 80 | read |
-| src/components/EndScreen.tsx | 62 | read |
-| src/game/engine.ts | 1055 | read in full (F-01..F-03, F-05, F-08, S-01..S-03) |
-| src/game/map.ts | 248 | read in full (S-08) |
-| src/game/math.ts | 47 | read |
-| src/game/constants.ts | 34 | read |
-| src/game/types.ts | 67 | read |
-| src/game/render/renderer.ts | 860 | read in full (S-06) |
-| src/game/systems/AISystem.ts | 161 | read (F-02 context, S-10) |
-| src/game/systems/CombatSystem.ts | 108 | read (F-04, F-07) |
-| src/game/systems/GameFlowSystem.ts | 82 | read (S-07) |
-| src/game/systems/InputSystem.ts | 57 | read (S-01) |
-| src/game/systems/MovementSystem.ts | 79 | read (F-03 proof, S-04, S-05) |
-| src/game/core/SpatialGrid.ts | 103 | read (excluded observation) |
-| src/stores/useGameStore.ts | 97 | read (F-01) |
-| src/stores/index.ts | 1 | read |
-| src/utils/cn.ts | 6 | read |
-| src/vite-env.d.ts | 1 | read |
-
-Test files read: `AISystem.test.ts` (78), `CombatSystem.test.ts` (36), `GameFlowSystem.test.ts` (26), `SpatialGrid.test.ts` (34).
-
----
-
-## Verification appendix (runtime evidence)
-
-A temporary harness `src/game/systems/__audit_verify.test.ts` was created for this audit and **removed afterwards** (repo left as found, apart from this log). It imported the real `AISystem`, `MovementSystem`, and `CombatSystem` and replicated `Game.updateEnemy`'s exact per-frame sequence (`engine.ts:783-785, 790-804`). Methodology note: the measurement teleports the chase target 300 px ahead each frame so the enemy never reaches it and the window (frames 60–120) is pure steady state.
-
-Commands and results:
-
-```
-$ npx vitest run                                  # baseline, before audit edits
-Test Files  4 passed (4)   Tests  7 passed (7)    EXIT:0
-
-$ npx tsc --noEmit
-src/game/engine.ts(9,3): error TS6196: 'HudData' is declared but never used.
-src/game/systems/AISystem.ts(1,15): error TS6196: 'Dir' is declared but never used.
-EXIT:2
-
-$ npx vitest run src/game/systems/__audit_verify.test.ts   # harness (4/4 passed)
-[AUDIT] sentinel configured=90 px/s | engine(2x-integration)=112.0 px/s | single-integration reference=56.5 px/s
-[AUDIT] sentinel engine speed @60fps=112.0 px/s @30fps=123.1 px/s
-[AUDIT] entity inside solid after move attempts: x=500 y=500 (spawned 500,500)
-[AUDIT] attackBox={"x":21,"y":80,"w":42,"h":40} (reaches x=63, wall far face=64)
-[AUDIT] rectCircle(enemy@77 through wall)=true
-```
-
-Sink-safety sweep (source of S-06): regex search over `src/` for `dangerouslySetInnerHTML|innerHTML|localStorage|sessionStorage|document\.write|eval\(` and `fetch\(|XMLHttpRequest|WebSocket` — zero hits in source (matches existed only inside the prebuilt `dist/index.html` bundle internals and markdown prose).
-
-Dead-code sweep (excluded observation): `SpatialGrid` appears in `src/game/core/SpatialGrid.ts` and `src/game/core/SpatialGrid.test.ts` only.
-
-Post-audit state: verification harness deleted; `npx vitest run` re-run clean (4 files / 7 tests passing); working tree contains only the new `AUDIT_LOG.md`.
-
-
-
-
-
-
-
----
-
-# Polish pass — 2026-09-20 (branch `arena/01a0bda1-eldrinth`, base `e0c24e5`)
-
-**Method:** baseline `tsc --noEmit` (clean) and `vitest run` (30 files / 197 tests, all passing),
-then a headless harness (`src/game/headlessGame.ts`) that boots the real `Game` — real map, real
-collision, real AI, real combat — under vitest, so findings below are measured rather than inferred.
-Every fix carries a regression test that was confirmed to fail against the unfixed code.
-
-## Findings and fixes
-
-### P-01 · CRITICAL · Four authored evidence notes were permanently unreadable
-**Location:** `src/game/map.ts` (frontier sign generation), `src/game/engine.ts` `tryInteract`
-
-The frontier generator wrote a generic `Road of Wayfarers` sign on **every** exit tile first, then
-appended the hand-written records. Six of those records sit on the *same tile* as a fortress gate,
-and `tryInteract` returned the **first** sign within reading distance — so the boilerplate always won.
-
-Measured by simulating the real selection rule on every tile of all 13 walkable regions:
-
-```
-[REACH] facts defined on signs: courier-orders, courier-memory, salt-graves, salt-beacon, dawn-record
-[REACH] facts actually readable: courier-orders
-```
-
-Four quest-critical facts (`courier-memory`, `salt-graves`, `salt-beacon`, `dawn-record`) could never
-be learned. Because `canResolve` requires *every* evidence fact, this blocked 3 of the 4 investigations
-— the game's headline feature — plus 4 of 8 town projects. `src/game/map.test.ts` asserted only that
-the facts existed in `map.signs`, never that they were reachable, so the suite stayed green.
-
-**Fix:** authored records are collected first; road markers are laid down afterwards and skipped for
-any tile already within `SIGN_READ_RADIUS`. `tryInteract` now opens the *nearest* sign instead of the
-first in array order, so readability can no longer depend on insertion order.
-**Test:** `src/game/signReadability.test.ts` (verified failing before the fix).
-
-### P-02 · HIGH · One town project required a fact nothing ever grants
-**Location:** `src/game/quests.ts:86`
-
-`crater-watch:path` required `warden:fortress.starfall-watch`, but `FORTRESS_WARDEN_FACTS` remaps that
-fortress to grant `warden:starfall-moors` (`escalation.ts:114`). The required string existed nowhere
-else in the source, so the project was uncompletable by any route. Fixed to require `warden:starfall-moors`,
-the fact the same fortress's quest evidence already uses.
-
-### P-03 · MEDIUM · Enemies moved at ~1.27× their configured speed
-**Location:** `src/game/engine.ts` `updateEnemy`
-
-The same `e.vx`/`e.vy` was integrated twice per step — once before the AI ran, once after. Measured over
-one second of real fixed-step simulation:
-
-| enemy | configured | before | after |
-|---|---|---|---|
-| sentinel | 90 px/s | **114.7** | **87.0** |
-| adept (0.7× approach) | 49 px/s | **62.4** | **47.4** |
-
-The residual ~3% is the steering ramp; at 30 fps the figure is now 87.8 vs 87.0 at 60 fps.
-**Correction to F-02 above:** that finding claimed speed "varies with frame rate". It does not — `FixedStepLoop`
-advances at a fixed 1/60 regardless of display rate. The overshoot was real; the frame-rate claim was not.
-**Note for tuning:** enemies are now ~21% slower than they were. That is what the `*_SPEED` constants
-always declared; raise them if the previous pace is preferred.
-**Test:** `src/game/enemyMotion.test.ts` (sentinel measured 117.4 against a 94.5 bound when reverted).
-
-### P-04 · MEDIUM · Melee swings reached a full tile through solid rock
-**Location:** `src/game/systems/CombatSystem.ts` `resolvePlayerSwing`, `src/game/engine.ts` `doAttackHit`
-
-The 42px swing box has no terrain test. An enemy stopped by a wall presents its surface 32px from the
-player's centre, so the box connected. Measured: enemy flush against the far face, `hp 5 -> 4`.
-**Fix:** added `Game.losClear` (half-tile sampling strictly between the endpoints) and a `SwingOptions.occluded`
-hook; occluded targets are skipped. Confirmed `hp 5 -> 5` after, with same-side hits still landing.
-**Test:** `src/game/combatOcclusion.test.ts` (fails when the occlusion check is neutralised).
-
-### P-05 · LOW · Touch pause never paused the simulation
-**Location:** `src/App.tsx`
-
-`VirtualControls.onTogglePause` called the **store** action `setPaused`, not the engine's. The overlay
-appeared while `engine.paused` stayed false. Measured: with `engine.paused === false`, 60 steps advanced
-`simulationTime` by 1.000s; with `engine.setPaused(true)`, 0.000s. Now routed through
-`game.togglePause()`, which flips the engine *and* publishes `onPause`, keeping one authority.
-**Test:** `src/game/pauseControl.test.ts`.
-
-### P-06 · LOW · "ABANDON & RESTART" fired on a single tap
-**Location:** `src/components/PauseOverlay.tsx`
-
-An unrecoverable action behind one button with no confirmation. Now a two-step confirm that decays back
-to the menu after 6s. (React-only; verified by typecheck, build and Vite transform, not by a test.)
-
-### P-07 · LOW · Road signs read as broken prose
-**Location:** `src/game/map.ts`
-
-All 12 generated markers rendered as `The road leads toward The Old Lands.` (capitalised article) or
-`toward Starfall Moors.` (no article). A `roadDestination` helper now lowercases an existing article and
-supplies one where missing. Covered by `signReadability.test.ts`.
-
-### P-08 · LOW · Journal could sit on a hidden tab
-**Location:** `src/components/Journal.tsx`
-
-`availableTabs` hides empty categories but `activeTab` was resolved against the full `TABS` list, so a
-selected category could vanish and leave the panel showing an unselected filter. The active tab is now
-resolved against the tabs actually on offer. (React-only; no test.)
-
-## Corrections to earlier findings in this log
-
-- **F-02** — the double integration was real; the "speed varies with frame rate" claim was not (fixed-step loop). Fixed as P-03.
-- **F-07** — projectile player-hit before solid-hit: **not reproducible on any real trajectory.** `processProjectiles` integrates position first, and the bolt is consumed the frame its centre enters the wall — 43px from a player standing flush on the far side. I kept the reorder (terrain now resolves before the player) as defensive precedence, but it changes no observable behaviour. Verified by running the same trajectory against both orderings: identical result.
-- **F-01 / F-03 / F-08** — already fixed at base `e0c24e5` (verified: `key={sessionId}` remount, `summonAdd` radial walkability search, clean `tsc --noEmit`).
-
-## What was checked and found sound
-
-- **9000-frame seeded random-input soak** across >4 regions including fortress and town interiors:
-  no exceptions, no non-finite coordinates, no map escapes, no particle/text/projectile leaks.
-  Kept as `src/game/simulationSoak.test.ts`.
-- **Renderer allocation:** `drawSortedWorldObjects` builds 38 closures/frame on the overworld — not a
-  bottleneck; no optimisation attempted.
-- **Save payload:** 13 KB fresh, 41 KB after a long run (~55 KB base64), so the sql.js → localStorage
-  round-trip is far from quota. Saves do fail silently in private windows; left alone as out of scope.
+# ELDRINTH — v1 Release Audit
+
+**Scope:** the whole repository at the `v1.0.0` tag: `src/`, `index.html`, `vite.config.ts`,
+`package.json`, and the shipped `dist/`. Excludes image assets and the Python sprite generator
+internals.
+**Method:** full read of the engine and shell → cross-function trace (input → sink, callback →
+store, update-order → mutation) → runtime verification with the real `MovementSystem`,
+`map.ts` generator and `headlessGame` harness → a subdirectory hosting check that serves the
+production build under a path prefix and resolves every referenced asset as a browser would.
+**Rules applied:** every finding carries a `file:line` that was opened and confirmed, a named
+trigger, and a concrete bad outcome. Style and naming are out of scope.
+
+Baseline at the start of this pass: 36 test files / 217 tests passing, `vite build` succeeding, and
+`npm run build` — which gates on `tsc --noEmit` — **failing**.
 
 ## Post-pass state
 
-`tsc --noEmit` clean · `vitest run` 35 files / 213 tests passing · `npm run build` succeeds ·
-`dist/` regenerated to match.
+`tsc --noEmit` clean · `vitest run` 35 files / 214 tests passing · `npm run build` succeeds ·
+`dist/` regenerated and verified reachable from a subdirectory · main chunk 519.4 kB → 510.0 kB
+(167.5 kB → 159.0 kB gzip) · tile-chunk cache, measured across a full overworld walk, 234 MB → 64 MB.
+
+---
+
+## Release blockers, fixed
+
+### B-01 · CRITICAL · The release gate did not pass
+`npm run build` is `tsc --noEmit && vite build`, and `tsconfig.json` includes `src`. An unfinished
+performance harness sat in `src/__perf__/` and `src/game/perf.bench.test.ts`; the entry point
+imported `__stageHook` from the renderer, which did not exist. Any `git add -A` shipped a red
+build.
+
+**Fix:** moved to `bench/` with a separate vitest config, so a diagnostic tool can never gate a
+release or slow the suite (it monkey-patches `localStorage` and runs 2000-frame loops). Added the
+missing `__stageHook` to `renderGame` as real per-stage instrumentation, not a stub.
+
+### B-02 · CRITICAL · The build only worked from a domain root
+`vite.config.ts` set no `base`, so all 72 asset URLs were absolute `/assets/…`. An itch.io zip is
+served from an arbitrary path, where the region Web Worker 404s — `Game.initialize()` rejects and
+the player gets "Initialization Failed" after committing to a new run — and the sql.js wasm 404s,
+which kills every save.
+
+**Fix:** `base: process.env.ELDRINTH_BASE ?? "./"`, overridable for a fixed deployment path.
+Verified by serving `dist/` under `/itch/eldrinth/` and resolving every reference: 72/72 reachable,
+worker and wasm both 200. The same check fails against an absolute base, so it is a real guard.
+
+### B-03 · HIGH · The shard counter was farmable
+Dying in a fortress sets `discardCurrentRegion`, which deletes that region's snapshot; re-entering
+re-seeds the shard from `map.shards`, and `world.shards` was incremented again on pickup and never
+decremented. The counter could exceed nine, and the "nine people" premise the whole story rests on
+stopped meaning anything.
+
+**Fix:** `WorldState.harvestedShards` records *which vessel* was emptied, persisted in the
+snapshot. The count is now `harvestedShards.size`, and a stale shard item in an already-emptied
+region is cleared without re-awarding. Old saves are backfilled from the shard count against the
+canonical fortress order.
+
+### B-04 · HIGH · "Abandon & Restart" did not restart
+`App.restart` called `startGame()` while `checkpoint` still held the last autosave, so the pause
+menu's only destructive action silently rewound the run by up to ten seconds — and it was the only
+in-game way back from a bad state.
+
+**Fix:** `restart` drops the checkpoint and closes the journal. Restart is a fresh run.
+
+### B-05 · HIGH · A settlement interior trapped the player inside solid tiles
+`interior.crater-watch.b` had its lamp glyph on the tile directly above the door, so
+`townInteriorSpawn` placed the player inside a solid `CRYSTAL`. Separately, `crater-watch` had a
+stray wall row under one cottage, so leaving that house deposited the player inside a `HOUSE_WALL`.
+Both were recoverable by pressing E (the exit is 32px away and `SIGN_READ_RADIUS` is 44), but the
+geometry was visibly broken.
+
+**Fix:** moved the lamp; removed the stray wall row. New test walks the entire world graph and
+asserts every transition — in both directions, since the entrance and the return are exits of
+*different* maps — lands on a walkable tile. Verified to fail against each original bug.
+
+### B-06 · HIGH · Walk-through region gates oscillated
+Fortress gates are one tile (32px) from their arrival point and the trigger radius is `TILE * 1.35`
+(43.2px), so a player who stopped to look around was ejected, then ejected straight back,
+rebuilding the region each time.
+
+**Fix:** gates are disarmed on arrival and re-arm only once the player is clear of every gate. The
+check re-evaluates against the current map, so it cannot go stale across a region change.
+
+### B-07 · HIGH · The ending was gated on content the game never said was required
+The harvest curve bills 13 maximum health across nine shards, so a pilgrim who took all nine and
+investigated nothing arrived at the boss on 5 HP against 96 HP at 1 damage per swing: 96 swings,
+~35 seconds of uninterrupted swinging, while the Unbound lands 2 damage per contact hit. Measured,
+not estimated. That player could not win, and nothing in the game said so — the objective text only
+ever reported that the ward was open.
+
+**Fix, in two parts.** Carrying the shards now deepens the blade (`shardBladeBonus`, capped at +2,
+against the +5 the investigations pay, so skipping the reading is still the weaker build). And
+Orithel says plainly at the gate when the pilgrim is unprepared, which makes the knife-edge an
+informed decision and keeps "No." a real option rather than the only survivable one.
+
+### B-08 · HIGH · Dying before resting at a wayfire ended the whole run
+The checkpoint could only be set by resting at a wayfire, which is optional. A player who treated
+the first fortress gate as a challenge, died inside, and had never sat down hit `endRun("spent")`
+and lost everything.
+
+**Fix:** the arrival road is the starting anchor. Wayfires still upgrade it.
+
+### B-09 · HIGH · A crash left a frozen screen with no explanation
+`FixedStepLoop` catches, stops the RAF, then calls `onError`, which only wrote to the console. The
+player saw a still image of the game with no signal that anything had happened, and a crash inside
+the engine can never reach a React error boundary.
+
+**Fix:** `GameCallbacks.onFatal`; `GameCanvas` shows a recovery panel. Separately, a render-time
+throw in the shell unmounted the whole tree into a blank dark page, so `main.tsx` now mounts
+`ErrorBoundary`.
+
+### B-10 · HIGH · Save failures were silent, and permanent
+`slots.ts` swallowed every `localStorage` error with a `/* quota/private mode */` comment, so a
+private window or a full quota looked exactly like a working save: the title screen kept showing the
+last save and the run was discarded with no warning. A rejected `initSqlJs` was also cached in
+`dbPromise` for the life of the page, turning one transient failure into a permanently dead save
+system. And `App.tsx`'s `slotStore.load` had no `.catch`, so a failed load left Continue inert with
+no message at all.
+
+**Fix:** failures set a `PersistenceStatus` that the shell renders as a banner on the title screen
+and in game; a failed open clears `dbPromise` so the next call retries; `load` reports a real error;
+a `PRAGMA user_version` ladder means a future schema change cannot brick existing saves.
+
+### B-11 · HIGH · Keyboard-only players could not erase a save
+`TitleScreen`'s window-level handler called `preventDefault()` unconditionally on Enter/Space. A
+button's activation is the default action of `keydown`, so this cancelled it — the slot erase button
+was unreachable by keyboard, and since the screen's only stated remedy for three occupied slots is
+"erase a slot", such a player was locked out of starting a new run entirely. It also meant Enter on
+"SLOT 3" loaded slot 1.
+
+**Fix:** the handler ignores events originating from an interactive element. The same guard was
+added to `EndScreen`.
+
+### B-12 · HIGH · The content warning described content that is not in the game
+The first-launch warning and `ROADMAP.md` both promised "one reference to sexual violence recorded
+as an administrative permission". No such reference exists anywhere in the shipped text. For a
+hard-M release that is a compliance defect in one direction or the other.
+
+**Fix (per maintainer decision):** the warning now describes the game that is actually here —
+institutional violence and the killing of children — and `ROADMAP.md` matches.
+
+### B-13 · MEDIUM · Endings ignored every decision the player made
+Forty pieces of authored choice text fed into three static screens. The refusal button read "STAY"
+over a body that says "It is not rescue. It is not over", on an action that starts a new run. The
+`spent` ending told the player to "count the entries in this slot", but no death counter was
+recorded. And reaching the Spire short of nine did nothing at all, so a run could be neither
+finished nor stopped.
+
+**Fix:** an epilogue assembled by `epilogueLines()` from the investigations resolved, the choice
+made in each, the town requests completed, the warden accounts found, and the death count (now
+tracked and persisted). The turn-back is reachable and replaces the old `spent` ending. All three
+buttons read WALK AGAIN.
+
+## Also fixed
+
+- **Silent black screen on load.** Between mounting the canvas and `init()` resolving — a worker
+  spawn, 40 sprite atlases, a generated map — the player saw nothing. `GameCanvas` now has a loading
+  state.
+- **234 MB of tile-chunk canvas.** `MAX_CACHED_CHUNKS` was 128, and each chunk is two 512×512
+  canvases, so 256 MB was reachable; the 200×140 overworld is 117 chunks, so walking across the
+  frontier filled the cache to 234 MB without ever evicting. Measured before and after with
+  `npm run bench`: `CHUNKS resident=117/117 backingStoreMB=234` is now `resident=32/117
+  backingStoreMB=64`. Eviction also zeroes the canvas dimensions, so the backing store is released
+  immediately rather than at GC.
+- **~28 KB of unused manifest hashes shipped to players.** The renderer globs all 53 sprite
+  manifests eagerly, including a per-pixel hash per frame that nothing at runtime reads — the
+  `SpriteManifest` interface has no such member. A Vite plugin strips it at bundle time. The
+  integrity test that checks sheets against those hashes reads the committed files from disk, so
+  it is unaffected.
+- **Fortress braziers were never drawn.** All nine fortresses ship braziers, preload the atlas, key
+  the sprite, and punch a hole in the darkness mask — and nothing ever called the draw. Every
+  fortress was lit by an invisible fire. Now drawn in the depth-sorted pass.
+- **Escape did not close the journal from the note field.** The target guard that stops typing "l"
+  from toggling the panel also swallowed Escape, stranding the player behind a button labelled
+  "ESC / L / CLOSE". Escape is now handled before the guard.
+- **Overlay panels were not dialogs.** Pause, journal and ending had no `role="dialog"`, no
+  `aria-modal`, and no focus management, so Tab walked out into the HUD behind them. Added a
+  `Modal` primitive that moves focus in, traps Tab, and restores it on close. The dialogue line and
+  the HUD prompt/message log are now live regions.
+- **Mobile safe areas.** The HUD and touch controls were positioned from the viewport edges, putting
+  the D-pad under the home indicator and the action cluster under a notch. Added `viewport-fit=cover`
+  and safe-area helpers, and switched the root from `h-screen`/`w-screen` (100vh/100vw) to `100dvh`.
+- **Journal text could not be selected.** `user-select: none` was on the app root, so long prose and
+  the player's own notes were uncopyable. Selection is re-enabled on the journal, and the scroll
+  containers no longer rubber-band the page out from under the game.
+- **Contrast.** Thirteen text treatments failed WCAG AA, including the two numbers a player must read
+  to play (max HP, shards collected) and a 9px dialogue role label. Raised, and the visible focus ring
+  restored where `outline: none` had been substituted with colour alone.
+- **Reduced motion** applied only to the intro; the looping decorative animations now stop too.
+- **Packaging metadata.** `package.json` was still the Vite scaffold (`react-vite-tailwind`, 0.0.0,
+  no license). Now named, versioned, described and MIT-licensed, with a committed `LICENSE` and
+  `README`. Removed a conflicting `pnpm-lock.yaml` (which resolved different versions and made the
+  committed `dist/` unreproducible), a stale pnpm-only `allowScripts` block naming a version its own
+  lockfile contradicted, and an orphaned gitlink for a leaked tool worktree.
+- **Web metadata.** Favicon, `theme-color`, Open Graph and Twitter tags, a `<noscript>` explanation,
+  and a `noscript` fallback for players with JavaScript disabled.
+
+## Dead code removed
+
+`src/game/entities/` (archetypes, components, factory, pool, registry — 986 lines) and
+`core/SpatialGrid.ts` (103 lines) were imported only by themselves and their own tests. The engine
+uses flat `WorldState` arrays. `ONBOARDING.md` documented `entities/` as live architecture and a
+`spriteCatalog.ts` that does not exist; both are corrected.
+
+Four tile types — `LEDGE`, `SLOPE_UP_LEFT`, `SLOPE_UP_RIGHT`, `TRIGGER` — are defined, collided
+against and rendered, but no generator ever places them. Kept rather than deleted: removing them
+would touch collision, the renderer and four sprite atlases for no user-visible gain.
+
+## Known, not fixed
+
+- **sql.js is 658 kB of WASM** (322 kB gzip) and is the largest startup cost, fetched just to render
+  three slot labels. The snapshot is plain JSON (~20 kB), so plain `localStorage` would remove the
+  download, the emscripten glue, and the `CREATE TABLE` compatibility trap entirely. This is a
+  persistence redesign rather than a fix, and was out of scope for the v1 pass.
+- **No CI.** `dist/` is committed and must only be changed by `npm run build`; nothing enforces that.
+- **`ROADMAP.md` Milestone 2's equipment layer, per-region elite behaviours, and authored activity
+  sites are designed but not implemented.** They are now marked as such rather than written in the
+  past tense.
+- **Milestone 3 (New Pilgrimage) is not shipped** beyond the epilogue. Deferred deliberately.

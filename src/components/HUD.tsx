@@ -4,13 +4,13 @@ export default function HUD({ hud }: { hud: HudData }) {
   return (
     <div className="pointer-events-none absolute inset-0 z-10 select-none">
       {/* Top-left: vitals */}
-      <div className="absolute left-4 top-4 flex flex-col gap-2">
+      <div className="absolute inset-safe-t inset-safe-l flex flex-col gap-2">
         <div className="w-44 rounded-lg border border-rose-300/20 bg-black/45 px-3 py-2 backdrop-blur-sm">
           <div className="mb-1 flex items-center justify-between font-title text-[10px] uppercase tracking-[0.2em] text-rose-100/75">
             <span>Life</span>
             <span>
               {Math.max(0, Math.ceil(hud.hp))}
-              <span className="text-rose-200/45"> / {hud.maxHp}</span>
+              <span className="text-rose-200/80"> / {hud.maxHp}</span>
             </span>
           </div>
           <div className="h-1.5 overflow-hidden rounded-full bg-rose-950/80">
@@ -24,7 +24,7 @@ export default function HUD({ hud }: { hud: HudData }) {
           <span className="inline-block h-3 w-3 rotate-45 bg-teal-300 shadow-[0_0_8px_2px_rgba(70,240,216,0.7)]" />
           <span className="font-title text-sm tracking-wider text-teal-100">
             ANIMA {hud.shards}
-            <span className="text-teal-300/50"> / {hud.totalShards}</span>
+            <span className="text-teal-300/80"> / {hud.totalShards}</span>
           </span>
         </div>
         <div className="w-44 rounded-lg border border-cyan-300/20 bg-black/45 px-3 py-2 backdrop-blur-sm">
@@ -55,8 +55,8 @@ export default function HUD({ hud }: { hud: HudData }) {
       </div>
 
       {/* Top-right: foes remaining */}
-      <div className="absolute right-4 top-4 rounded-lg border border-rose-300/15 bg-black/45 px-3 py-2 text-right backdrop-blur-sm">
-        <div className="font-title text-[10px] uppercase tracking-[0.3em] text-rose-200/60">
+      <div className="absolute inset-safe-t inset-safe-r rounded-lg border border-rose-300/15 bg-black/45 px-3 py-2 text-right backdrop-blur-sm">
+        <div className="font-title text-[10px] uppercase tracking-[0.3em] text-rose-200/80">
           The Sundered
         </div>
         <div className="font-title text-lg text-rose-100">{hud.enemies}</div>
@@ -80,7 +80,7 @@ export default function HUD({ hud }: { hud: HudData }) {
       {/* Interact prompt */}
       {hud.prompt && !hud.bossActive && (
         <div className="absolute bottom-7 left-1/2 -translate-x-1/2">
-          <div className="rounded-md border border-teal-200/30 bg-black/60 px-4 py-1.5 font-title text-sm tracking-wider text-teal-100 backdrop-blur-sm">
+          <div role="status" aria-live="polite" className="rounded-md border border-teal-200/30 bg-black/60 px-4 py-1.5 font-title text-sm tracking-wider text-teal-100 backdrop-blur-sm">
             {hud.prompt}
           </div>
         </div>
@@ -90,6 +90,8 @@ export default function HUD({ hud }: { hud: HudData }) {
       {hud.message && (
         <div
           key={hud.messageId}
+          role="status"
+          aria-live="polite"
           className="msg-fade pointer-events-none absolute bottom-16 left-0 right-0 flex justify-center px-4 text-center"
         >
           <span className="rounded bg-black/55 px-4 py-1 font-serif text-base italic text-amber-50/90 backdrop-blur-sm">

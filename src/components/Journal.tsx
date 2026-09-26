@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import Modal from "./Modal";
 import type { JournalEntry } from "@/game/types";
 
 type TabId = "all" | "intake" | "warden" | "town" | "investigations" | "notes";
@@ -74,19 +75,30 @@ export default function Journal({
   }, [entries, activeTabDef]);
 
   return (
-    <div
+    <Modal
+      labelledBy="journal-heading"
       className="absolute inset-0 z-30 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
-      onClick={onClose}
+      onKeyDown={(event) => {
+        // Escape has to work from inside the note field too, because the close
+        // button right above it advertises ESC.
+        if (event.key === "Escape") {
+          event.stopPropagation();
+          onClose();
+        }
+      }}
     >
       <section
-        className="flex max-h-[86vh] w-[min(820px,96vw)] flex-col rounded-xl border border-amber-200/25 bg-[#14100e]/95 p-6 shadow-2xl"
+        // Journal prose is real text a player may need to copy, and the note
+        // field is a real text field: selection is re-enabled for this panel
+        // even though the game surface around it suppresses it.
+        className="selectable flex max-h-[86dvh] w-[min(820px,96vw)] flex-col rounded-xl border border-amber-200/25 bg-[#14100e]/95 p-6 shadow-2xl [overscroll-behavior:contain]"
         onClick={(event) => event.stopPropagation()}
       >
         {/* Header */}
         <div className="mb-4 flex items-baseline justify-between border-b border-amber-200/15 pb-3">
           <div>
-            <div className="font-title text-xs tracking-[.35em] text-amber-200/60">FIELD JOURNAL</div>
-            <h2 className="font-serif text-3xl text-amber-100">Notes, Cores & Testimonies</h2>
+            <div className="font-title text-xs tracking-[.35em] text-amber-200/75">FIELD JOURNAL</div>
+            <h2 id="journal-heading" className="font-serif text-3xl text-amber-100">Notes, Cores &amp; Testimonies</h2>
           </div>
           <button
             onClick={onClose}
@@ -98,13 +110,15 @@ export default function Journal({
 
         {/* Tab filters */}
         {availableTabs.length > 1 && (
-          <div className="mb-4 flex flex-wrap gap-1.5 border-b border-amber-200/10 pb-2">
+          <div role="tablist" aria-label="Journal categories" className="mb-4 flex flex-wrap gap-1.5 border-b border-amber-200/10 pb-2">
             {availableTabs.map((tab) => {
               const count = entries.filter(tab.filter).length;
               const isActive = activeTabDef.id === tab.id;
               return (
                 <button
                   key={tab.id}
+                  role="tab"
+                  aria-selected={isActive}
                   onClick={() => setActiveTab(tab.id)}
                   className={`rounded-md border px-2.5 py-1 font-title text-[11px] tracking-wider transition ${
                     isActive
@@ -120,9 +134,9 @@ export default function Journal({
         )}
 
         {/* Content list with scrolling */}
-        <div className="flex-1 space-y-4 overflow-y-auto pr-2">
+        <div className="flex-1 space-y-4 overflow-y-auto pr-2 [overscroll-behavior:contain]">
           {displayedEntries.length === 0 ? (
-            <div className="py-8 text-center font-serif italic text-amber-100/50">
+            <div className="py-8 text-center font-serif italic text-amber-100/75">
               No entries recorded in this category yet. Explore ruins, speak with townsfolk, and investigate the Spire's fortresses to uncover the truth.
             </div>
           ) : (
@@ -157,7 +171,7 @@ export default function Journal({
 
         {/* Note entry at bottom */}
         <div className="mt-4 border-t border-amber-100/10 pt-3">
-          <label htmlFor="journal-note" className="font-title text-[10px] tracking-[0.2em] text-amber-100/55">
+          <label htmlFor="journal-note" className="font-title text-[10px] tracking-[0.2em] text-amber-100/75">
             MY OBSERVATION
           </label>
           <div className="mt-1.5 flex gap-2">
@@ -167,6 +181,10 @@ export default function Journal({
               maxLength={1200}
               rows={2}
               placeholder="Record a landmark, rumour, or reflection (Ctrl+Enter to write)…"
+              spellCheck={false}
+              autoCorrect="off"
+              autoCapitalize="sentences"
+              enterKeyHint="enter"
               onChange={(event) => setNote(event.target.value)}
               onKeyDown={(event) => {
                 if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
@@ -185,6 +203,6 @@ export default function Journal({
           </div>
         </div>
       </section>
-    </div>
+    </Modal>
   );
 }

@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import endingBg from "@/assets/ending.jpg";
+import Modal from "./Modal";
 import type { EndingId } from "@/game/core/SceneStack";
 
 interface EndingCopy {
@@ -70,13 +71,17 @@ export default function EndScreen({
 
   const notes = epilogue ?? [];
   return (
-    <div className="absolute inset-0 z-40 flex flex-col items-center justify-center overflow-hidden">
+    <Modal
+      labelledBy="ending-heading"
+      className="absolute inset-0 z-40 flex flex-col items-center justify-center overflow-hidden"
+    >
       <img src={endingBg} alt="" className={`absolute inset-0 h-full w-full object-cover ${copy.image}`} />
       <div className={`absolute inset-0 ${copy.scrim}`} />
       <div className="absolute inset-0 vignette" />
 
       <div className="relative z-10 flex max-w-2xl flex-col items-center overflow-y-auto px-6 py-10 text-center">
         <h1
+          id="ending-heading"
           className={`font-title text-5xl font-bold tracking-[0.15em] drop-shadow-[0_2px_18px_rgba(0,0,0,0.9)] sm:text-6xl ${copy.heading}`}
         >
           {copy.title}
@@ -113,6 +118,6 @@ export default function EndScreen({
           {copy.button}
         </button>
       </div>
-    </div>
+    </Modal>
   );
 }
