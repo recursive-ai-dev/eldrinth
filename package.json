@@ -13,6 +13,7 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "verify:release": "node tools/verify-release.mjs",
     "bench": "vitest run --config bench/vitest.config.ts",
     "preview": "vite preview",
     "gen:sprites": "python3 tools/spritegen/gen_sprites.py",

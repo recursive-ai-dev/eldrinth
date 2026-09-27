@@ -172,9 +172,6 @@ class CreatureSpriteGenerator(SpriteGenerator):
             symmetric=symmetric,
             neighborhood=nb,
         )
-        if direction == "back":
-            # already symmetric; flipping does nothing visible on CA, that's ok
-            pass
         if direction in ("left", "right"):
             # compress x toward a profile by skipping every other empty col on far side
             sil = self._profile(sil, direction)

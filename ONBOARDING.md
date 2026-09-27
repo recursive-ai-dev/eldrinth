@@ -506,7 +506,9 @@ The production output is deliberately multi-file: JavaScript, CSS, WebAssembly, 
 atlases are emitted as separate cacheable assets under `dist/assets/`. Use `npm run preview` or any static
 HTTP server for the final check.
 
-There is no CI, no environment config, and no backend. The game is fully client-side and self-contained.
+CI runs the tests, production build, nested-path release check, and committed
+bundle comparison. There is no required environment config or backend. The
+game is fully client-side; its optional web fonts fall back to local fonts.
 
 ---
 

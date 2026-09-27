@@ -211,7 +211,6 @@ would touch collision, the renderer and four sprite atlases for no user-visible 
   three slot labels. The snapshot is plain JSON (~20 kB), so plain `localStorage` would remove the
   download, the emscripten glue, and the `CREATE TABLE` compatibility trap entirely. This is a
   persistence redesign rather than a fix, and was out of scope for the v1 pass.
-- **No CI.** `dist/` is committed and must only be changed by `npm run build`; nothing enforces that.
 - **`ROADMAP.md` Milestone 2's equipment layer, per-region elite behaviours, and authored activity
   sites are designed but not implemented.** They are now marked as such rather than written in the
   past tense.

@@ -91,14 +91,17 @@ async function downloadPortrait(char, attempt = 1) {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 60000);
-
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        "User-Agent": "Eldrinth-Portrait-Pipeline/1.0",
-      },
-    });
-    clearTimeout(timeout);
+    let res;
+    try {
+      res = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          "User-Agent": "Eldrinth-Portrait-Pipeline/1.0",
+        },
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!res.ok) {
       throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -149,11 +152,13 @@ async function main() {
 
   if (failed > 0) {
     console.error(`\nFailed to generate ${failed} portraits.`);
-    process.exit(1);
+    process.exitCode = 1;
   } else {
     console.log(`\nSuccessfully generated all ${CHARACTERS.length} character portraits!`);
   }
 }
 
-main();
-
+main().catch((error) => {
+  console.error("Portrait generation failed:", error);
+  process.exitCode = 1;
+});

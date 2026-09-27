@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { T } from "./constants";
-import { RegionRepository, type RegionSource } from "./regions";
+import { RegionRepository, WorkerRegionSource, type RegionSource } from "./regions";
 
 describe("RegionRepository", () => {
   it("lets one caller abort without cancelling a shared region load", async () => {
@@ -79,5 +79,29 @@ describe("RegionRepository", () => {
     await repository.preload("2,0", signal);
 
     expect(repository.residentCount).toBe(2);
+  });
+
+  it("rejects an unreadable worker response and terminates the worker", async () => {
+    const originalWorker = globalThis.Worker;
+    let worker!: {
+      onmessageerror: (() => void) | null;
+      terminate: ReturnType<typeof vi.fn>;
+      postMessage: ReturnType<typeof vi.fn>;
+    };
+    class FakeWorker {
+      onmessageerror: (() => void) | null = null;
+      terminate = vi.fn();
+      postMessage = vi.fn();
+      constructor() { worker = this; }
+    }
+    vi.stubGlobal("Worker", FakeWorker);
+    try {
+      const pending = new WorkerRegionSource().load("overworld", new AbortController().signal);
+      worker.onmessageerror?.();
+      await expect(pending).rejects.toThrow("response could not be read");
+      expect(worker.terminate).toHaveBeenCalledOnce();
+    } finally {
+      vi.stubGlobal("Worker", originalWorker);
+    }
   });
 });
