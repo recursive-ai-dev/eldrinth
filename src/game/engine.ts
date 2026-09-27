@@ -318,6 +318,7 @@ export class Game {
       this.syncMovementSystem();
 
       await spriteLoad;
+      if (this.destroyed) return;
       this.tileRenderer = new TileChunkRenderer(this.map);
 
       const s = this.map.spawn;

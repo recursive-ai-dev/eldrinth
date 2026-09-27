@@ -376,6 +376,24 @@ describe("GameCanvas Component Lifecycle Integration Tests", () => {
     vi.useRealTimers();
   });
 
+  it("does not overwrite the last good checkpoint after a fatal simulation error", async () => {
+    const onCheckpoint = vi.fn();
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      await act(async () => {
+        root.render(<GameCanvas callbacks={defaultCallbacks} onCheckpoint={onCheckpoint} />);
+      });
+      const game = mockGameInstances[0];
+      await act(async () => { game.callbacks.onFatal(new Error("simulation failed")); });
+      mockDoc.visibilityState = "hidden";
+      for (const handler of visibilityHandlers) handler(new Event("visibilitychange"));
+      await act(async () => { root.unmount(); });
+      expect(onCheckpoint).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it("loading a save through GameCanvas: pre-sets region before init and restores snapshot after init", async () => {
     const savedSnapshot: WorldSnapshot = {
       regionId: "cinderwild",
