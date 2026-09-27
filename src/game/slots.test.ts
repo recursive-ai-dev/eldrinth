@@ -98,5 +98,11 @@ describe("Difficulty validation & SlotStore", () => {
       [1, "standard", 0, Date.now(), JSON.stringify({ version: 4 })]
     );
     expect(await slotStore.load(1)).toBeNull();
+
+    db.run(
+      "INSERT OR REPLACE INTO save_slots (id, difficulty, shards, updated_at, world_json) VALUES (?, ?, ?, ?, ?)",
+      [1, "standard", 0, Date.now(), JSON.stringify({ ...makeSnapshot(), enemies: null })]
+    );
+    expect(await slotStore.load(1)).toBeNull();
   });
 });

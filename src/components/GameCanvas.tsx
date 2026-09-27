@@ -34,6 +34,7 @@ export default function GameCanvas({
   useEffect(() => {
     const canvas = ref.current;
     if (!canvas) return;
+    let fatal = false;
     const proxy: GameCallbacks = {
       onHud: (d) => cbRef.current.onHud(d),
       onDialogue: (d) => cbRef.current.onDialogue(d),
@@ -44,6 +45,7 @@ export default function GameCanvas({
       // The loop has already stopped by the time this fires, so nothing else
       // will ever render or update. Latch it and cover the screen.
       onFatal: (error) => {
+        fatal = true;
         console.error("Game loop error:", error);
         onError?.(error);
         setFatalError(error instanceof Error ? error.message : "The simulation stopped unexpectedly.");
@@ -55,7 +57,7 @@ export default function GameCanvas({
     if (initialSnapshot) game.world.regionId = initialSnapshot.regionId;
     let disposed = false;
     const checkpoint = () => {
-      if (!disposed && game.initialized && !game.ended) onCheckpoint?.(game.saveWorld());
+      if (!disposed && !fatal && game.initialized && !game.ended) onCheckpoint?.(game.saveWorld());
     };
     const onVisibilityChange = () => {
       if (document.visibilityState === "hidden") checkpoint();

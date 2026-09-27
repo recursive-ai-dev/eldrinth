@@ -37,7 +37,12 @@ export default function App() {
   const [persistence, setPersistence] = useState<PersistenceStatus>({ ok: true, reason: null, cause: null });
   const [slotError, setSlotError] = useState<string | null>(null);
 
-  const refreshSlots = useCallback(() => { void slotStore.list().then(setSlots).catch(() => setSlots([])); }, []);
+  const refreshSlots = useCallback(() => {
+    void slotStore.list().then(setSlots).catch((error: unknown) => {
+      console.error("Failed to list saves:", error);
+      setSlotError("Save records could not be read. Please reload the page and try again.");
+    });
+  }, []);
   useEffect(() => { refreshSlots(); }, [refreshSlots]);
 
   // A browser that refuses to persist would otherwise look identical to a
@@ -50,7 +55,10 @@ export default function App() {
     setActiveSlot(slot);
     setDifficulty(selectedDifficulty);
     setSlotError(null);
-    void slotStore.remove(slot).then(refreshSlots).catch(() => undefined);
+    void slotStore.remove(slot).then(refreshSlots).catch((error: unknown) => {
+      console.error("Failed to clear save slot:", error);
+      setSlotError("The selected save record could not be cleared.");
+    });
     setIntroPlaying(true);
   }, [refreshSlots]);
 
@@ -63,7 +71,10 @@ export default function App() {
     setSlotError(null);
     void slotStore.load(slot)
       .then((saved) => {
-        if (!saved) return;
+        if (!saved) {
+          setSlotError("That record could not be read. It may be damaged, or written by a newer version of the game.");
+          return;
+        }
         setCheckpoint(saved.world);
         setActiveSlot(slot);
         setDifficulty(normalizeDifficulty(saved.difficulty));
@@ -88,12 +99,22 @@ export default function App() {
   }, [startGame]);
 
   const saveCheckpoint = useCallback((snapshot: WorldSnapshot) => {
+    // The outgoing canvas checkpoints during effect cleanup. A restart has
+    // already advanced the session by then, so its snapshot must not replace
+    // the new run's checkpoint or overwrite its slot.
+    if (useGameStore.getState().sessionId !== sessionId) return;
     setCheckpoint(snapshot);
-    if (activeSlot != null) void slotStore.save(activeSlot, snapshot).then(refreshSlots).catch(() => undefined);
-  }, [activeSlot, refreshSlots]);
+    if (activeSlot != null) void slotStore.save(activeSlot, snapshot).then(refreshSlots).catch((error: unknown) => {
+      console.error("Failed to save checkpoint:", error);
+      setSlotError("Progress could not be saved. Please reload the page and try again.");
+    });
+  }, [activeSlot, refreshSlots, sessionId]);
 
   const eraseSlot = useCallback((slot: number) => {
-    void slotStore.remove(slot).then(refreshSlots).catch(() => undefined);
+    void slotStore.remove(slot).then(refreshSlots).catch((error: unknown) => {
+      console.error("Failed to erase save slot:", error);
+      setSlotError("The selected save record could not be erased.");
+    });
   }, [refreshSlots]);
 
   const acknowledgeWarning = useCallback(() => {

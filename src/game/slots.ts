@@ -162,7 +162,11 @@ class SlotStore {
     const [difficulty, shards, updatedAt, json] = result.values[0];
     try {
       const world = JSON.parse(String(json)) as WorldSnapshot;
-      if (!SUPPORTED_WORLD_VERSIONS.includes(world.version) || !world.player) return null;
+      if (!world || !SUPPORTED_WORLD_VERSIONS.includes(world.version) ||
+          typeof world.regionId !== "string" || !world.regionId ||
+          !world.player || !Array.isArray(world.player.swingHit) ||
+          !Array.isArray(world.enemies) || !Array.isArray(world.projectiles) ||
+          !Array.isArray(world.items)) return null;
       const validDifficulty = normalizeDifficulty(difficulty, normalizeDifficulty(world.difficulty, "standard"));
       world.difficulty = normalizeDifficulty(world.difficulty, validDifficulty);
       return { id, difficulty: validDifficulty, shards: Number(shards), updatedAt: Number(updatedAt), world };
