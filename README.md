@@ -1,8 +1,9 @@
 # ELDRINTH: The Unbound Spire
 
 A 2D open-world dark-fantasy action RPG that runs entirely in the browser. No
-backend, no network calls, no build-time data fetching. Maps and gameplay are
-deterministic; the pixel art is generated offline and committed.
+backend or build-time data fetching is required. Gameplay and saves use only
+the static bundle; optional web fonts fall back to local fonts. Maps and
+gameplay are deterministic; the pixel art is generated offline and committed.
 
 > You play a lone wayfarer hunting **nine Anima Shards** to quiet the
 > **Unbound** — the last, broken mind of the **Mnemonic**, a machine the Elder
@@ -50,6 +51,7 @@ npm run dev          # dev server with hot reload
 npm test             # unit + integration suite (src/)
 npm run typecheck    # tsc --noEmit
 npm run build        # typecheck gate, then production build into dist/
+npm run verify:release # confirm built assets work under a nested static path
 npm run preview      # serve the production build
 npm run bench        # performance harnesses (see below)
 ```
@@ -73,6 +75,9 @@ ELDRINTH_BASE=/eldrinth/ npm run build
 
 `dist/` is committed to the repository so a release can be served directly from
 a branch. It must only ever be changed by running `npm run build`.
+The release check in `.github/workflows/release-check.yml` installs from the
+lockfile, runs the tests, builds, verifies the static assets, and fails if the
+committed `dist/` differs from the build. No deployment variables are required.
 
 ### Benchmarks
 

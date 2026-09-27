@@ -141,22 +141,34 @@ export class WorkerRegionSource implements RegionSource {
         return;
       }
       const worker = new Worker(new URL("./region.worker.ts", import.meta.url), { type: "module" });
+      const fail = (error: unknown) => {
+        signal.removeEventListener("abort", abort);
+        worker.terminate();
+        reject(error);
+      };
       const abort = () => {
         worker.terminate();
         reject(new DOMException("Region load aborted", "AbortError"));
       };
       signal.addEventListener("abort", abort, { once: true });
       worker.onmessage = ({ data }: MessageEvent<{ id: string; map: MapData }>) => {
+        if (data?.id !== regionId || !data.map || !(data.map.tiles instanceof Uint8Array)) {
+          fail(new Error("Region worker returned invalid map data."));
+          return;
+        }
         signal.removeEventListener("abort", abort);
         worker.terminate();
         resolve(data);
       };
       worker.onerror = (event) => {
-        signal.removeEventListener("abort", abort);
-        worker.terminate();
-        reject(event.error ?? new Error("Region worker failed."));
+        fail(event.error ?? new Error("Region worker failed."));
       };
-      worker.postMessage({ id: regionId });
+      worker.onmessageerror = () => fail(new Error("Region worker response could not be read."));
+      try {
+        worker.postMessage({ id: regionId });
+      } catch (error) {
+        fail(error);
+      }
     });
   }
 }

@@ -228,6 +228,7 @@ describe("GameCanvas Component Lifecycle Integration Tests", () => {
   it("restart remounting: unmounting cleans up previous engine and remounting boots fresh instance", async () => {
     const onCheckpoint = vi.fn();
     const onReady = vi.fn();
+    const onDispose = vi.fn();
 
     await act(async () => {
       root.render(
@@ -236,6 +237,7 @@ describe("GameCanvas Component Lifecycle Integration Tests", () => {
           callbacks={defaultCallbacks}
           onCheckpoint={onCheckpoint}
           onReady={onReady}
+          onDispose={onDispose}
         />
       );
     });
@@ -255,6 +257,7 @@ describe("GameCanvas Component Lifecycle Integration Tests", () => {
           callbacks={defaultCallbacks}
           onCheckpoint={onCheckpoint}
           onReady={onReady}
+          onDispose={onDispose}
         />
       );
     });
@@ -262,6 +265,7 @@ describe("GameCanvas Component Lifecycle Integration Tests", () => {
     // Previous game must be destroyed and checkpointed upon unmount
     expect(firstGame.destroy).toHaveBeenCalled();
     expect(firstGame.destroyed).toBe(true);
+    expect(onDispose).toHaveBeenCalledWith(firstGame);
     expect(onCheckpoint).toHaveBeenCalled();
 
     // New game instance must be created and started

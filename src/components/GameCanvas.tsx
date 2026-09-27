@@ -8,6 +8,7 @@ import { useGameStore } from "@/stores/useGameStore";
 export default function GameCanvas({
   callbacks,
   onReady,
+  onDispose,
   initialSnapshot,
   onCheckpoint,
   difficulty,
@@ -16,6 +17,7 @@ export default function GameCanvas({
 }: {
   callbacks: GameCallbacks;
   onReady?: (g: Game) => void;
+  onDispose?: (g: Game) => void;
   initialSnapshot?: WorldSnapshot | null;
   onCheckpoint?: (snapshot: WorldSnapshot) => void;
   difficulty?: Difficulty;
@@ -85,6 +87,7 @@ export default function GameCanvas({
       window.clearInterval(interval);
       window.removeEventListener("visibilitychange", onVisibilityChange);
       game.destroy();
+      onDispose?.(game);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [retryNonce]);

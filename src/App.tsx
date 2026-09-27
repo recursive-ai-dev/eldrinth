@@ -169,6 +169,7 @@ export default function App() {
           onCheckpoint={saveCheckpoint}
           difficulty={difficulty}
           onReady={(g) => { gameRef.current = g; }}
+          onDispose={(g) => { if (gameRef.current === g) gameRef.current = null; }}
         />
       )}
 
