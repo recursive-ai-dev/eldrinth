@@ -34,6 +34,9 @@ export default function IntroSequence({ onComplete }: { onComplete: () => void }
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      // One held Enter would otherwise advance a shot per repeat and skip the
+      // whole cinematic in a fraction of a second.
+      if (event.repeat) return;
       if (event.key === "Escape") {
         event.preventDefault();
         finish();

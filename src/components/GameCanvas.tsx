@@ -76,6 +76,10 @@ export default function GameCanvas({
       })
       .catch((error: unknown) => {
         if (disposed) return;
+        // init() may have succeeded before loadWorld() or start() threw, which
+        // leaves the engine `initialized` over a half-restored world. Latch it
+        // like a fatal error so no checkpoint overwrites the slot it came from.
+        fatal = true;
         console.error("Game initialization error:", error);
         onError?.(error);
         const msg = error instanceof Error ? error.message : "Failed to initialize game engine.";

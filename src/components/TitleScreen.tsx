@@ -28,6 +28,9 @@ export default function TitleScreen({
   const [difficulty, setDifficulty] = useState<Difficulty>("standard");
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
+      // Auto-repeat from the key that dismissed the previous screen must not
+      // start or continue a run the player never chose.
+      if (e.repeat) return;
       // A button's Enter/Space activation is the default action of keydown, so
       // an unconditional preventDefault() here cancels it. That made the slot
       // erase button unreachable by keyboard, and since the only remedy the

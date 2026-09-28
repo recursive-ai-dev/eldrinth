@@ -15,6 +15,9 @@ describe("pause authority", () => {
     const pauses: boolean[] = [];
     const cb: GameCallbacks = { ...silentCallbacks(), onPause: (paused) => pauses.push(paused) };
     const game = await bootGame(cb);
+    // Boot announces the engine's initial unpaused state; count toggles only.
+    expect(pauses).toEqual([false]);
+    pauses.length = 0;
 
     const before = game.world.simulationTime;
     for (let i = 0; i < 60; i++) game.simulateStep(1 / 60);
