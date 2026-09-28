@@ -23,7 +23,7 @@ One existing test changed. `pauseControl.test.ts` recorded every `onPause` call 
 - `npm run verify:release`: "Release bundle passed nested-path asset checks."
 - Lint: the repository has no lint script or ESLint config, so nothing was run.
 - `npm run bench`: not run. It is a measurement harness, not a pass/fail gate, and none of these changes touch a hot path.
-- The committed `dist/` was restored after the build. This change does not include rebuilt artifacts.
+- CI (`.github/workflows/release-check.yml`) requires the committed `dist/` to match a fresh build (`git diff --exit-code -- dist`). `main` was already failing that check, because its committed `index-Ea4TleB3.js` did not match its source. This PR commits the rebuilt bundle. Two consecutive local builds produced byte-identical output.
 
 ## Deferred Risks
 - **`App.onReady` journal reset has no automated test.** `App` has no test harness, and adding one would mean mocking the save store, engine and every child component. Containment: the change is one state-setter call that only runs when a fresh engine becomes ready, and the engine side of the same desync is covered by `engine.initProjection.test.ts`.
