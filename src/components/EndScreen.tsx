@@ -58,6 +58,8 @@ export default function EndScreen({
   const copy = ENDINGS[ending];
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
+      // A key still held from the final fight must not skip the ending.
+      if (e.repeat) return;
       const target = e.target as HTMLElement | null;
       if (target?.closest?.("button, input, select, textarea, a[href], [contenteditable]")) return;
       if (e.key === "Enter" || e.key === " ") {

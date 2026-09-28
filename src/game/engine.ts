@@ -374,6 +374,12 @@ export class Game {
       this.centerCam();
       this.tileRenderer.warm(this.cam, this.viewW, this.viewH);
       this.message = "Seek the Anima Shards — or speak with the Watcher in the ruins.";
+      // A fresh engine has no open dialogue and is not paused. Say so, or a
+      // shell recovering from a crashed engine ("Reload Region") keeps that
+      // engine's dialogue box or pause menu over this one, where nothing can
+      // ever close it.
+      this.cb.onDialogue(null);
+      this.cb.onPause(false);
       this.publishJournal();
       this.pushHud();
       this.initialized = true;
@@ -491,7 +497,11 @@ export class Game {
   }
 
   saveWorld(): WorldSnapshot {
-    this.rememberRegion();
+    // A pending discard is applied by the respawn's region transition. An
+    // autosave landing while that transition awaits its region must honour the
+    // discard without consuming it, or the transition stores the region anyway.
+    if (this.discardCurrentRegion) delete this.world.regions[this.world.regionId];
+    else this.rememberRegion();
     return this.world.snapshot();
   }
 

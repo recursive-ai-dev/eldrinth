@@ -8,6 +8,7 @@ import type { WorldSnapshot } from "../game/core/WorldState";
 const mockGameInstances: any[] = [];
 let mockInitShouldReject = false;
 let mockInitRejectError: Error | null = null;
+let mockLoadWorldError: Error | null = null;
 
 vi.mock("@/game/engine", () => {
   return {
@@ -42,6 +43,7 @@ vi.mock("@/game/engine", () => {
           player: { hp: 10 },
         } as unknown as WorldSnapshot)),
         loadWorld: vi.fn().mockImplementation((snapshot: WorldSnapshot) => {
+          if (mockLoadWorldError) throw mockLoadWorldError;
           instance.world.regionId = snapshot.regionId;
         }),
       };
@@ -168,6 +170,7 @@ describe("GameCanvas Component Lifecycle Integration Tests", () => {
     mockGameInstances.length = 0;
     mockInitShouldReject = false;
     mockInitRejectError = null;
+    mockLoadWorldError = null;
     visibilityHandlers = [];
 
     mockDoc = {
@@ -395,6 +398,36 @@ describe("GameCanvas Component Lifecycle Integration Tests", () => {
       expect(onCheckpoint).not.toHaveBeenCalled();
     } finally {
       log.mockRestore();
+    }
+  });
+
+  // init() succeeding leaves the engine `initialized`, so a snapshot that then
+  // fails to restore used to leave the autosave armed: every ten seconds, and
+  // again on unmount, it wrote the half-restored world over the player's slot
+  // while the error screen promised the save was untouched.
+  it("does not autosave a world whose snapshot failed to restore", async () => {
+    vi.useFakeTimers();
+    const onCheckpoint = vi.fn();
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const snapshot = { regionId: "overworld", tick: 7, player: { hp: 3 } } as unknown as WorldSnapshot;
+      mockLoadWorldError = new Error("corrupt snapshot");
+      await act(async () => {
+        root.render(<GameCanvas callbacks={defaultCallbacks} initialSnapshot={snapshot} onCheckpoint={onCheckpoint} />);
+      });
+      const game = mockGameInstances[0];
+      expect(game.initialized).toBe(true);
+      expect(game.start).not.toHaveBeenCalled();
+      expect(container.querySelector('[data-testid="init-error-screen"]')).not.toBeNull();
+
+      await act(async () => { vi.advanceTimersByTime(10_000); });
+      mockDoc.visibilityState = "hidden";
+      for (const handler of visibilityHandlers) handler(new Event("visibilitychange"));
+      await act(async () => { root.unmount(); });
+      expect(onCheckpoint).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+      vi.useRealTimers();
     }
   });
 
