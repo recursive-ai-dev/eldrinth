@@ -23,6 +23,9 @@ export default function ContentWarning({ onAcknowledge }: { onAcknowledge: () =>
   const buttonRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
+      // A held key is not a second decision. Without this, the auto-repeat of
+      // the Enter that dismissed this notice fell through to the title screen.
+      if (e.repeat) return;
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
         onAcknowledge();

@@ -168,7 +168,9 @@ export default function App() {
           initialSnapshot={checkpoint}
           onCheckpoint={saveCheckpoint}
           difficulty={difficulty}
-          onReady={(g) => { gameRef.current = g; }}
+          // A fresh engine starts with its journal closed; match it, or a journal
+          // left open when the previous engine crashed covers a live world.
+          onReady={(g) => { gameRef.current = g; setJournalOpen(false); }}
           onDispose={(g) => { if (gameRef.current === g) gameRef.current = null; }}
         />
       )}
