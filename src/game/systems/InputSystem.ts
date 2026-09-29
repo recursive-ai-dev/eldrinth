@@ -61,6 +61,12 @@ export class InputSystem {
 
   private handleKeyDown = (event: KeyboardEvent) => {
     const key = event.key.toLowerCase();
+    const target = event.target as HTMLElement | null;
+    // Native editing and button activation belong to the UI, not the game.
+    if (event.defaultPrevented || target?.isContentEditable ||
+        target?.closest?.('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return;
+    if ([" ", "enter", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(key) &&
+        target?.closest?.('button, a[href], [role="button"], [role="tab"]')) return;
     if (!this.keys.has(key)) this.pressed.add(key);
     this.keys.add(key);
     this.keydownHandler?.(event);

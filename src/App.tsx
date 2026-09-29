@@ -30,6 +30,9 @@ export default function App() {
   const [journalOpen, setJournalOpen] = useState(false);
   const [checkpoint, setCheckpoint] = useState<WorldSnapshot | null>(null);
   const [slots, setSlots] = useState<SaveSlot[]>([]);
+  const [slotsReady, setSlotsReady] = useState(false);
+  const [slotBusy, setSlotBusy] = useState(false);
+  const slotBusyRef = useRef(false);
   const [activeSlot, setActiveSlot] = useState<number | null>(null);
   const [difficulty, setDifficulty] = useState<Difficulty>("standard");
   const [introPlaying, setIntroPlaying] = useState(false);
@@ -38,29 +41,52 @@ export default function App() {
   const [slotError, setSlotError] = useState<string | null>(null);
 
   const refreshSlots = useCallback(() => {
-    void slotStore.list().then(setSlots).catch((error: unknown) => {
+    return slotStore.list().then((records) => { setSlots(records); setSlotsReady(true); }).catch((error: unknown) => {
+      setSlotsReady(false);
       console.error("Failed to list saves:", error);
       setSlotError("Save records could not be read. Please reload the page and try again.");
     });
   }, []);
-  useEffect(() => { refreshSlots(); }, [refreshSlots]);
+  useEffect(() => {
+    const refresh = () => { void refreshSlots(); };
+    refresh();
+    window.addEventListener("storage", refresh);
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.removeEventListener("storage", refresh);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [refreshSlots]);
 
   // A browser that refuses to persist would otherwise look identical to a
   // working one until the player lost a run. Warn as soon as we know.
   useEffect(() => slotStore.onStatusChange(setPersistence), []);
   useEffect(() => { setSlotError(null); }, [screen]);
 
-  const start = useCallback((slot: number, selectedDifficulty: Difficulty) => {
-    setCheckpoint(null);
-    setActiveSlot(slot);
-    setDifficulty(selectedDifficulty);
+  const runSlotAction = useCallback((action: () => Promise<void>) => {
+    if (!slotsReady || slotBusyRef.current) return;
+    slotBusyRef.current = true;
+    setSlotBusy(true);
     setSlotError(null);
-    void slotStore.remove(slot).then(refreshSlots).catch((error: unknown) => {
-      console.error("Failed to clear save slot:", error);
-      setSlotError("The selected save record could not be cleared.");
+    void action().catch((error: unknown) => {
+      console.error("Save record action failed:", error);
+      setSlotError(error instanceof Error ? error.message : "The save record could not be read or changed.");
+    }).finally(() => {
+      slotBusyRef.current = false;
+      setSlotBusy(false);
     });
-    setIntroPlaying(true);
-  }, [refreshSlots]);
+  }, [slotsReady]);
+
+  const start = useCallback((slot: number, selectedDifficulty: Difficulty) => {
+    runSlotAction(async () => {
+      // Recheck the actual database, without ever deleting an existing record.
+      await slotStore.prepareNew(slot);
+      setCheckpoint(null);
+      setActiveSlot(slot);
+      setDifficulty(selectedDifficulty);
+      setIntroPlaying(true);
+    });
+  }, [runSlotAction]);
 
   const finishIntro = useCallback(() => {
     setIntroPlaying(false);
@@ -68,25 +94,18 @@ export default function App() {
   }, [startGame]);
 
   const resume = useCallback((slot: number) => {
-    setSlotError(null);
-    void slotStore.load(slot)
-      .then((saved) => {
-        if (!saved) {
-          setSlotError("That record could not be read. It may be damaged, or written by a newer version of the game.");
-          return;
-        }
-        setCheckpoint(saved.world);
-        setActiveSlot(slot);
-        setDifficulty(normalizeDifficulty(saved.difficulty));
-        startGame();
-      })
-      // Previously unhandled: a failed load left the Continue button inert with
-      // no message at all, which reads as a broken game rather than a broken save.
-      .catch((error: unknown) => {
-        console.error("Failed to load save:", error);
+    runSlotAction(async () => {
+      const saved = await slotStore.load(slot);
+      if (!saved) {
         setSlotError("That record could not be read. It may be damaged, or written by a newer version of the game.");
-      });
-  }, [startGame]);
+        return;
+      }
+      setCheckpoint(saved.world);
+      setActiveSlot(slot);
+      setDifficulty(normalizeDifficulty(saved.difficulty));
+      startGame();
+    });
+  }, [runSlotAction, startGame]);
 
   const restart = useCallback(() => {
     // Restart has to drop the checkpoint. Leaving it in place made
@@ -106,16 +125,16 @@ export default function App() {
     setCheckpoint(snapshot);
     if (activeSlot != null) void slotStore.save(activeSlot, snapshot).then(refreshSlots).catch((error: unknown) => {
       console.error("Failed to save checkpoint:", error);
-      setSlotError("Progress could not be saved. Please reload the page and try again.");
+      setSlotError(error instanceof Error ? error.message : "Progress could not be saved. Please reload the page and try again.");
     });
   }, [activeSlot, refreshSlots, sessionId]);
 
   const eraseSlot = useCallback((slot: number) => {
-    void slotStore.remove(slot).then(refreshSlots).catch((error: unknown) => {
-      console.error("Failed to erase save slot:", error);
-      setSlotError("The selected save record could not be erased.");
+    runSlotAction(async () => {
+      await slotStore.remove(slot);
+      await refreshSlots();
     });
-  }, [refreshSlots]);
+  }, [refreshSlots, runSlotAction]);
 
   const acknowledgeWarning = useCallback(() => {
     markContentWarningSeen();
@@ -129,6 +148,7 @@ export default function App() {
   }, []);
   useEffect(() => {
     const toggleJournal = (event: KeyboardEvent) => {
+      if (event.repeat) return;
       // Escape must close the journal even from inside the note field. The
       // target guard exists so typing "l" does not toggle the panel, but applied
       // first it also swallowed Escape and stranded the player in the textarea
@@ -239,6 +259,8 @@ export default function App() {
           onContinue={resume}
           onErase={eraseSlot}
           slots={slots}
+          slotsReady={slotsReady}
+          busy={slotBusy}
           savingUnavailable={!persistence.ok}
         />
       )}

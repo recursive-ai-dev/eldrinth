@@ -7,9 +7,10 @@ const DATABASE_KEY = "eldrinth.sqlite.v1";
 export const SLOT_COUNT = 3;
 
 /** Schema version stored in SQLite's `user_version`. Bump with a migration below. */
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 const SUPPORTED_WORLD_VERSIONS = [1, 2, 3, 4];
+const UNSAFE_SAVING = "Safe saving is unavailable here. Open the game over HTTPS in an up-to-date browser. Existing records have been left untouched.";
 
 export interface SaveSlot {
   id: number;
@@ -55,8 +56,13 @@ function describeWriteFailure(error: unknown): string {
 }
 
 /** SQLite-in-WASM persisted as one opaque database file in localStorage. */
-class SlotStore {
+export class SlotStore {
   private dbPromise: Promise<Database> | null = null;
+  private persisted: string | null = null;
+  private queue: Promise<unknown> = Promise.resolve();
+  // Listing records must not advance the revision owned by a running game.
+  private owned = new Map<number, string | null>();
+  private listed = new Map<number, string | null>();
   private status: PersistenceStatus = { ok: true, reason: null, cause: null };
   private listeners = new Set<StatusListener>();
 
@@ -100,16 +106,73 @@ class SlotStore {
     const SQL = await initSqlJs({ locateFile });
     let bytes: Uint8Array | undefined;
     try {
-      const saved = localStorage.getItem(DATABASE_KEY);
-      if (saved) bytes = decode(saved);
+      this.persisted = localStorage.getItem(DATABASE_KEY);
     } catch (error) {
       // Reading can fail even when writing would not, but a missing read is not
       // itself fatal: we open an empty database and warn that saves are at risk.
       this.setStatus(false, describeWriteFailure(error), error);
     }
+    // Invalid data must never be mistaken for an empty database.
+    if (this.persisted) bytes = decode(this.persisted);
     const db = new SQL.Database(bytes);
-    this.migrate(db);
+    try { this.migrate(db); } catch (error) { db.close(); throw error; }
+    if (typeof window !== "undefined" && !globalThis.navigator?.locks) {
+      this.setStatus(false, UNSAFE_SAVING);
+    }
     return db;
+  }
+
+  /** Reload and mutate under one cross-tab lock; a cached database is only a view. */
+  private run<T>(write: boolean, action: (db: Database) => T): Promise<T> {
+    const execute = async () => {
+      let db = await this.db();
+      const locked = async () => {
+        let readable = true;
+        let saved = this.persisted;
+        try { saved = localStorage.getItem(DATABASE_KEY); }
+        catch (error) { readable = false; this.setStatus(false, describeWriteFailure(error), error); }
+        if (readable && saved !== this.persisted) {
+          const SQL = await initSqlJs();
+          const latest = new SQL.Database(saved ? decode(saved) : undefined);
+          try { this.migrate(latest); } catch (error) { latest.close(); throw error; }
+          db.close();
+          db = latest;
+          this.dbPromise = Promise.resolve(db);
+          this.persisted = saved;
+        }
+        const result = action(db);
+        if (write && readable) this.persist(db);
+        return result;
+      };
+      if (globalThis.navigator?.locks) return navigator.locks.request(DATABASE_KEY, locked);
+      // Non-browser tests can use a single-process queue. In browsers lacking
+      // cross-tab locks, reads remain available but no persistent mutation is safe.
+      if (write && typeof window !== "undefined") {
+        throw new Error(UNSAFE_SAVING);
+      }
+      return locked();
+    };
+    const pending = this.queue.then(execute, execute);
+    this.queue = pending.catch(() => undefined);
+    return pending;
+  }
+
+  private revision(db: Database, id: number): string | null {
+    const row = db.exec("SELECT revision FROM save_slots WHERE id = ?", [id])[0]?.values[0];
+    return row ? String(row[0]) : null;
+  }
+
+  private assertRevision(db: Database, id: number, expected: string | null) {
+    if (this.revision(db, id) !== expected) {
+      throw new Error("This record changed in another tab. Reload and continue the latest record before saving again. No saved progress was overwritten.");
+    }
+  }
+
+  async prepareNew(id: number) {
+    return this.run(false, (db) => {
+      this.assertRevision(db, id, null);
+      this.owned.set(id, null);
+    });
   }
 
   /**
@@ -135,11 +198,20 @@ class SlotStore {
       )`);
       db.run(`PRAGMA user_version = 1`);
     }
+    if (readVersion < 2) {
+      db.run("ALTER TABLE save_slots ADD COLUMN revision TEXT NOT NULL DEFAULT ''");
+      // Stable across readers before the first v2 write; future writes get a
+      // random revision, including identical snapshots saved in the same ms.
+      db.run("UPDATE save_slots SET revision = 'legacy:' || id || ':' || updated_at");
+      db.run("PRAGMA user_version = 2");
+    }
   }
 
   private persist(db: Database) {
     try {
-      localStorage.setItem(DATABASE_KEY, encode(db.export()));
+      const encoded = encode(db.export());
+      localStorage.setItem(DATABASE_KEY, encoded);
+      this.persisted = encoded;
       this.setStatus(true, null);
     } catch (error) {
       // Previously swallowed with a comment. A silent failure here looks exactly
@@ -151,40 +223,54 @@ class SlotStore {
   }
 
   async list(): Promise<SaveSlot[]> {
-    const result = (await this.db()).exec("SELECT id, difficulty, shards, updated_at FROM save_slots ORDER BY id")[0];
-    if (!result) return [];
-    return result.values.map((row: any[]) => ({ id: Number(row[0]), difficulty: normalizeDifficulty(row[1]), shards: Number(row[2]), updatedAt: Number(row[3]) }));
+    return this.run(false, (db) => {
+      const result = db.exec("SELECT id, difficulty, shards, updated_at, revision FROM save_slots ORDER BY id")[0];
+      this.listed.clear();
+      return (result?.values ?? []).map((row) => {
+        this.listed.set(Number(row[0]), String(row[4]));
+        return { id: Number(row[0]), difficulty: normalizeDifficulty(row[1]), shards: Number(row[2]), updatedAt: Number(row[3]) };
+      });
+    });
   }
 
   async load(id: number): Promise<SlotSave | null> {
-    const result = (await this.db()).exec("SELECT difficulty, shards, updated_at, world_json FROM save_slots WHERE id = ?", [id])[0];
-    if (!result?.values[0]) return null;
-    const [difficulty, shards, updatedAt, json] = result.values[0];
-    try {
-      const world = JSON.parse(String(json)) as WorldSnapshot;
-      if (!world || !SUPPORTED_WORLD_VERSIONS.includes(world.version) ||
-          typeof world.regionId !== "string" || !world.regionId ||
-          !world.player || !Array.isArray(world.player.swingHit) ||
-          !Array.isArray(world.enemies) || !Array.isArray(world.projectiles) ||
-          !Array.isArray(world.items)) return null;
-      const validDifficulty = normalizeDifficulty(difficulty, normalizeDifficulty(world.difficulty, "standard"));
-      world.difficulty = normalizeDifficulty(world.difficulty, validDifficulty);
-      return { id, difficulty: validDifficulty, shards: Number(shards), updatedAt: Number(updatedAt), world };
-    } catch { return null; }
+    return this.run(false, (db) => {
+      const result = db.exec("SELECT difficulty, shards, updated_at, world_json, revision FROM save_slots WHERE id = ?", [id])[0];
+      if (!result?.values[0]) return null;
+      const [difficulty, shards, updatedAt, json, revision] = result.values[0];
+      try {
+        const world = JSON.parse(String(json)) as WorldSnapshot;
+        if (!world || !SUPPORTED_WORLD_VERSIONS.includes(world.version) ||
+            typeof world.regionId !== "string" || !world.regionId ||
+            !world.player || !Array.isArray(world.player.swingHit) ||
+            !Array.isArray(world.enemies) || !Array.isArray(world.projectiles) ||
+            !Array.isArray(world.items)) return null;
+        const validDifficulty = normalizeDifficulty(difficulty, normalizeDifficulty(world.difficulty, "standard"));
+        world.difficulty = normalizeDifficulty(world.difficulty, validDifficulty);
+        this.owned.set(id, String(revision));
+        return { id, difficulty: validDifficulty, shards: Number(shards), updatedAt: Number(updatedAt), world };
+      } catch { return null; }
+    });
   }
 
   async save(id: number, world: WorldSnapshot) {
-    const db = await this.db();
-    const difficulty = normalizeDifficulty(world.difficulty, "standard");
-    world.difficulty = difficulty;
-    db.run("INSERT OR REPLACE INTO save_slots (id, difficulty, shards, updated_at, world_json) VALUES (?, ?, ?, ?, ?)", [id, difficulty, world.shards, Date.now(), JSON.stringify(world)]);
-    this.persist(db);
+    return this.run(true, (db) => {
+      this.assertRevision(db, id, this.owned.get(id) ?? null);
+      const difficulty = normalizeDifficulty(world.difficulty, "standard");
+      world.difficulty = difficulty;
+      db.run("INSERT OR REPLACE INTO save_slots (id, difficulty, shards, updated_at, world_json, revision) VALUES (?, ?, ?, ?, ?, lower(hex(randomblob(16))))", [id, difficulty, world.shards, Date.now(), JSON.stringify(world)]);
+      this.owned.set(id, this.revision(db, id));
+    });
   }
 
   async remove(id: number) {
-    const db = await this.db();
-    db.run("DELETE FROM save_slots WHERE id = ?", [id]);
-    this.persist(db);
+    return this.run(true, (db) => {
+      this.assertRevision(db, id, this.listed.get(id) ?? null);
+      db.run("DELETE FROM save_slots WHERE id = ?", [id]);
+      this.listed.delete(id);
+      // Keep the old owned revision: an outgoing game's autosave must not
+      // resurrect a slot that the title screen just erased.
+    });
   }
 }
 

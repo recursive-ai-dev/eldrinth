@@ -19,6 +19,8 @@ bun.lockb
 .claude/
 .vite/
 coverage/
+test-results/
+playwright-report/
 *.log
 
 .DS_Store

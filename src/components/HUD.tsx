@@ -2,9 +2,9 @@ import type { HudData } from "@/game/types";
 
 export default function HUD({ hud }: { hud: HudData }) {
   return (
-    <div className="pointer-events-none absolute inset-0 z-10 select-none">
+    <div className="game-hud pointer-events-none absolute inset-0 z-10 select-none">
       {/* Top-left: vitals */}
-      <div className="absolute inset-safe-t inset-safe-l flex flex-col gap-2">
+      <div data-testid="hud-vitals" className="hud-vitals absolute inset-safe-t inset-safe-l flex flex-col gap-2">
         <div className="w-44 rounded-lg border border-rose-300/20 bg-black/45 px-3 py-2 backdrop-blur-sm">
           <div className="mb-1 flex items-center justify-between font-title text-[10px] uppercase tracking-[0.2em] text-rose-100/75">
             <span>Life</span>
@@ -42,7 +42,7 @@ export default function HUD({ hud }: { hud: HudData }) {
       </div>
 
       {/* Top-center: objective */}
-      <div className="absolute left-1/2 top-4 w-[min(560px,80vw)] -translate-x-1/2">
+      <div data-testid="hud-objective" className="hud-objective absolute top-4">
         <div className="rounded-lg border border-amber-200/15 bg-black/45 px-4 py-2 text-center backdrop-blur-sm">
           <div className="mb-1 font-title text-[10px] uppercase tracking-[0.3em] text-teal-200/65">
             {hud.regionName}
@@ -55,7 +55,7 @@ export default function HUD({ hud }: { hud: HudData }) {
       </div>
 
       {/* Top-right: foes remaining */}
-      <div className="absolute inset-safe-t inset-safe-r rounded-lg border border-rose-300/15 bg-black/45 px-3 py-2 text-right backdrop-blur-sm">
+      <div className="hud-foes absolute inset-safe-t inset-safe-r rounded-lg border border-rose-300/15 bg-black/45 px-3 py-2 text-right backdrop-blur-sm">
         <div className="font-title text-[10px] uppercase tracking-[0.3em] text-rose-200/80">
           The Sundered
         </div>

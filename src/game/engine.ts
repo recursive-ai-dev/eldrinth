@@ -658,6 +658,7 @@ export class Game {
 
   /* ----------------------------- input ----------------------------- */
   onKeyDown = (e: KeyboardEvent) => {
+    if (this.paused || this.journalOpen || this.ended) return;
     const k = e.key.toLowerCase();
     if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(k)) e.preventDefault();
   };
