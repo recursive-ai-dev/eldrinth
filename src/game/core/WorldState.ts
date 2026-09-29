@@ -1,6 +1,6 @@
 import { type DialogueData, type Difficulty, type Dir, type EnemyType, type ItemType, type JournalEntry, type MapData, normalizeDifficulty } from "../types";
 import type { QuestProgress } from "../quests";
-import { cumulativeHarvestCost } from "../escalation";
+import { cumulativeHarvestCost, fortressShardIntakeEntry } from "../escalation";
 import { FORTRESS_LAYOUTS } from "../fortressLayouts";
 
 export interface RegionSnapshot {
@@ -124,11 +124,34 @@ export interface WorldSnapshot {
   checkpoint?: WayfireCheckpoint | null;
   /**
    * Region ids whose shard has already been taken. Optional because v4 saves
-   * predate it; those are backfilled from the shard count on restore.
+   * predate it; those are recovered from intake and regional records on restore.
    */
   harvestedShards?: string[];
   /** Optional: pre-v1.0 saves did not count deaths. */
   deaths?: number;
+}
+
+/** Counts cannot identify vessels in a game that permits any collection order. */
+export function restoreHarvestedShards(snapshot: WorldSnapshot): Set<string> {
+  if (snapshot.harvestedShards) return new Set(snapshot.harvestedShards);
+  const ids = Object.keys(FORTRESS_LAYOUTS);
+  if (!Number.isInteger(snapshot.shards) || snapshot.shards < 0 || snapshot.shards > ids.length) {
+    throw new Error("This save has an invalid shard count. The original record has been left untouched.");
+  }
+  if (snapshot.shards === ids.length) return new Set(ids);
+  const harvested = new Set<string>();
+  for (const id of ids) {
+    const intake = fortressShardIntakeEntry(id);
+    const items = snapshot.regionId === id ? snapshot.items : snapshot.regions?.[id]?.items;
+    if ((intake && snapshot.journal?.some((entry) => entry.id === intake.id)) ||
+        (items && !items.some((item) => item.type === "shard" && !item.taken))) {
+      harvested.add(id);
+    }
+  }
+  if (harvested.size !== snapshot.shards) {
+    throw new Error("This older save does not identify all harvested shards reliably, so it cannot be resumed safely. The original record has been left untouched.");
+  }
+  return harvested;
 }
 
 /**
@@ -213,6 +236,8 @@ export class WorldState {
 
   restore(snapshot: WorldSnapshot) {
     if (snapshot.version !== 1 && snapshot.version !== 2 && snapshot.version !== 3 && snapshot.version !== 4) throw new Error(`Unsupported world snapshot version: ${snapshot.version}`);
+    // Resolve compatibility before mutating any live state.
+    const harvested = restoreHarvestedShards(snapshot);
     const legacySave = snapshot.version === 1;
     const preRewriteSave = snapshot.version <= 2;
     // Pre-inversion saves (v3 and earlier) banked +1 maxHp per shard already
@@ -234,10 +259,7 @@ export class WorldState {
     this.bossSpawned = snapshot.bossSpawned;
     this.shards = snapshot.shards;
     this.totalShards = snapshot.totalShards;
-    // v4 saves recorded only a count, not which vessels were emptied. Backfill
-    // from the canonical fortress order so a carried save cannot farm the
-    // fortresses it already cleared.
-    this.harvestedShards = new Set(snapshot.harvestedShards ?? Object.keys(FORTRESS_LAYOUTS).slice(0, snapshot.shards));
+    this.harvestedShards = harvested;
     this.deaths = Math.max(0, snapshot.deaths ?? 0);
     this.message = snapshot.message;
     this.messageId = snapshot.messageId;

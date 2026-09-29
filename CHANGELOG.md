@@ -5,6 +5,23 @@ All notable changes to ELDRINTH: The Unbound Spire.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 semantic versioning.
 
+## [Unreleased]
+
+- Wait for save records before enabling new-game or continue actions. Starting
+  a pilgrimage rechecks that the slot is empty and never deletes an occupied record.
+- Serialize SQLite writes between tabs and check per-slot revisions. Unrelated
+  slots survive concurrent saves; stale saves and stale erase requests are rejected.
+  Database schema 2 adds revision tokens and migrates existing schema-1 records.
+  Safe persistence requires HTTPS or localhost and browser Web Locks support.
+- Recover legacy shard identities from intake and regional records, including
+  arbitrary collection orders. Preserve ambiguous saves with a visible error.
+- Keep native spaces, arrow-key editing, and button activation out of game input.
+- Keep touch Pause and Journal available in landscape and on tablets. Make the
+  title scrollable on short screens and prevent compact HUD/control overlaps.
+- Add production-browser regression tests to the release workflow for delayed
+  save initialization, multiple tabs, quota failure, journal editing, reload,
+  restart, and phone/tablet layouts.
+
 ## [1.0.0]
 
 First releasable build. Ships the Old Lands, Cinderwild, Moonlit Coast and Starfall Moors as four
@@ -92,7 +109,8 @@ skipped the optional content without being told.
 - sql.js is 658 kB of WASM and is the largest startup cost, fetched only to render three slot
   labels. The snapshot is plain JSON, so `localStorage` would remove the download entirely. Left
   alone: it is a persistence redesign, not a fix.
-- No CI. `dist/` is committed and must only be changed by `npm run build`; nothing enforces that.
+- `dist/` is committed and must only be changed by `npm run build`; the release
+  workflow checks that it matches a fresh build.
 - `ROADMAP.md` Milestone 2's equipment layer, per-region elite behaviours and authored activity
   sites are designed but **not** implemented, and Milestone 3 (New Pilgrimage) is deferred beyond
   the epilogue.

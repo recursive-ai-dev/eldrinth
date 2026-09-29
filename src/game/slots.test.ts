@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { slotStore } from "./slots";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { slotStore, SlotStore } from "./slots";
 import { isDifficulty, normalizeDifficulty } from "./types";
 import { WorldState } from "./core/WorldState";
 
@@ -105,4 +105,125 @@ describe("Difficulty validation & SlotStore", () => {
     );
     expect(await slotStore.load(1)).toBeNull();
   });
+
+  describe("independent save clients", () => {
+    let storage: Map<string, string>;
+    beforeEach(() => {
+      storage = new Map();
+      vi.stubGlobal("localStorage", {
+        getItem: (key: string) => storage.get(key) ?? null,
+        setItem: (key: string, value: string) => storage.set(key, value),
+      });
+      let queue: Promise<unknown> = Promise.resolve();
+      vi.stubGlobal("navigator", { locks: {
+        request: (_name: string, callback: () => unknown) => {
+          const result = queue.then(callback);
+          queue = result.catch(() => undefined);
+          return result;
+        },
+      } });
+    });
+    afterEach(() => vi.unstubAllGlobals());
+
+    it("retains concurrent writes to different slots from initially stale clients", async () => {
+      const a = new SlotStore(), b = new SlotStore();
+      await Promise.all([a.list(), b.list()]);
+      await Promise.all([a.save(1, makeSnapshot("story")), b.save(2, makeSnapshot("brutal"))]);
+      expect((await new SlotStore().list()).map(s => [s.id, s.difficulty])).toEqual([[1, "story"], [2, "brutal"]]);
+    });
+
+    it("rejects stale writes even after refreshing the title's slot labels", async () => {
+      const a = new SlotStore(), b = new SlotStore();
+      await a.save(1, makeSnapshot());
+      await b.load(1);
+      await a.save(1, makeSnapshot("brutal"));
+      await b.list();
+      await expect(b.save(1, makeSnapshot("story"))).rejects.toThrow("changed in another tab");
+      expect((await new SlotStore().load(1))?.difficulty).toBe("brutal");
+      // An explicit reload adopts the latest revision and can save again.
+      await b.load(1);
+      await b.save(1, makeSnapshot("story"));
+    });
+
+    it("rechecks supposedly empty slots and refuses to replace occupied records", async () => {
+      const a = new SlotStore(), b = new SlotStore();
+      await b.list();
+      await b.prepareNew(1);
+      await a.save(1, makeSnapshot("brutal"));
+      await expect(b.prepareNew(1)).rejects.toThrow("changed in another tab");
+      await expect(b.save(1, makeSnapshot())).rejects.toThrow("changed in another tab");
+      expect((await new SlotStore().load(1))?.difficulty).toBe("brutal");
+    });
+
+    it("does not resurrect an erased slot or erase a newer revision", async () => {
+      const a = new SlotStore(), b = new SlotStore();
+      await a.save(1, makeSnapshot());
+      await b.list();
+      await a.save(1, makeSnapshot("brutal"));
+      await expect(b.remove(1)).rejects.toThrow("changed in another tab");
+      await b.list();
+      await b.remove(1);
+      await expect(a.save(1, makeSnapshot())).rejects.toThrow("changed in another tab");
+      expect(await new SlotStore().list()).toEqual([]);
+    });
+
+    it("detects erase-and-recreate even when the snapshot and clock are identical", async () => {
+      vi.spyOn(Date, "now").mockReturnValue(123);
+      try {
+        const a = new SlotStore(), b = new SlotStore();
+        const snapshot = makeSnapshot();
+        await a.save(1, snapshot);
+        await b.list();
+        await b.remove(1);
+        await b.prepareNew(1);
+        await b.save(1, snapshot);
+        await expect(a.save(1, snapshot)).rejects.toThrow("changed in another tab");
+      } finally { vi.restoreAllMocks(); }
+    });
+
+    it("only accepts one of two simultaneous writes to the same revision", async () => {
+      const a = new SlotStore(), b = new SlotStore();
+      await a.save(1, makeSnapshot());
+      await b.load(1);
+      const results = await Promise.allSettled([a.save(1, makeSnapshot("story")), b.save(1, makeSnapshot("brutal"))]);
+      expect(results.filter(r => r.status === "fulfilled")).toHaveLength(1);
+      expect(results.filter(r => r.status === "rejected")).toHaveLength(1);
+    });
+
+    it("migrates a v1 database without losing another slot or inventing a revision conflict", async () => {
+      const source = new SlotStore();
+      await source.save(1, makeSnapshot("story"));
+      const oldDb = await (source as any).db();
+      oldDb.run("ALTER TABLE save_slots DROP COLUMN revision");
+      oldDb.run("PRAGMA user_version = 1");
+      storage.set("eldrinth.sqlite.v1", btoa(String.fromCharCode(...oldDb.export())));
+      const a = new SlotStore(), b = new SlotStore();
+      await a.list();
+      await b.load(1);
+      await a.save(2, makeSnapshot("brutal"));
+      await b.save(1, makeSnapshot("standard"));
+      expect((await new SlotStore().list()).map(s => [s.id, s.difficulty])).toEqual([[1, "standard"], [2, "brutal"]]);
+    });
+
+    it("warns on quota failure while preserving the last persisted save", async () => {
+      const a = new SlotStore();
+      await a.save(1, makeSnapshot("story"));
+      const before = [...storage.entries()];
+      vi.spyOn(localStorage, "setItem").mockImplementation(() => { throw new DOMException("Full", "QuotaExceededError"); });
+      await a.save(1, makeSnapshot("brutal"));
+      expect(a.getStatus().ok).toBe(false);
+      expect(a.getStatus().reason).toContain("storage is full");
+      expect([...storage.entries()]).toEqual(before);
+      expect((await new SlotStore().load(1))?.difficulty).toBe("story");
+    });
+
+    it("never treats corrupt stored bytes as a new empty database", async () => {
+      storage.set("eldrinth.sqlite.v1", "invalid base64!");
+      const a = new SlotStore();
+      await expect(a.list()).rejects.toThrow();
+      await expect(a.save(1, makeSnapshot())).rejects.toThrow();
+      expect(storage.get("eldrinth.sqlite.v1")).toBe("invalid base64!");
+    });
+  });
+
 });

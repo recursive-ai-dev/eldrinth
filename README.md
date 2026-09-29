@@ -40,6 +40,17 @@ unmount, across three slots. **Private/incognito windows can block storage
 writes** — the game detects this and warns you rather than losing your run
 silently.
 
+Serve releases over **HTTPS** (localhost also works for development). Safe saves
+use the browser's Web Locks API to serialize database writes across tabs. If
+safe saving is unavailable, the game warns you and leaves existing records
+untouched. Different slots can be played in separate tabs; if two tabs resume
+the same slot, an older session is prevented from overwriting a newer save.
+Reload that tab and continue the latest record to resume saving.
+
+Older saves without shard identities are recovered from their intake and
+fortress records. Ambiguous records are preserved and reported as incompatible,
+rather than guessing which shards were collected.
+
 ## Develop
 
 Requires Node 20.19+ (Vite 7). npm is the supported package manager and
@@ -52,6 +63,8 @@ npm test             # unit + integration suite (src/)
 npm run typecheck    # tsc --noEmit
 npm run build        # typecheck gate, then production build into dist/
 npm run verify:release # confirm built assets work under a nested static path
+npx playwright install chromium # one-time setup for browser regression tests
+npm run test:browser # production browser tests; run npm run build first
 npm run preview      # serve the production build
 npm run bench        # performance harnesses (see below)
 ```
@@ -76,7 +89,7 @@ ELDRINTH_BASE=/eldrinth/ npm run build
 `dist/` is committed to the repository so a release can be served directly from
 a branch. It must only ever be changed by running `npm run build`.
 The release check in `.github/workflows/release-check.yml` installs from the
-lockfile, runs the tests, builds, verifies the static assets, and fails if the
+lockfile, runs unit and production-browser tests, builds, verifies the static assets, and fails if the
 committed `dist/` differs from the build. No deployment variables are required.
 
 ### Benchmarks
