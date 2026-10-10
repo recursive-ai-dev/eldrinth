@@ -1,0 +1,26 @@
+.high-contrast [role="dialog"] > div,
+.high-contrast .pause-panel,
+.high-contrast .journal-panel,
+.high-contrast .atlas-panel { background: #080c12 !important; }
+.high-contrast [class*="text-amber-"],
+.high-contrast [class*="text-stone-"] { color: #fff2cd !important; }
+.high-contrast [class*="text-teal-"] { color: #a1ffef !important; }
+.high-contrast [class*="text-rose-"] { color: #ffb9ce !important; }
+.high-contrast button,
+.high-contrast input,
+.high-contrast select,
+.high-contrast textarea { border-color: #a3baa9 !important; }
+.high-contrast :is(.field-guide, .atlas-panel, .hud-atlas, .hud-wayfinder) :is(p, span, small, label, strong, b, h2, h3, button, summary),
+.high-contrast :is(.journal-summary, .journal-toolbar, .journal-note-meta, .journal-empty, .journal-feedback, .atlas-results),
+.high-contrast .journal-toolbar label { color: #fff2cd !important; }
+.high-contrast :is(input, select, textarea) { color: #fff2cd !important; background-color: #101820 !important; }
+.high-contrast :is(input, textarea)::placeholder { color: #d9dccd !important; }
+.high-contrast :is(.guide-card, .guide-status, .journal-panel, .atlas-panel, .atlas-chart, .atlas-summary, .atlas-refuge, .atlas-footer, .guide-route) { border-color: #a3baa9 !important; }
+.high-contrast :is(.guide-card, .hud-atlas, .hud-wayfinder) { color: #fff2cd; background: #111921 !important; }
+.high-contrast .atlas-chart { background: #101d19; }
+.high-contrast .atlas-map-marker { background-color: #172723; }
+.high-contrast :is(.guide-sections, .journal-view-switch) button[aria-pressed="true"],
+.high-contrast .atlas-landmark.is-pinned { color: #a1ffef !important; border-color: #a1ffef !important; background-color: #183d36 !important; }
+.high-contrast .atlas-map-marker.is-pinned { border-color: #fff0ac !important; outline-color: #fff0ac; background-color: #493d20 !important; }
+.high-contrast .guide-card[data-complete="true"] .guide-status { color: #a1ffef !important; border-color: #a1ffef !important; }
+.app-root :is(button, summary, select, input, textarea):focus-visible { outline: 2px solid #a0f4db; outline-offset: 3px; }

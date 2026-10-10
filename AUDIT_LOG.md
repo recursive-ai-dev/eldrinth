@@ -215,3 +215,73 @@ would touch collision, the renderer and four sprite atlases for no user-visible 
   sites are designed but not implemented.** They are now marked as such rather than written in the
   past tense.
 - **Milestone 3 (New Pilgrimage) is not shipped** beyond the epilogue. Deferred deliberately.
+
+## 1.0.1 Debian release stabilization — 4 October 2026
+
+This pass covers save failures, checkpoint timing, region-load recovery and the
+new Linux desktop distribution. The historical v1 findings above remain a record
+of that earlier pass. Baseline: 39 files / 246 game tests passing.
+
+| Finding | Trigger and observed outcome | Fix and evidence |
+| --- | --- | --- |
+| Failed mutations reported success | Force a quota error during a save or erase. The operation resolved, its cached row/revision changed, and the title could show an erased slot although disk still held it. | Reject failed persistence; restore the database cache and revision ownership. Save and erase retry tests in `slots.test.ts`, plus the production failed-erase browser regression. |
+| Writes continued after failed reads | Make `localStorage.getItem` throw while a cached save exists. A write still mutated the cache and resolved without reaching disk. | Refuse the write before mutation; the regression confirms the original record and a later successful retry. All three persistence regressions failed before the fix. |
+| Autosave during a death respawn | Delay the checkpoint region load. The player was revived while the primary snapshot still described the fortress; its pending discard was not saveable. | Track the region transition promise and wait before checkpointing. Engine and canvas tests cover pending respawn loads, asynchronous persistence and disposal. |
+| Failed transitions left the simulation running | Reject the destination worker during respawn. Only the console received the error, so the shell could keep saving the incomplete state. | Stop the loop and use the existing fatal recovery screen. A real engine regression verifies the callback; canvas fatal-error tests protect the previous save. |
+| Development engine requirement was stale | The package allowed Node 20, while the locked Vitest and new Electron tooling require Node 22.12 or later. | Align the package engine range and recommend Node 24 LTS. Verification used Node 24.21.0. |
+
+The Debian release bundles Electron 44.5.1, the production game, a launcher,
+desktop entry, icons and third-party license notices. It uses a stable secure
+local origin, permits browser Web Locks, blocks external navigation and requests,
+and keeps the renderer sandboxed without Node integration. Closing the window
+awaits a checkpoint; a failed final save gives the player a choice to keep playing.
+
+Validation: 251 game tests in 39 files; desktop protocol tests; production build
+and nested-path asset check; ten browser regressions including phone/tablet layouts;
+package metadata, file checksums and root-owned mode-4755 sandbox helper verified;
+APT installation simulation succeeds without removals. The extracted package
+passes offline launch, close/reopen persistence, quota recovery, journal and pause
+checks on a virtual display with Chromium's namespace sandbox enabled. The CI
+workflow additionally installs the package and tests its installed sandbox helper.
+
+The produced release is amd64. Other distributions and architectures require
+their own install/runtime validation before being advertised as tested.
+
+
+## Eight-phase autonomous sprint — 2026-10-09 — The Lamplighter's Margin
+
+The sprint started from an existing, uncommitted 1.2.0 worktree. All decisions
+were made within the requested non-destructive scope. Existing saves and the
+source sprite project were not edited. The pre-sprint state was archived before
+implementation; no reset, stash, commit, release publication, or system install
+was performed. Version metadata remains 1.2.0 and the new work is Unreleased.
+
+| Phase | Completed outcome | Evidence |
+| --- | --- | --- |
+| 1. Preserve and audit | Preserved 402 tracked/untracked project files and the original diff; identified the existing roadmap and rendering contracts. | Recovery archive below; baseline 49 test files / 317 tests, typecheck and 7 desktop tests passed. |
+| 2. Define scope | Selected the planned lantern with four optional regional accounts and compatible equipment illustrations. | No new shard requirement, stat reward, save version, map pins or fuel economy. |
+| 3. Generate sprites | Added six equipment icons and one lantern icon from the sibling generator, with seeds and source provenance. | Deterministic regeneration and hash checks; source revision `be0cb4b63806cd649391935a5290244d7400bc7e`; source project remains clean. |
+| 4. Implement discovery | Added lit/range/sight-gated writing, geographic leads and idempotent journal copies. | All four records are reachable and do not overlap ordinary notes; old v4 checkpoints restore. |
+| 5. Integrate presentation | Added a carried lamp, wider fortress light, brass silhouettes, HUD/touch toggle, equipment illustrations and Lamplight journal category. | Production browser screenshots at desktop, 320×568 and 844×390; keyboard and touch interactions pass. |
+| 6. Align interactions | Shared target selection between prompts and actions; selected nearest eligible NPCs/doors and consistent radii. | Pure selection tests and live-engine overlap regressions; paused inputs cannot toggle the lantern after resume. |
+| 7. Verify regressions | Exercised game state, saves, browser controls and asset integrity. | 53 files / 356 unit and integration tests; 23 production-browser tests; 7 desktop unit tests; TypeScript passes. |
+| 8. Build and hand off | Regenerated the static bundle using `npm run build`; updated README, roadmap, changelog and contributor instructions. | Nested-path release check passes; seven generated icons verified; all 53 original atlases / 759 frame hashes verified. |
+
+**Preservation:** all 106 original `src/assets/sprites/` files are byte-for-byte
+identical to the pre-sprint snapshot. The expanded review also checked 148
+original asset and vendored-generator files without finding a change. Only
+Vite-generated, hashed build files were replaced in `dist/`. Dependencies and the
+existing package lock were not changed by this sprint.
+
+**Recovery snapshot on this workstation:**
+`/home/woez/.local/state/eldrinth-sprints/20261009T073527Z/before-sprint.tar.gz`.
+The same directory contains `git-status.txt`, `tracked.diff`, `metadata.json`,
+and a final changed-path inventory. Extract individual files into a separate
+review directory when comparing; wholesale restoration would overwrite later work.
+
+**Verification commands:** `npm test`, `npm run typecheck`, `npm run build`,
+`npm run verify:release`, `npm run test:browser`, `npm run test:desktop:unit`,
+`npm run verify:equipment`, and `python3 tools/spritegen/asset_integrity_test.py`.
+The browser build retains its existing single-chunk size warning. Desktop
+packaging code is unchanged; this sprint did not rebuild or install a Debian
+package. The standalone static build in `dist/` contains the completed feature.

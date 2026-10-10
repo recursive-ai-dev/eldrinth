@@ -145,6 +145,16 @@ export default function VirtualControls({
 
       {/* Bottom-right: Action Buttons */}
       <div className="touch-actions pointer-events-auto absolute inset-safe-b inset-safe-r flex items-end gap-3">
+        <button
+          type="button"
+          aria-label="Parry"
+          onPointerDown={handlePointerDown("f")}
+          onPointerUp={handlePointerUp("f")}
+          onPointerCancel={handlePointerCancel("f")}
+          className="flex h-14 w-14 flex-col items-center justify-center rounded-full border border-amber-200/45 bg-amber-950/65 font-serif text-[11px] font-bold tracking-wider text-amber-100 backdrop-blur-md active:scale-95 active:bg-amber-800/80"
+        >
+          <span>PARRY</span><span className="text-[9px] text-amber-200/65">[F]</span>
+        </button>
         {/* Interact / Talk */}
         <button
           type="button"

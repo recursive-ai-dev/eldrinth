@@ -137,6 +137,29 @@ test("a failed storage write warns and preserves the last persisted record", asy
   await expect(page.getByText("Unsaved note", { exact: true })).toBeHidden();
 });
 
+test("a failed erase keeps the record visible and can be retried", async ({ page }) => {
+  await title(page); await begin(page); await note(page, "Keep until erase reaches disk"); await save(page);
+  await page.reload();
+  await expect(page.getByRole("button", { name: /^SLOT 1/ })).toBeVisible();
+  const original = await page.evaluate(() => localStorage.getItem("eldrinth.sqlite.v1"));
+  await page.evaluate(() => {
+    const set = Storage.prototype.setItem;
+    (window as unknown as { restoreStorage: () => void }).restoreStorage = () => { Storage.prototype.setItem = set; };
+    Storage.prototype.setItem = () => { throw new DOMException("Full", "QuotaExceededError"); };
+  });
+  await page.getByRole("button", { name: "Erase slot 1" }).click();
+  await expect(page.getByTestId("slot-error")).toContainText("storage is full");
+  await expect(page.getByRole("button", { name: /^SLOT 1/ })).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem("eldrinth.sqlite.v1"))).toBe(original);
+  await page.evaluate(() => (window as unknown as { restoreStorage: () => void }).restoreStorage());
+  await page.getByRole("button", { name: "Erase slot 1" }).click();
+  await expect(page.getByRole("button", { name: /^SLOT 1/ })).toHaveCount(0);
+  await expect(page.getByTestId("slot-error")).toHaveCount(0);
+  await expect(page.getByTestId("persistence-warning")).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole("button", { name: /^SLOT 1/ })).toHaveCount(0);
+});
+
 test("browsers without safe cross-tab locking leave stored records untouched", async ({ page, context }) => {
   await title(page); await begin(page); await save(page);
   const original = await page.evaluate(() => localStorage.getItem("eldrinth.sqlite.v1"));
@@ -188,3 +211,81 @@ for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }
     } finally { await context.close(); }
   });
 }
+
+test("equipment, camera preferences and journal search survive save and return", async ({ page }) => {
+  await title(page); await begin(page);
+  await note(page, "The north road remembers");
+  await page.keyboard.press("i");
+  await page.getByRole("button", { name: /Gravehammer/ }).click();
+  await expect(page.getByRole("button", { name: /Gravehammer/ })).toHaveAttribute("aria-pressed", "true");
+  await page.screenshot({ path: "test-results/eldrinth-equipment.png" });
+  await page.getByRole("button", { name: "Display", exact: true }).click();
+  const zoom = page.getByRole("slider", { name: "Camera zoom" });
+  await expect(zoom).toHaveValue("1.5");
+  await zoom.focus(); await page.keyboard.press("End");
+  await expect(zoom).toHaveValue("2");
+  await page.getByRole("checkbox", { name: /Larger reading text/ }).check();
+  await page.getByRole("checkbox", { name: /Quiet interface/ }).check();
+  await zoom.press("Escape");
+  await expect(page.getByRole("heading", { name: "PAUSED", exact: true })).toBeHidden();
+  await page.screenshot({ path: "test-results/eldrinth-camera.png" });
+  await page.keyboard.press("l");
+  await page.getByRole("searchbox", { name: "Search journal" }).fill("north road");
+  await expect(page.getByText("The north road remembers", { exact: true })).toBeVisible();
+  await page.getByRole("searchbox", { name: "Search journal" }).fill("no-such-record");
+  await expect(page.getByText(/No records match/)).toBeVisible();
+  await page.getByRole("searchbox", { name: "Search journal" }).press("Escape");
+  await page.keyboard.press("i");
+  await page.getByRole("button", { name: "SAVE & RETURN TO TITLE" }).click();
+  await expect(page.getByRole("heading", { name: "ELDRINTH", exact: true })).toBeVisible();
+  await page.reload(); await continueSlot(page, 1);
+  await page.keyboard.press("i");
+  await expect(page.getByRole("button", { name: /Gravehammer/ })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Display", exact: true }).click();
+  await expect(zoom).toHaveValue("2");
+  await expect(page.getByRole("checkbox", { name: /Larger reading text/ })).toBeChecked();
+  await expect(page.getByRole("checkbox", { name: /Quiet interface/ })).toBeChecked();
+  await expect(page.locator(".app-root")).toHaveClass(/large-reading.*quiet-interface/);
+});
+
+test("save and return stays in the game when persistence fails", async ({ page }) => {
+  await title(page); await begin(page); await save(page);
+  const stored = await page.evaluate(() => localStorage.getItem("eldrinth.sqlite.v1"));
+  await page.evaluate(() => {
+    const set = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === "eldrinth.sqlite.v1") throw new DOMException("Full", "QuotaExceededError");
+      set.call(this, key, value);
+    };
+  });
+  await page.keyboard.press("i");
+  await page.getByRole("button", { name: "SAVE & RETURN TO TITLE" }).click();
+  await expect(page.getByTestId("persistence-warning")).toContainText("storage is full");
+  await expect(page.getByRole("heading", { name: "PAUSED", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "RESUME", exact: true })).toBeEnabled();
+  expect(await page.evaluate(() => localStorage.getItem("eldrinth.sqlite.v1"))).toBe(stored);
+});
+
+test("compact journal keeps search, records and note writing reachable", async ({ page }) => {
+  await title(page); await begin(page);
+  await note(page, "Follow the ash road to the water drum.");
+  for (const viewport of [{ width: 320, height: 568 }, { width: 844, height: 390 }]) {
+    await page.setViewportSize(viewport);
+    await page.keyboard.press("l");
+    const search = page.getByRole("searchbox", { name: "Search journal" });
+    await search.fill("ash road");
+    const record = page.getByText("Follow the ash road to the water drum.", { exact: true });
+    await record.scrollIntoViewIfNeeded();
+    await expect(record).toBeInViewport({ ratio: 1 });
+    const input = page.locator("#journal-note");
+    await input.scrollIntoViewIfNeeded();
+    // Fractional dvh/scroll positions can clip less than one CSS pixel.
+    await expect(input).toBeInViewport({ ratio: 0.95 });
+    await page.screenshot({ path: `test-results/eldrinth-journal-${viewport.width}.png` });
+    await input.fill("The cup is still there.");
+    await input.press("Control+Enter");
+    await expect(input).toHaveValue("");
+    await input.press("Escape");
+    await expect(page.getByRole("dialog", { name: /Notes, Cores/ })).toHaveCount(0);
+  }
+});

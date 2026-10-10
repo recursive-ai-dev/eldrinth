@@ -19,7 +19,7 @@ export default function GameCanvas({
   onReady?: (g: Game) => void;
   onDispose?: (g: Game) => void;
   initialSnapshot?: WorldSnapshot | null;
-  onCheckpoint?: (snapshot: WorldSnapshot) => void;
+  onCheckpoint?: (snapshot: WorldSnapshot) => void | Promise<void>;
   difficulty?: Difficulty;
   onError?: (error: unknown) => void;
   onReturnToTitle?: () => void;
@@ -58,13 +58,20 @@ export default function GameCanvas({
     // a checkpoint in any of the connected maps loadable after a refresh.
     if (initialSnapshot) game.world.regionId = initialSnapshot.regionId;
     let disposed = false;
-    const checkpoint = () => {
-      if (!disposed && !fatal && game.initialized && !game.ended) onCheckpoint?.(game.saveWorld());
+    const checkpoint = async () => {
+      // A death respawn changes the player before loading the destination.
+      // Saving in that gap restores a living player into the half-cleared
+      // fortress and loses its pending reset. Wait for the complete world.
+      if (game.regionTransition) await game.regionTransition;
+      if (!disposed && !fatal && game.initialized && !game.ended) await onCheckpoint?.(game.saveWorld());
     };
+    // The desktop host awaits this promise before closing its window.
+    window.eldrinthCheckpoint = checkpoint;
+    const backgroundCheckpoint = () => { void checkpoint().catch(() => undefined); };
     const onVisibilityChange = () => {
-      if (document.visibilityState === "hidden") checkpoint();
+      if (document.visibilityState === "hidden") backgroundCheckpoint();
     };
-    const interval = window.setInterval(checkpoint, 10_000);
+    const interval = window.setInterval(backgroundCheckpoint, 10_000);
     window.addEventListener("visibilitychange", onVisibilityChange);
     void game.init()
       .then(() => {
@@ -86,8 +93,9 @@ export default function GameCanvas({
         setInitError(msg);
       });
     return () => {
-      checkpoint();
+      backgroundCheckpoint();
       disposed = true;
+      if (window.eldrinthCheckpoint === checkpoint) delete window.eldrinthCheckpoint;
       window.clearInterval(interval);
       window.removeEventListener("visibilitychange", onVisibilityChange);
       game.destroy();

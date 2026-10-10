@@ -1,5 +1,5 @@
 import type { HudData, DialogueData } from "../types";
-import { TILE, SIGN_READ_RADIUS } from "../constants";
+import { interactionPrompt, selectInteraction } from "../interactions";
 
 export interface GameFlowState {
   player: {
@@ -65,29 +65,7 @@ export class GameFlowSystem {
 
   updatePrompt(state: GameFlowState): string {
     if (state.dialogue) return state.prompt;
-    const p = state.player;
-    const npc = state.map.npc;
-    if (state.map.campfires.some((fire) => Math.hypot(p.x - fire.x, p.y - fire.y) < 52)) return "Press E to rest at the wayfire";
-    const doorway = state.map.exits.find((exit) => exit.requiresInteraction && Math.hypot(p.x - (exit.x * TILE + TILE / 2), p.y - (exit.y * TILE + TILE / 2)) < 44);
-    if (doorway) return `Press E to enter ${doorway.label}`;
-    if (Math.hypot(p.x - npc.x, p.y - npc.y) < 48) {
-      return "Press E to speak with Orithel";
-    }
-    for (const npc of state.map.npcs) {
-      if (Math.hypot(p.x - npc.x, p.y - npc.y) < 44) {
-        return `Press E to speak with ${npc.name}`;
-      }
-    }
-    for (const s of state.map.signs) {
-      const sx = s.x * TILE + TILE / 2;
-      const sy = s.y * TILE + TILE / 2;
-      // Must agree with the engine's own reading radius, or the prompt offers a
-      // note the interaction then refuses to open.
-      if (Math.hypot(p.x - sx, p.y - sy) < SIGN_READ_RADIUS) {
-        return "Press E to read note";
-      }
-    }
-    return "";
+    return interactionPrompt(selectInteraction(state));
   }
 
   advanceDialogue(dialogue: DialogueData | null, lines: string[], index: number) {

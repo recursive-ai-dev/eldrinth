@@ -1,8 +1,10 @@
+import { LANTERN_LIGHT_RADIUS, type LanternRecord } from "../lantern";
 import { TILE, T, tileDefinition } from "../constants";
 import { rr, dot, hash2, DIRV, DIRA } from "../math";
 import type { EnemyState, ItemState, PlayerState, ProjectileState } from "../core/WorldState";
 import type { MapData, NpcData, SettlementState } from "../types";
 import { getAtlasRevision, loadAtlas, preloadAtlases, type SpriteAtlas } from "./spriteAtlas";
+import { drawExpeditionLandmark, expeditionOnMap } from "./expeditionLandmarks";
 
 export const TILE_SPRITE_KEY: Record<number, string> = {
   [T.GRASS]: "tile.grass",
@@ -36,7 +38,7 @@ export const TILE_SPRITE_KEY: Record<number, string> = {
  * engine's virtual viewport calculations: a zoomed renderer that still culls
  * against the unzoomed viewport causes visible seams at chunk boundaries.
  */
-export const CAMERA_ZOOM = 1.2;
+export const CAMERA_ZOOM = 1.5;
 
 export const ENTITY_SPRITE_KEY: Record<string, string> = {
   player: "player",
@@ -219,9 +221,14 @@ export interface RenderState {
   cssH: number;
   viewW: number;
   viewH: number;
+  cameraZoom?: number;
+  lanternOn?: boolean;
+  lamplightRecord?: LanternRecord;
+  revealedLamplightRecord?: LanternRecord;
   cam: { x: number; y: number };
   time: number;
   wardUnlocked: boolean;
+  shards?: number;
   player: PlayerState;
   enemies: EnemyState[];
   projectiles: ProjectileState[];
@@ -245,9 +252,10 @@ const CHUNK_GUARD = 1;
  * `npm run bench`) without ever triggering an eviction. iOS Safari enforces a
  * far lower per-page canvas budget than that and will kill the tab.
  *
- * A 1280x720 view at CAMERA_ZOOM 1.2 shows about 12 chunks, so 32 keeps the
- * visible set plus a generous guard ring while walking, and caps the cache at
- * 64 MB.
+ * The usual budget is 32 chunks / 64 MB. Offscreen guards only use spare
+ * capacity. Large desktop windows can retain their visible set when it exceeds
+ * that budget; repeatedly evicting visible chunks would rasterize them on
+ * every frame even with a stationary camera.
  */
 const MAX_CACHED_CHUNKS = 32;
 
@@ -269,6 +277,7 @@ export class TileChunkRenderer {
   constructor(private readonly map: MapData) {}
 
   warm(cam: { x: number; y: number }, viewW: number, viewH: number) {
+    this.frame++;
     this.prepare(cam, viewW, viewH, CHUNK_GUARD);
   }
 
@@ -294,11 +303,18 @@ export class TileChunkRenderer {
   }
 
   private prepare(cam: { x: number; y: number }, viewW: number, viewH: number, guard: number) {
-    for (const [cx, cy] of this.chunkRange(cam, viewW, viewH, guard)) {
+    const visible = this.chunkRange(cam, viewW, viewH, 0);
+    const visibleKeys = new Set(visible.map(([cx, cy]) => `${cx},${cy}`));
+    const required = [...visible];
+    for (const position of this.chunkRange(cam, viewW, viewH, guard)) {
+      if (required.length >= MAX_CACHED_CHUNKS) break;
+      if (!visibleKeys.has(`${position[0]},${position[1]}`)) required.push(position);
+    }
+    for (const [cx, cy] of required) {
       const chunk = this.get(cx, cy);
       chunk.lastUsed = this.frame;
     }
-    this.evict();
+    this.evict(Math.max(MAX_CACHED_CHUNKS, visible.length));
   }
 
   private chunkRange(cam: { x: number; y: number }, viewW: number, viewH: number, guard: number): [number, number][] {
@@ -357,8 +373,8 @@ export class TileChunkRenderer {
     chunk.overlay.height = 0;
   }
 
-  private evict() {
-    while (this.chunks.size > MAX_CACHED_CHUNKS) {
+  private evict(limit: number) {
+    while (this.chunks.size > limit) {
       let oldestKey: string | undefined;
       let oldest = Infinity;
       for (const [key, chunk] of this.chunks) {
@@ -759,7 +775,7 @@ export function renderGame(g: RenderState) {
   }
 
   ctx.save();
-  ctx.scale(CAMERA_ZOOM, CAMERA_ZOOM);
+  ctx.scale(g.cameraZoom ?? CAMERA_ZOOM, g.cameraZoom ?? CAMERA_ZOOM);
   ctx.translate(-Math.round(g.cam.x) + sx, -Math.round(g.cam.y) + sy);
   stage("ground");
   g.tileRenderer.drawGround(ctx, g.cam, g.viewW, g.viewH);
@@ -889,38 +905,59 @@ function drawSettlementState(g: RenderState, ctx: CanvasRenderingContext2D) {
 
 const PLAYER_LIGHT_RADIUS = 96;
 const BRAZIER_LIGHT_RADIUS = 176;
+const darknessMasks = new WeakMap<CanvasRenderingContext2D, { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D }>();
 
-function drawDarkness(g: RenderState, ctx: CanvasRenderingContext2D) {
+export function drawDarkness(g: RenderState, ctx: CanvasRenderingContext2D) {
   if (!g.map.dark) return;
-  ctx.save();
-  ctx.globalCompositeOperation = "source-over";
-  ctx.fillStyle = "rgba(2,3,6,0.93)";
-  ctx.fillRect(0, 0, g.cssW, g.cssH);
+  let mask = darknessMasks.get(ctx);
+  if (!mask) {
+    const canvas = document.createElement("canvas");
+    const maskContext = canvas.getContext("2d");
+    if (!maskContext) return;
+    mask = { canvas, ctx: maskContext };
+    darknessMasks.set(ctx, mask);
+  }
+  const width = Math.max(1, Math.floor(g.cssW * g.dpr));
+  const height = Math.max(1, Math.floor(g.cssH * g.dpr));
+  if (mask.canvas.width !== width) mask.canvas.width = width;
+  if (mask.canvas.height !== height) mask.canvas.height = height;
+  const shade = mask.ctx;
+  shade.setTransform(g.dpr, 0, 0, g.dpr, 0, 0);
+  shade.globalAlpha = 1;
+  shade.globalCompositeOperation = "source-over";
+  shade.clearRect(0, 0, g.cssW, g.cssH);
+  const zoom = g.cameraZoom ?? CAMERA_ZOOM;
+  shade.fillStyle = "rgba(2,3,6,0.93)";
+  shade.fillRect(0, 0, g.cssW, g.cssH);
 
-  // Punch the lit areas back out of the darkness we just laid down. Convert
-  // world positions to screen space the same way drawLighting does, so both
-  // passes share one coordinate convention and stay shake/rounding-safe.
-  ctx.globalCompositeOperation = "destination-out";
+  // Erase only the darkness mask. Doing this on the main context would also
+  // erase the floor and actors beneath each light, leaving transparent holes.
+  shade.globalCompositeOperation = "destination-out";
   const punch = (x: number, y: number, radius: number) => {
-    const hole = ctx.createRadialGradient(x, y, radius * 0.15, x, y, radius);
+    const hole = shade.createRadialGradient(x, y, radius * 0.15, x, y, radius);
     hole.addColorStop(0, "rgba(0,0,0,1)");
     hole.addColorStop(0.65, "rgba(0,0,0,0.55)");
     hole.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = hole;
-    ctx.beginPath();
-    ctx.arc(x, y, radius, 0, Math.PI * 2);
-    ctx.fill();
+    shade.fillStyle = hole;
+    shade.beginPath();
+    shade.arc(x, y, radius, 0, Math.PI * 2);
+    shade.fill();
   };
-  const px = (g.player.x - g.cam.x + g.lastShakeX) * CAMERA_ZOOM;
-  const py = (g.player.y - g.cam.y + g.lastShakeY) * CAMERA_ZOOM;
-  punch(px, py, PLAYER_LIGHT_RADIUS * CAMERA_ZOOM);
+  const cameraX = Math.round(g.cam.x), cameraY = Math.round(g.cam.y);
+  const px = (g.player.x - cameraX + g.lastShakeX) * zoom;
+  const py = (g.player.y - cameraY + g.lastShakeY) * zoom;
+  punch(px, py, (g.lanternOn ? LANTERN_LIGHT_RADIUS : PLAYER_LIGHT_RADIUS) * zoom);
   for (const light of g.map.lights) {
     punch(
-      (light.x - g.cam.x + g.lastShakeX) * CAMERA_ZOOM,
-      (light.y - g.cam.y + g.lastShakeY) * CAMERA_ZOOM,
-      BRAZIER_LIGHT_RADIUS * CAMERA_ZOOM,
+      (light.x - cameraX + g.lastShakeX) * zoom,
+      (light.y - cameraY + g.lastShakeY) * zoom,
+      BRAZIER_LIGHT_RADIUS * zoom,
     );
   }
+  ctx.save();
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
+  ctx.drawImage(mask.canvas, 0, 0, g.cssW, g.cssH);
   ctx.restore();
 }
 
@@ -1037,6 +1074,28 @@ function drawBrazier(ctx: CanvasRenderingContext2D, x: number, y: number) {
 
 function drawSortedWorldObjects(g: RenderState, ctx: CanvasRenderingContext2D) {
   const objects: { y: number; draw: () => void }[] = [];
+  const record = g.lamplightRecord;
+  if (record) objects.push({ y: record.y * TILE + TILE / 2, draw: () => {
+    const x = record.x * TILE + TILE / 2, y = record.y * TILE + TILE / 2;
+    const revealed = g.revealedLamplightRecord === record;
+    ctx.save();
+    drawStaticSprite(ctx, "sign", x, y, 32);
+    // A scraped brass face is a landmark even with the lantern shuttered.
+    ctx.fillStyle = revealed ? "#eed39d" : "#806b46";
+    ctx.fillRect(x - 10, y - 13, 20, 14);
+    ctx.strokeStyle = revealed ? "#fff3cc" : "#b69a65";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x - 10, y - 13, 20, 14);
+    ctx.fillStyle = revealed ? "#634c2c" : "#a99267";
+    if (revealed) {
+      for (let row = 0; row < 3; row++) ctx.fillRect(x - 7, y - 10 + row * 4, 13 - row * 2, 1);
+    } else {
+      ctx.fillRect(x - 7, y - 6, 13, 1);
+    }
+    ctx.restore();
+  } });
+  const expedition = expeditionOnMap(g.map);
+  if (expedition) objects.push({ y: expedition.y * TILE + TILE / 2, draw: () => drawExpeditionLandmark(ctx, expedition, g.time) });
   // Braziers are the light sources in the fortresses, and the darkness pass
   // already punches a hole for every entry in map.lights. They were preloaded
   // and keyed but never actually drawn, so every fortress was lit by an
@@ -2087,6 +2146,20 @@ function drawPlayer(g: RenderState, ctx: CanvasRenderingContext2D) {
   ctx.ellipse(px, py + Math.round(p.r * 0.7), Math.round(p.r * 0.95), Math.round(p.r * 0.45), 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.translate(px, py);
+  // The burden remains visible on the road: one patient light per person.
+  const carried = Math.min(9, g.shards ?? 0);
+  if (carried > 0 && p.dying <= 0) {
+    ctx.save();
+    ctx.fillStyle = "#b9f0df";
+    ctx.globalAlpha = 0.6;
+    for (let i = 0; i < carried; i++) {
+      const angle = (i / 9) * Math.PI * 2 - Math.PI / 2;
+      ctx.beginPath();
+      ctx.arc(Math.cos(angle) * 23, Math.sin(angle) * 18, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
   const bob = p.dashing ? 0 : Math.round(Math.sin(p.walkT) * 1.5);
   ctx.translate(0, bob);
   if (p.dashing) {
@@ -2101,6 +2174,38 @@ function drawPlayer(g: RenderState, ctx: CanvasRenderingContext2D) {
   }
   if (p.invuln > 0 && !p.dashing && Math.floor(g.time * 20) % 2 === 0) ctx.globalAlpha = a * 0.5;
   drawKnightBody(ctx, p);
+  if (g.lanternOn && p.dying <= 0) {
+    ctx.save();
+    ctx.globalAlpha = a;
+    const glow = ctx.createRadialGradient(13, 7, 1, 13, 7, 30);
+    glow.addColorStop(0, "rgba(255,211,135,.22)");
+    glow.addColorStop(1, "rgba(255,211,135,0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(-17, -23, 60, 60);
+    drawStaticSprite(ctx, "lantern", 13, 7, 24);
+    ctx.restore();
+  }
+  if ((p.guardTimer ?? 0) > 0) {
+    const [dx, dy] = DIRV[p.dir];
+    const angle = Math.atan2(dy, dx);
+    ctx.save();
+    ctx.globalAlpha = .9;
+    ctx.strokeStyle = "#fff0b6";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, 22, angle - Math.PI / 3, angle + Math.PI / 3);
+    ctx.stroke();
+    ctx.restore();
+  } else if ((p.riposteTimer ?? 0) > 0) {
+    ctx.save();
+    ctx.globalAlpha = .65;
+    ctx.strokeStyle = "#ffe09a";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(0, 0, 21, -Math.PI / 2, -Math.PI / 2 + Math.PI * (p.riposteTimer ?? 0));
+    ctx.stroke();
+    ctx.restore();
+  }
   if (p.attacking) drawSword(ctx, p);
   ctx.restore();
 }
@@ -2175,6 +2280,23 @@ function drawSword(ctx: CanvasRenderingContext2D, p: PlayerState) {
   const ang = DIRA[p.dir] + (-1.0 + prog * 2.0);
   ctx.save();
   ctx.rotate(ang);
+  if (p.combatTool === "gravehammer") {
+    const windingUp = (p.attackWindup ?? 0) > 0;
+    ctx.strokeStyle = windingUp ? "rgba(255,196,110,0.4)" : "rgba(255,217,152,0.85)";
+    ctx.lineWidth = windingUp ? 2 : 8;
+    ctx.beginPath();
+    ctx.arc(0, 0, 29, -0.95, 0.95);
+    ctx.stroke();
+    ctx.fillStyle = "#805d3b";
+    ctx.fillRect(5, -2, 25, 4);
+    ctx.fillStyle = windingUp ? "#9e9bac" : "#f1c889";
+    ctx.fillRect(24, -9, 12, 18);
+    ctx.strokeStyle = "#463e50";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(24, -9, 12, 18);
+    ctx.restore();
+    return;
+  }
   ctx.globalCompositeOperation = "lighter";
   ctx.strokeStyle = `rgba(200,230,255,${0.5 * (1 - prog * 0.3)})`;
   ctx.lineWidth = 5;
@@ -2280,9 +2402,10 @@ function drawTexts(g: RenderState, ctx: CanvasRenderingContext2D) {
 function drawLighting(g: RenderState) {
   const ctx = g.ctx;
   const p = g.player;
-  const px = (p.x - g.cam.x + g.lastShakeX) * CAMERA_ZOOM;
-  const py = (p.y - g.cam.y + g.lastShakeY) * CAMERA_ZOOM;
-  const R = Math.max(g.viewW, g.viewH) * CAMERA_ZOOM * 0.62;
+  const zoom = g.cameraZoom ?? CAMERA_ZOOM;
+  const px = (p.x - g.cam.x + g.lastShakeX) * zoom;
+  const py = (p.y - g.cam.y + g.lastShakeY) * zoom;
+  const R = Math.max(g.viewW, g.viewH) * zoom * 0.62;
   // On dark maps drawDarkness supplies the ambient occlusion; the vignette
   // here would just re-darken the holes it punches, so skip it. The warm
   // torch-glow pass below is additive ("lighter") and only brightens, so it

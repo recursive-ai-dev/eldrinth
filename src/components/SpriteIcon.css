@@ -1,0 +1,8 @@
+.field-sprite {
+  display: inline-block;
+  flex-shrink: 0;
+  object-fit: contain;
+  image-rendering: pixelated;
+  vertical-align: middle;
+  user-select: none;
+}

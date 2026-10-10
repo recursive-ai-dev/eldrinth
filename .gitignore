@@ -21,6 +21,7 @@ bun.lockb
 coverage/
 test-results/
 playwright-report/
+release/
 *.log
 
 .DS_Store

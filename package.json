@@ -1,25 +1,46 @@
 {
   "name": "eldrinth",
   "private": true,
-  "version": "1.0.0",
-  "description": "ELDRINTH: The Unbound Spire — a 2D open-world dark-fantasy action RPG that runs entirely in the browser.",
+  "version": "1.2.0",
+  "productName": "ELDRINTH",
+  "description": "ELDRINTH: The Unbound Spire \u2014 a 2D open-world dark-fantasy action RPG for browsers and Linux desktops.",
+  "main": "desktop/main.cjs",
+  "author": {
+    "name": "recursive-ai-dev",
+    "email": "psychcoherence@gmail.com"
+  },
+  "homepage": "https://github.com/recursive-ai-dev/eldrinth",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/recursive-ai-dev/eldrinth.git"
+  },
   "license": "MIT",
   "type": "module",
   "engines": {
-    "node": ">=20.19"
+    "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
   },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "build:deb": "npm run build && npm run verify:release && npm run desktop:install && node tools/build-deb.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "verify:release": "node tools/verify-release.mjs",
     "bench": "vitest run --config bench/vitest.config.ts",
     "preview": "vite preview",
+    "gen:equipment": "python3 tools/spritegen/gen_equipment_icons.py",
+    "verify:equipment": "python3 tools/spritegen/gen_equipment_icons.py --check",
     "gen:sprites": "python3 tools/spritegen/gen_sprites.py",
     "portraits:gen": "node tools/generate-portraits.mjs",
     "portraits:zoom": ".venv/bin/python3 tools/zoom_portraits.py",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "desktop:install": "install-electron",
+    "desktop": "npm run desktop:install && electron .",
+    "test:desktop:unit": "node --test desktop/*.test.cjs",
+    "test:desktop": "node tools/smoke-desktop.mjs",
+    "verify:deb": "node tools/verify-deb.mjs",
+    "gen:field-kit": "python3 tools/spritegen/gen_field_kit.py",
+    "verify:field-kit": "python3 tools/spritegen/gen_field_kit.py --check"
   },
   "dependencies": {
     "@types/sql.js": "^1.4.11",
@@ -37,6 +58,7 @@
     "@types/react": "19.2.7",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "5.1.1",
+    "electron": "44.5.1",
     "tailwindcss": "4.1.17",
     "typescript": "5.9.3",
     "vite": "^7.3.6",

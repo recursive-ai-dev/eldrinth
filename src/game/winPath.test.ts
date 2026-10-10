@@ -60,6 +60,11 @@ describe("the run can be finished", () => {
       game.player.x = shard.x;
       game.player.y = shard.y;
       game.checkPickups();
+      expect(game.shards).toBe(before);
+      game.tryInteract();
+      game.advanceLock = 0;
+      game.advanceDialogue();
+      game.chooseDialogue(`harvest:${regionId}`);
 
       expect(game.shards, `${regionId} did not yield a shard`).toBe(before + 1);
       // Recorded against the vessel, so re-entering cannot re-award it.

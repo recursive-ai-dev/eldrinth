@@ -1,4 +1,6 @@
 import type { EndingId } from "./core/SceneStack";
+import type { EquipmentData } from "./equipment";
+import type { NavigationData } from "./navigation";
 
 export type Dir = "up" | "down" | "left" | "right";
 export type Difficulty = "story" | "standard" | "brutal";
@@ -157,6 +159,8 @@ export interface MapData {
 }
 
 export interface HudData {
+  navigation?: NavigationData;
+  journey?: { seconds: number; deaths: number; difficulty: Difficulty };
   regionName: string;
   hp: number;
   maxHp: number;
@@ -171,6 +175,10 @@ export interface HudData {
   enemies: number;
   bossActive: boolean;
   bossHp: number;
+  lantern?: { lit: boolean };
+  equipment?: EquipmentData;
+  voices?: { id: string; name: string; heard: boolean }[];
+  guard?: { window: number; cooldown: number; riposte: number; parries: number };
 }
 
 export interface DialogueData {

@@ -1,7 +1,9 @@
+import { addLanternDirections } from "./lantern";
 import { MAP_W, MAP_H, TILE, T, SIGN_READ_RADIUS } from "./constants";
 import type { MapData, Vec, EnemySpawn, SignData, RegionExit, CampfireData, TownData, TownBuildingData, NpcData } from "./types";
 import { parseFortressLayout } from "./fortress";
 import { FORTRESS_LAYOUTS } from "./fortressLayouts";
+import { expeditionForRegion, stampExpeditionSite } from "./encounters";
 
 function mulberry32(seed: number) {
   let a = seed >>> 0;
@@ -804,7 +806,7 @@ export function generateMap(regionId = "overworld"): MapData {
       x: 17,
       y: 43,
       title: "A Traveller's Primer",
-      text: "MOVE  WASD / Arrows · ATTACK  J / Space · DASH  Shift · SPEAK / READ  E · JOURNAL  L · PAUSE  Esc. The Watcher keeps the hall in Ilyarael: this road east to the junction, then south past the wayfire into the ruin. Write down what you find. Nobody else is going to.",
+      text: "MOVE  WASD / Arrows · ATTACK  J / Space · DASH  Shift · PARRY  F · SPEAK / READ  E · JOURNAL  L · PAUSE  Esc. Face an incoming blow and tap F just before it lands. A gold flash means you caught it; strike within two seconds to answer. The Watcher keeps the hall in Ilyarael: this road east to the junction, then south past the wayfire into the ruin. Write down what you find. Nobody else is going to.",
     },
     {
       x: 56,
@@ -892,6 +894,8 @@ export function generateMap(regionId = "overworld"): MapData {
 
   const shards: Vec[] = [];
 
+  stampExpeditionSite("overworld", tiles, MAP_W, signs);
+
   // 18 enemies strategically distributed across the expanded Old Lands
   const enemySpawns: EnemySpawn[] = [
     // Weeping Forest patrols & Archive guards
@@ -921,6 +925,7 @@ export function generateMap(regionId = "overworld"): MapData {
     { x: 128, y: 34, type: "adept" },
   ];
 
+  addLanternDirections("overworld", signs);
   return {
     regionName: "The Old Lands",
     width: MAP_W,
@@ -1303,7 +1308,11 @@ function generateFrontierMap(regionId: string): MapData {
     if (town.sign) signs.push(town.sign);
   }
 
-  // Exactly 10 enemies: 2 fortress approach sentinels + 8 wilderness patrols
+  stampExpeditionSite(regionId, tiles, MAP_W, signs);
+  const expedition = expeditionForRegion(regionId);
+
+  // Exactly 10 ambient enemies: authored expeditions summon their own cast on
+  // discovery so an old save with an existing population can still play them.
   const enemySpawns: EnemySpawn[] = [
     { x: config.siteTiles[0][0] - 2, y: config.siteTiles[0][1] + 4, type: "sentinel" },
     { x: config.siteTiles[1][0] - 2, y: config.siteTiles[1][1] + 4, type: "sentinel" },
@@ -1317,6 +1326,7 @@ function generateFrontierMap(regionId: string): MapData {
     const y = 10 + Math.floor(rng() * (MAP_H - 20));
     if (!openGround(tiles[idx(x, y)])) continue;
     if (Math.hypot(x - hub[0], y - hub[1]) < 16) continue;
+    if (expedition && Math.hypot(x - expedition.x, y - expedition.y) < 14) continue;
     if (config.siteTiles.some(([sx, sy]) => Math.hypot(x - sx, y - sy) < 10)) continue;
     if (towns.some((t) => Math.hypot(x * TILE + TILE / 2 - t.x, y * TILE + TILE / 2 - t.y) < t.safeRadius + 32)) continue;
     if (enemySpawns.some((spawn) => Math.hypot(x - spawn.x, y - spawn.y) < 18)) continue;
@@ -1324,6 +1334,7 @@ function generateFrontierMap(regionId: string): MapData {
     enemySpawns.push({ x, y, type: i % 4 === 0 ? "adept" : i % 3 === 0 ? "sentinel" : "wraith" });
   }
 
+  addLanternDirections(regionId, signs);
   return {
     regionName: config.name,
     width: MAP_W,

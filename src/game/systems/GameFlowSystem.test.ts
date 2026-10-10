@@ -71,4 +71,31 @@ describe("GameFlowSystem objectives", () => {
     };
     expect(flow.updatePrompt(state)).toBe("Press E to enter Althea's Ledger Room");
   });
+
+  it("advertises the closer inhabitant instead of a nearby doorway or wayfire", () => {
+    const state = {
+      ...base,
+      player: { ...base.player, x: 48, y: 48 },
+      map: {
+        ...base.map,
+        npc: { x: -9999, y: -9999 },
+        npcs: [{ x: 52, y: 48, name: "Althea", role: "lore" }],
+        exits: [{ x: 2, y: 1, label: "Ledger Room", requiresInteraction: true }],
+        campfires: [{ x: 48, y: 48 }],
+      },
+    };
+    expect(new GameFlowSystem().updatePrompt(state)).toBe("Press E to speak with Althea");
+  });
+
+  it("advertises conversation throughout the engine's interaction radius", () => {
+    const state = {
+      ...base,
+      map: {
+        ...base.map,
+        npc: { x: -9999, y: -9999 },
+        npcs: [{ x: 46, y: 0, name: "Mirene", role: "healer" }],
+      },
+    };
+    expect(new GameFlowSystem().updatePrompt(state)).toBe("Press E to speak with Mirene");
+  });
 });

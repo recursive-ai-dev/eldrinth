@@ -47,6 +47,7 @@ describe("respawning out of a reset-on-death region", () => {
     // The respawn is now waiting on the overworld load.
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(game.world.regionId).toBe(FORTRESS);
+    expect(game.regionTransition).not.toBeNull();
 
     const autosave = game.saveWorld();
     expect(autosave.regions?.[FORTRESS]).toBeUndefined();
@@ -56,8 +57,30 @@ describe("respawning out of a reset-on-death region", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
     expect(game.world.regionId).toBe("overworld");
+    expect(game.regionTransition).toBeNull();
     expect(game.world.regions[FORTRESS]).toBeUndefined();
     expect(game.saveWorld().regions?.[FORTRESS]).toBeUndefined();
+    game.destroy();
+  });
+
+  it("reports a failed respawn load so the shell protects the last good save", async () => {
+    const source: RegionSource = {
+      async load(regionId) {
+        if (regionId === "overworld") throw new Error("Destination worker failed");
+        return { id: regionId, map: generateMap(regionId) };
+      },
+    };
+    const failures: unknown[] = [];
+    const game = new Game(makeHeadlessCanvas(), { ...silentCallbacks(), onFatal: error => { failures.push(error); } }, new RegionRepository(source));
+    game.world.regionId = FORTRESS;
+    await game.init();
+    const map = generateMap("overworld");
+    game.world.checkpoint = { regionId: "overworld", ...map.spawn, name: "arrival" };
+    game.player.dying = 0.001;
+    game.simulateStep(1 / 60);
+    await game.regionTransition;
+    expect(failures).toHaveLength(1);
+    expect((failures[0] as Error).message).toBe("Destination worker failed");
     game.destroy();
   });
 });

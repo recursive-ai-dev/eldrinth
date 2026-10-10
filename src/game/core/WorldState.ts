@@ -2,6 +2,7 @@ import { type DialogueData, type Difficulty, type Dir, type EnemyType, type Item
 import type { QuestProgress } from "../quests";
 import { cumulativeHarvestCost, fortressShardIntakeEntry } from "../escalation";
 import { FORTRESS_LAYOUTS } from "../fortressLayouts";
+import { normalizeCombatTool, normalizeEquippedRelics, type CombatToolId, type RelicId } from "../equipment";
 
 export interface RegionSnapshot {
   enemies: EnemyState[];
@@ -47,6 +48,14 @@ export interface PlayerState {
   relics: string[];
   dashCostDiscount: number;
   attackBonus: number;
+  /** Optional in v4 checkpoints written before equipment became selectable. */
+  equippedRelics?: RelicId[];
+  combatTool?: CombatToolId;
+  attackWindup?: number;
+  guardTimer?: number;
+  guardCooldown?: number;
+  riposteTimer?: number;
+  parryCount?: number;
 }
 
 export interface EnemyState {
@@ -88,6 +97,8 @@ export interface ProjectileState {
   life: number;
   dmg: number;
   color: string;
+  /** A bolt turned back by Ashstep. */
+  friendly?: boolean;
 }
 
 export interface ItemState {
@@ -129,6 +140,8 @@ export interface WorldSnapshot {
   harvestedShards?: string[];
   /** Optional: pre-v1.0 saves did not count deaths. */
   deaths?: number;
+  /** Surveyed landmarks, grouped by region; older saves begin with an empty atlas. */
+  atlasDiscoveries?: Record<string, string[]>;
 }
 
 /** Counts cannot identify vessels in a game that permits any collection order. */
@@ -182,6 +195,7 @@ export class WorldState {
    */
   harvestedShards = new Set<string>();
   deaths = 0;
+  atlasDiscoveries: Record<string, string[]> = {};
   message = "";
   messageId = 0;
   nextEnemyId = 1;
@@ -211,7 +225,7 @@ export class WorldState {
       regionId: this.regionId,
       simulationTime: this.simulationTime,
       tick: this.tick,
-      player: { ...this.player, relics: [...this.player.relics], swingHit: [...this.player.swingHit] },
+      player: { ...this.player, relics: [...this.player.relics], equippedRelics: normalizeEquippedRelics(this.player.equippedRelics, this.player.relics), combatTool: normalizeCombatTool(this.player.combatTool), swingHit: [...this.player.swingHit] },
       enemies: this.enemies.map((enemy) => ({ ...enemy })),
       projectiles: this.projectiles.map((projectile) => ({ ...projectile })),
       items: this.items.map((item) => ({ ...item })),
@@ -222,6 +236,7 @@ export class WorldState {
       totalShards: this.totalShards,
       harvestedShards: [...this.harvestedShards],
       deaths: this.deaths,
+      atlasDiscoveries: structuredClone(this.atlasDiscoveries),
       message: this.message,
       messageId: this.messageId,
       nextEnemyId: this.nextEnemyId,
@@ -252,6 +267,14 @@ export class WorldState {
     this.simulationTime = snapshot.simulationTime;
     this.tick = snapshot.tick;
     this.player = { ...snapshot.player, relics: [...(snapshot.player.relics ?? [])], dashCostDiscount: snapshot.player.dashCostDiscount ?? 0, attackBonus: snapshot.player.attackBonus ?? 0, swingHit: new Set(snapshot.player.swingHit) };
+    this.player.equippedRelics = normalizeEquippedRelics(snapshot.player.equippedRelics, this.player.relics);
+    this.player.combatTool = normalizeCombatTool(snapshot.player.combatTool);
+    this.player.attackWindup = Math.max(0, snapshot.player.attackWindup ?? 0);
+    // Restoring a checkpoint cannot bank an active parry or a pending riposte.
+    this.player.guardTimer = 0;
+    this.player.guardCooldown = 0;
+    this.player.riposteTimer = 0;
+    this.player.parryCount = Math.max(0, Math.floor(snapshot.player.parryCount ?? 0));
     this.enemies = snapshot.enemies.map((enemy) => ({ ...enemy }));
     this.projectiles = snapshot.projectiles.map((projectile) => ({ ...projectile }));
     this.items = snapshot.items.map((item) => ({ ...item }));
@@ -261,6 +284,13 @@ export class WorldState {
     this.totalShards = snapshot.totalShards;
     this.harvestedShards = harvested;
     this.deaths = Math.max(0, snapshot.deaths ?? 0);
+    this.atlasDiscoveries = {};
+    if (snapshot.atlasDiscoveries && typeof snapshot.atlasDiscoveries === "object" && !Array.isArray(snapshot.atlasDiscoveries)) {
+      for (const [region, ids] of Object.entries(snapshot.atlasDiscoveries).slice(0, 128)) {
+        if (region === "__proto__" || region === "constructor" || region === "prototype" || !Array.isArray(ids)) continue;
+        this.atlasDiscoveries[region] = [...new Set(ids.filter((id): id is string => typeof id === "string" && id.startsWith(`${region}:`) && id.length < 240))].slice(0, 512);
+      }
+    }
     this.message = snapshot.message;
     this.messageId = snapshot.messageId;
     this.nextEnemyId = snapshot.nextEnemyId;

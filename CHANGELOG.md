@@ -7,6 +7,119 @@ semantic versioning.
 
 ## [Unreleased]
 
+### Added — The Wayfarer’s Kit
+
+- A discovery-based local atlas on `M`, saved surveys, searchable landmark
+  categories, destination pins, compass bearings, and sanctuary/return-point status.
+- An illustrated field guide, journal progress and status filters, record sorting,
+  clipboard/text export, and clearer personal-note feedback.
+- Loadout statistics, non-mutating relic comparisons, and an acquired-relic filter.
+- Manual checkpoints, save timestamps, journey statistics, and next-vessel health
+  forecasts in the pause menu.
+- Persisted focus-loss pausing, high contrast, ambient-overlay and camera-shake
+  switches, fullscreen controls, and comfort-setting reset.
+- 24 deterministic field-kit images generated from `shed-dev-sprites`, with
+  recipes, checksums, source attribution, license, and an offline verification tool.
+- [Full inventory of 41 improvements](docs/wayfarers-kit.md).
+
+### Added — The Lamplighter's Margin
+
+- A carried lantern on `R` and a touch-accessible HUD button. Raising it reveals
+  nearby concealed writing with clear line of sight and widens personal light in
+  dark interiors. The lamp needs no fuel, stamina, unlock or save migration.
+- Four optional brass-plate accounts across the Old Lands, Cinderwild, Moonlit
+  Coast and Starfall Moors. Existing road notices give directions; reading with
+  `E` preserves each account once in the journal's Lamplight category.
+- Seven deterministic equipment/lantern icons generated from `shed-dev-sprites`,
+  with source revision, recipes and hashes; existing world atlases are preserved.
+
+### Fixed
+
+- Interaction prompts and `E` now select the same nearest eligible inhabitant,
+  doorway, wayfire or note. The old prompt could advertise resting while the
+  action opened a nearby door, or miss an inhabitant inside interaction range.
+- Lantern inputs during pause, dialogue or journal reading cannot become delayed
+  toggles after returning to play. Cold loads shutter the lantern without losing
+  copied writing.
+
+## [1.2.0] — 2026-10-08 — Names in the Fire
+
+### Added
+
+- Nine named encounters at Anima vessels. Press `E` to hear the person inside
+  and see the exact permanent maximum-health cost before choosing to carry them.
+  Leaving a vessel keeps it available for a later visit.
+- Nine personal memories heard beside wayfires, saved in the journal's new
+  Voices section and reflected in the epilogue. The pause menu's Names section
+  shows the people carried and the memories heard, including on existing saves.
+- Last Breath: a directional parry on `F` and a touch Parry button. The
+  0.24-second guard costs 18 stamina and has a 0.9-second cooldown; a successful
+  parry returns 12 stamina and grants +2 damage to the next strike within two
+  seconds. The HUD shows guard and riposte readiness.
+- Offline procedural regional soundscapes and combat cues, with saved volume
+  and mute preferences.
+- A refreshed title, regional atmosphere and lights that accompany the people
+  the pilgrim carries.
+
+### Fixed
+
+- Fortress lantern light now reveals the player and nearby terrain instead of
+  erasing the rendered scene, keeping exploration and combat visible.
+
+### Desktop
+
+- Upgrade the standalone Debian release to 1.2.0. Existing desktop profiles,
+  slots, equipment and display preferences remain available after reinstalling.
+
+## [1.1.0] — 2026-10-08
+
+- Keep visible terrain cached at wide camera settings to avoid rebuilding tile
+  canvases every frame. Restore older saves safely when newly authored terrain
+  occupies a player's or enemy's previous position.
+- Keep equipment and resume keys locked while Save & Return waits for storage,
+  so a late input cannot discard changes made after the checkpoint was captured.
+
+### Added
+
+- Two combat tools: the fast Wayblade and the heavier, stamina-consuming
+  Gravehammer. Switch tools with `Q` or open the loadout with `I`.
+- Three relic slots with optional effects and tradeoffs for Emberheart,
+  Ashstep, Tidewell and Starblade. Older saves retain all earned permanent
+  bonuses and can attune their previously collected relics.
+- Four optional regional expeditions: the Hollow of the Uncounted, Ashglass
+  Causeway, the Drowned Court and the Listening Ring. Directions and discoveries
+  are recorded through the world and journal; completed rewards cannot be farmed.
+- A closer camera, starting at 150% zoom, with a 100%–200% display preference.
+  Add larger dialogue and journal text and a quiet interface with reduced motion.
+- Journal search and a Save & Return to Title action that waits for the current
+  checkpoint and keeps the run open if saving fails.
+
+### Desktop
+
+- Detect Wayland-only desktops in the launcher, so the game starts without
+  requiring an XWayland display. Match this behavior in package smoke tests.
+- Include release notes with the installed package. Preserve existing desktop
+  profiles and saves during the upgrade from 1.0.1.
+- Exercise combat-tool and camera-preference persistence through native window
+  close/reopen, and journal persistence through Save & Return to Title.
+
+## [1.0.1] — 2026-10-04
+
+- Add a standalone offline Linux desktop release with a bundled Electron
+  runtime, Debian package, desktop menu entry, icon, checksums and package checks.
+  The release workflow builds, installs and tests the package and uploads it
+  as a downloadable artifact.
+- Wait for the final checkpoint before closing the desktop window. Failed saves
+  keep the window open unless the player chooses to quit without saving.
+- Roll back failed SQLite mutations and revision ownership. A failed save or
+  erase now rejects the operation, preserves the visible record and can be retried.
+  Writes are refused when the latest stored database cannot be read.
+- Wait for region transitions before autosaving, so a death respawn cannot save
+  a revived player in the old fortress. Report failed region loads through the
+  recovery screen and protect the last successful save.
+- Align the development Node requirement with the locked test runner and desktop
+  tooling; Node 24 LTS is recommended.
+
 - Wait for save records before enabling new-game or continue actions. Starting
   a pilgrimage rechecks that the slot is empty and never deletes an occupied record.
 - Serialize SQLite writes between tabs and check per-slot revisions. Unrelated

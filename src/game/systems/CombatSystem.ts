@@ -24,6 +24,7 @@ export interface CombatProjectile {
   life: number;
   dmg: number;
   color: string;
+  friendly?: boolean;
 }
 
 export interface PlayerCombatState {
@@ -88,6 +89,10 @@ export class CombatSystem {
     onSolidHit: (projectile: CombatProjectile) => boolean,
     onPlayerHit: (projectile: CombatProjectile) => void,
     onExpire: (projectile: CombatProjectile) => void,
+    options?: {
+      onDeflect?: (projectile: CombatProjectile) => boolean;
+      onFriendlyHit?: (projectile: CombatProjectile) => boolean;
+    },
   ) {
     for (let i = projectiles.length - 1; i >= 0; i--) {
       const pr = projectiles[i];
@@ -110,7 +115,15 @@ export class CombatSystem {
         continue;
       }
 
-      if (Math.hypot(pr.x - player.x, pr.y - player.y) < pr.r + player.r && player.dying <= 0 && player.invuln <= 0 && !player.dashing) {
+      if (pr.friendly) {
+        if (options?.onFriendlyHit?.(pr)) projectiles.splice(i, 1);
+        continue;
+      }
+
+      const touchesPlayer = Math.hypot(pr.x - player.x, pr.y - player.y) < pr.r + player.r;
+      if (touchesPlayer && player.dying <= 0 && player.dashing && options?.onDeflect?.(pr)) continue;
+
+      if (touchesPlayer && player.dying <= 0 && player.invuln <= 0 && !player.dashing) {
         onPlayerHit(pr);
         projectiles.splice(i, 1);
       }

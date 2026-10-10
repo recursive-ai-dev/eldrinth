@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import titleBg from "@/assets/title.jpg";
 import type { Difficulty } from "@/game/types";
 import type { SaveSlot } from "@/game/slots";
+import AnimaSigil from "./AnimaSigil";
 
 const DIFFICULTIES: { id: Difficulty; label: string; description: string }[] = [
   { id: "story", label: "Story", description: "More health · slower, less alert foes" },
@@ -55,20 +56,23 @@ export default function TitleScreen({
   }, [difficulty, enabled, firstEmpty, onContinue, onStart, slots]);
 
   return (
-    <div className="absolute inset-0 z-40 overflow-hidden">
+    <div className="title-world absolute inset-0 z-40 overflow-hidden">
       <img
         src={titleBg}
         alt=""
-        className="absolute inset-0 h-full w-full object-cover opacity-70"
+        className="title-landscape absolute inset-0 h-full w-full object-cover opacity-70"
       />
       <div className="absolute inset-0 bg-linear-to-b from-black/40 via-black/30 to-black/85" />
       <div className="absolute inset-0 vignette" />
+      <AnimaSigil className="title-sigil absolute text-amber-100/35" />
+      <div aria-hidden="true" className="title-rule" />
 
       <div data-testid="title-scroll" className="title-scroll absolute inset-0 z-10 overflow-y-auto">
         <div className="flex min-h-full flex-col items-center px-4 py-8 text-center sm:px-6">
           <div className="my-auto flex w-full max-w-3xl shrink-0 flex-col items-center">
+            <div className="mb-5 flex items-center gap-3 font-title text-[10px] tracking-[.25em] text-amber-100/75"><span className="h-px w-8 bg-amber-100/30" />NAMES IN THE FIRE · 1.2<span className="h-px w-8 bg-amber-100/30" /></div>
             <div className="font-title text-xs uppercase tracking-[0.6em] text-teal-300/70 glow-pulse">
-              A Dark Fantasy of the Forged
+              Nine people. One body. Your decision.
             </div>
             <h1 className="font-title mt-3 text-[clamp(2.5rem,10vw,4.5rem)] font-bold leading-none tracking-[0.12em] text-amber-50 drop-shadow-[0_2px_18px_rgba(0,0,0,0.9)]">
               ELDRINTH
@@ -79,17 +83,13 @@ export default function TitleScreen({
               <span className="h-px w-12 bg-amber-200/30" />
             </div>
 
-            <p className="mx-auto mt-6 max-w-2xl font-serif text-base leading-relaxed text-amber-50/70 sm:text-lg">
-              Long ago the Elder Elves built the <em className="text-teal-200/80">Mnemonic</em> — a mind
-              that would lose nothing — and set it to keep their cities. When the last Elf died it went on
-              remembering, alone, and some of what it holds has since{" "}
-              <em className="text-rose-300/80">Sundered</em> into hunger. The greatest of them, the{" "}
-              <em className="text-rose-300/80">Unbound</em>, wakes beneath the last Glass Spire. Nine Anima
-              Shards will quiet it, they say. Orithel keeps the hall at Ilyarael, and will tell you where to
-              look.
-              <br />
-              Take up the old blade, wayfarer.
+            <p className="mx-auto mt-6 max-w-xl font-serif text-base leading-relaxed text-amber-50/85 sm:text-lg">
+              Beneath the last Glass Spire, a mind built to remember everything wakes alone.
+              Nine Anima Shards will quiet it, they say. Each one is a person still inside.
+              Take up the old blade, wayfarer. Orithel waits in Ilyarael.
             </p>
+            <p className="mt-3 font-serif text-sm italic text-teal-100/75">The world calls them shards. Learn their names.</p>
+            <div className="mt-5 flex flex-wrap justify-center gap-x-5 gap-y-1 border-y border-amber-100/15 py-2.5 font-title text-[9px] tracking-[.17em] text-amber-100/65"><span>READ THE ROADS</span><span>HOLD YOUR GROUND</span><span>LISTEN AT THE FIRE</span></div>
 
             <div className="mt-8 w-full max-w-xl rounded-xl border border-amber-100/15 bg-black/35 p-4 text-left backdrop-blur-sm">
               <div className="font-title text-xs tracking-[0.25em] text-amber-100/75">PILGRIM RECORDS</div>
@@ -101,6 +101,7 @@ export default function TitleScreen({
                       <button disabled={!enabled} onClick={() => onContinue(id)} className="min-w-0 flex-1 px-2 py-2 text-left">
                         <span className="block font-title text-xs tracking-wider text-teal-100">SLOT {id}</span>
                         <span className="block font-serif text-[10px] text-amber-100/75">{slot.difficulty} · {slot.shards}/9 shards</span>
+                        <time dateTime={new Date(slot.updatedAt).toISOString()} className="mt-1 block text-[10px] text-amber-100/60">{new Date(slot.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })} · {new Date(slot.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
                       </button>
                       <button disabled={!enabled} aria-label={`Erase slot ${id}`} onClick={() => onErase(id)} className="border-l border-teal-300/20 px-2 text-rose-200/80 hover:bg-rose-400/15 hover:text-rose-100">×</button>
                     </div>
@@ -145,6 +146,11 @@ export default function TitleScreen({
               <div>
                 <span className="text-teal-200/80">L</span> — Field Journal
               </div>
+              <div><span className="text-teal-200/80">Q</span> — Switch Weapon</div>
+              <div><span className="text-teal-200/80">I / Esc</span> — Equipment</div>
+              <div><span className="text-teal-200/80">F</span> — Timed Parry</div>
+              <div><span className="text-teal-200/80">R</span> — Lantern</div>
+              <div><span className="text-teal-200/80">M</span> — Local Atlas</div>
             </div>
           </div>
 
@@ -160,7 +166,7 @@ export default function TitleScreen({
           )}
 
           <div className="mt-6 font-serif text-[10px] tracking-widest text-amber-100/60">
-            ELVES MADE MINDS · MINDS WENT MAD · ONE BLADE REMAINS
+            THEY WERE PEOPLE BEFORE THEY WERE USEFUL
           </div>
         </div>
       </div>

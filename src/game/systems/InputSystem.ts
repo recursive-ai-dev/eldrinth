@@ -67,7 +67,9 @@ export class InputSystem {
         target?.closest?.('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return;
     if ([" ", "enter", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(key) &&
         target?.closest?.('button, a[href], [role="button"], [role="tab"]')) return;
-    if (!this.keys.has(key)) this.pressed.add(key);
+    // Opening/advancing dialogue clears held state. An OS repeat after that
+    // clear must not become a fresh attack, guard, or irreversible choice.
+    if (!event.repeat && !this.keys.has(key)) this.pressed.add(key);
     this.keys.add(key);
     this.keydownHandler?.(event);
   };

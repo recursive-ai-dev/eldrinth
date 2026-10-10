@@ -1,0 +1,202 @@
+{
+  "icons": {
+    "ashstep": {
+      "file": "ashstep.png",
+      "fileSha256": "913eb8b17db76f2ba981f7cf3994007a2db3af559f0accde3c1edcc37d746c24",
+      "height": 32,
+      "kind": "item",
+      "options": {
+        "category": "ring",
+        "palette": "volcanic_ember"
+      },
+      "pixelSha256": "0fd1f2f59befaca6d70b799b3c53fce5c73eae5f3bf33af898ed1303016bce3b",
+      "seed": "eldrinth-equipment-ashstep-13",
+      "spec": {
+        "accent": "#a48baf",
+        "accent2": "#fa7415",
+        "category": "ring",
+        "flip": true,
+        "material": "#df431b",
+        "palette": "volcanic_ember",
+        "pipeline": {
+          "outline": "inward-1px",
+          "palette": "cosine",
+          "shape": "sdf-csg"
+        },
+        "tier": "obsidian",
+        "variant": "studded"
+      },
+      "width": 32
+    },
+    "emberheart": {
+      "file": "emberheart.png",
+      "fileSha256": "247a94febc0e3277e87556042ff4fc0f1472a09f47e077c782ea6d32c7cce334",
+      "height": 32,
+      "kind": "item",
+      "options": {
+        "category": "gem",
+        "palette": "volcanic_ember"
+      },
+      "pixelSha256": "3537e6e7228cc625845c4363c232d83d02275b681212c69db822b35d76946665",
+      "seed": "eldrinth-equipment-emberheart-01",
+      "spec": {
+        "accent": "#a910ae",
+        "accent2": "#770909",
+        "category": "gem",
+        "flip": false,
+        "material": "#e05803",
+        "palette": "volcanic_ember",
+        "pipeline": {
+          "outline": "inward-1px",
+          "palette": "cosine",
+          "shape": "sdf-csg"
+        },
+        "tier": "silver",
+        "variant": "studded"
+      },
+      "width": 32
+    },
+    "gravehammer": {
+      "file": "gravehammer.png",
+      "fileSha256": "61a0e33776da8de20cc77d2368538085c17f776911fea3658e0ae58aadc8b1dd",
+      "height": 32,
+      "kind": "item",
+      "options": {
+        "category": "hammer",
+        "palette": "rusted_stone"
+      },
+      "pixelSha256": "15ab1964ef33cce39876ec51f45f4bc877418f83a62f5e613d90a3b5d56a04d8",
+      "seed": "eldrinth-equipment-gravehammer-35",
+      "spec": {
+        "accent": "#b04462",
+        "accent2": "#c8330c",
+        "category": "hammer",
+        "flip": false,
+        "material": "#8a6a45",
+        "palette": "rusted_stone",
+        "pipeline": {
+          "outline": "inward-1px",
+          "palette": "cosine",
+          "shape": "sdf-csg"
+        },
+        "tier": "obsidian",
+        "variant": "runed"
+      },
+      "width": 32
+    },
+    "lantern": {
+      "file": "lantern.png",
+      "fileSha256": "c4a2302b5125e2f975b1d661c1f83e686373a7aace1ce98ed6b672a17f88a148",
+      "height": 32,
+      "kind": "prop",
+      "options": {
+        "frame": 0,
+        "frames": 2,
+        "prop_type": "lantern"
+      },
+      "pixelSha256": "8be9c4478bad61a8298085ff1fc789c2f311774262fc8c1272b38d81e607a6de",
+      "seed": "eldrinth-equipment-lantern-01",
+      "spec": {
+        "frame": 0,
+        "prop_type": "lantern",
+        "seed": 16848018985850495335,
+        "size": [
+          32,
+          32
+        ]
+      },
+      "width": 32
+    },
+    "starblade": {
+      "file": "starblade.png",
+      "fileSha256": "ab92dbd1749141ce18222b16625aea75c31de5f871d8ab7e75789e308b09df25",
+      "height": 32,
+      "kind": "item",
+      "options": {
+        "category": "dagger",
+        "palette": "spire_anima"
+      },
+      "pixelSha256": "230231f4f13470f37702b55d2c3c8499a84bc9eb407debaed611bf59ea3d22fe",
+      "seed": "eldrinth-equipment-starblade-01",
+      "spec": {
+        "accent": "#970dba",
+        "accent2": "#790a09",
+        "category": "dagger",
+        "flip": false,
+        "material": "#64eadd",
+        "palette": "spire_anima",
+        "pipeline": {
+          "outline": "inward-1px",
+          "palette": "cosine",
+          "shape": "sdf-csg"
+        },
+        "tier": "steel",
+        "variant": "plain"
+      },
+      "width": 32
+    },
+    "tidewell": {
+      "file": "tidewell.png",
+      "fileSha256": "ad256bbcd0233a95151f765cd1f1e02a05bbe8592578c8d9379236e22843b85f",
+      "height": 32,
+      "kind": "item",
+      "options": {
+        "category": "potion",
+        "palette": "black_water"
+      },
+      "pixelSha256": "658ff37cb547c2e2572785e916aff94ab6f136dcc6e5c4051ce9aa42ae91bb51",
+      "seed": "eldrinth-equipment-tidewell-01",
+      "spec": {
+        "accent": "#5d13d8",
+        "accent2": "#fb580f",
+        "category": "potion",
+        "flip": false,
+        "material": "#18011e",
+        "palette": "black_water",
+        "pipeline": {
+          "outline": "inward-1px",
+          "palette": "cosine",
+          "shape": "sdf-csg"
+        },
+        "tier": "obsidian",
+        "variant": "runed"
+      },
+      "width": 32
+    },
+    "wayblade": {
+      "file": "wayblade.png",
+      "fileSha256": "3a67211fc12a2098840d8d72b654bd07578c335e7246e2ba3898869e21f7fc51",
+      "height": 32,
+      "kind": "item",
+      "options": {
+        "category": "sword",
+        "palette": "grim_steel"
+      },
+      "pixelSha256": "6bce749261bcc1c7f685492263c83093440ae8da939d7af9a1ae5c66be32ade7",
+      "seed": "eldrinth-equipment-wayblade-33",
+      "spec": {
+        "accent": "#ae4361",
+        "accent2": "#e3450e",
+        "category": "sword",
+        "flip": false,
+        "material": "#958e89",
+        "palette": "grim_steel",
+        "pipeline": {
+          "outline": "inward-1px",
+          "palette": "cosine",
+          "shape": "sdf-csg"
+        },
+        "tier": "obsidian",
+        "variant": "runed"
+      },
+      "width": 32
+    }
+  },
+  "source": {
+    "generatorSha256": "678984d81436bd54fa1602213a85bda185e1b86885a72e10bed7a0a26bc58256",
+    "license": "Apache-2.0",
+    "project": "shed-dev-sprites",
+    "revision": "be0cb4b63806cd649391935a5290244d7400bc7e"
+  },
+  "version": 1
+}

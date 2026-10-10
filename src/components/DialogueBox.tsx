@@ -18,7 +18,7 @@ export default function DialogueBox({
       className="pointer-events-auto absolute inset-x-0 bottom-0 z-20 flex justify-center px-4 pb-[max(1.25rem,env(safe-area-inset-bottom,0px))]"
       onClick={data.choices ? undefined : onAdvance}
     >
-      <div className="w-[min(820px,94vw)] rounded-xl border border-amber-200/20 bg-linear-to-b from-[#15131c]/95 to-[#0a0810]/95 p-5 shadow-2xl backdrop-blur-md">
+      <div className="max-h-[75dvh] w-[min(820px,94vw)] overflow-y-auto rounded-xl border border-amber-200/20 bg-linear-to-b from-[#15131c]/95 to-[#0a0810]/95 p-5 shadow-2xl backdrop-blur-md">
         <div className="flex gap-4">
           {data.portrait && (
             <NpcPortraitView
@@ -42,7 +42,7 @@ export default function DialogueBox({
             <p
               aria-live="polite"
               aria-atomic="true"
-              className="min-h-[3.5rem] font-serif text-lg leading-relaxed text-amber-50/90"
+              className="reading-copy min-h-[3.5rem] font-serif text-lg leading-relaxed text-amber-50/90"
             >
               {data.text}
             </p>
@@ -56,7 +56,7 @@ export default function DialogueBox({
                 onClick={(event) => { event.stopPropagation(); onChoice(choice.id); }}
                 className="rounded border border-teal-200/25 bg-teal-300/5 px-3 py-2 text-left font-serif text-sm text-teal-50/90 transition hover:border-teal-200/60 hover:bg-teal-300/15"
               >
-                <span className="mr-2 font-title text-xs tracking-wider text-teal-200/80">{index + 1}.</span>
+                <span className="mr-2 font-title text-xs tracking-wider text-teal-200/80">{(index + 1) % 10}.</span>
                 {choice.label}
               </button>
             ))}
@@ -70,7 +70,7 @@ export default function DialogueBox({
             />
           </div>
           <span className="font-title flick text-xs tracking-widest text-amber-200/80">
-            {data.choices ? "1–9 / CLICK" : "▼ E / CLICK"}
+            {data.choices ? (data.choices.length > 9 ? "1–9, 0 / CLICK" : "1–9 / CLICK") : "▼ E / CLICK"}
           </span>
         </div>
       </div>

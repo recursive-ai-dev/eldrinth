@@ -15,9 +15,26 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - run: npm run test:desktop:unit
       - run: npm run build
       - run: npm run verify:release
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser
       - name: Check committed bundle is current
         run: git diff --exit-code -- dist
+      - run: npm run desktop:install
+      - name: Build and verify Debian package
+        run: |
+          node tools/build-deb.mjs
+          npm run verify:deb
+      - name: Install and test Debian desktop release
+        run: |
+          sudo apt-get install -y ./release/eldrinth_*.deb xvfb
+          xvfb-run -a npm run test:desktop
+        env:
+          ELDRINTH_DESKTOP_EXECUTABLE: /usr/lib/eldrinth/eldrinth
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eldrinth-debian-amd64
+          path: release/
+          if-no-files-found: error
