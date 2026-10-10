@@ -15,6 +15,13 @@ import type { Game } from "@/game/engine";
 import type { WorldSnapshot } from "@/game/core/WorldState";
 import { slotStore, type SaveSlot, type PersistenceStatus } from "@/game/slots";
 import { type Difficulty, normalizeDifficulty } from "@/game/types";
+import { readDisplayPreferences, saveDisplayPreferences, type DisplayPreferences } from "@/components/displayPreferences";
+import WorldAtmosphere from "@/components/WorldAtmosphere";
+import { useSoundscape } from "@/audio/useSoundscape";
+import SoundSettings from "@/audio/SoundSettings";
+import Atlas from "@/components/Atlas";
+import { readTravelPreferences, saveTravelPreferences, type TravelPreferences } from "@/components/travelPreferences";
+import "@/components/travel.css";
 
 
 export default function App() {
@@ -28,6 +35,8 @@ export default function App() {
   const epilogue = useGameStore(selectEpilogue);
   const { startGame, endGame, setPaused, setHud, setDialogue, setJournal, setInterior } = useGameStore();
   const [journalOpen, setJournalOpen] = useState(false);
+  const [atlasOpen, setAtlasOpen] = useState(false);
+  const [pinnedId, setPinnedId] = useState<string | null>(null);
   const [checkpoint, setCheckpoint] = useState<WorldSnapshot | null>(null);
   const [slots, setSlots] = useState<SaveSlot[]>([]);
   const [slotsReady, setSlotsReady] = useState(false);
@@ -39,6 +48,11 @@ export default function App() {
   const [warned, setWarned] = useState(() => contentWarningSeen());
   const [persistence, setPersistence] = useState<PersistenceStatus>({ ok: true, reason: null, cause: null });
   const [slotError, setSlotError] = useState<string | null>(null);
+  const [preferences, setPreferences] = useState(readDisplayPreferences);
+  const [preferencesSaved, setPreferencesSaved] = useState(true);
+  const [travelPreferences, setTravelPreferences] = useState(readTravelPreferences);
+  const [travelPreferencesSaved, setTravelPreferencesSaved] = useState(true);
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
 
   const refreshSlots = useCallback(() => {
     return slotStore.list().then((records) => { setSlots(records); setSlotsReady(true); }).catch((error: unknown) => {
@@ -114,6 +128,8 @@ export default function App() {
     // bad state.
     setCheckpoint(null);
     setJournalOpen(false);
+    setAtlasOpen(false);
+    setPinnedId(null);
     startGame();
   }, [startGame]);
 
@@ -123,9 +139,14 @@ export default function App() {
     // the new run's checkpoint or overwrite its slot.
     if (useGameStore.getState().sessionId !== sessionId) return;
     setCheckpoint(snapshot);
-    if (activeSlot != null) void slotStore.save(activeSlot, snapshot).then(refreshSlots).catch((error: unknown) => {
+    if (activeSlot != null) return slotStore.save(activeSlot, snapshot).then(async () => {
+      setSlotError(null);
+      setLastSavedAt(Date.now());
+      await refreshSlots();
+    }).catch((error: unknown) => {
       console.error("Failed to save checkpoint:", error);
       setSlotError(error instanceof Error ? error.message : "Progress could not be saved. Please reload the page and try again.");
+      throw error;
     });
   }, [activeSlot, refreshSlots, sessionId]);
 
@@ -142,9 +163,52 @@ export default function App() {
   }, []);
 
   const gameRef = useRef<Game | null>(null);
+  const changePreferences = useCallback((next: DisplayPreferences) => {
+    setPreferences(next);
+    setPreferencesSaved(saveDisplayPreferences(next));
+    gameRef.current?.setCameraZoom(next.cameraZoom);
+  }, []);
+  const changeTravelPreferences = useCallback((next: TravelPreferences) => {
+    setTravelPreferences(next);
+    setTravelPreferencesSaved(saveTravelPreferences(next));
+    if (gameRef.current) {
+      gameRef.current.autoPause = next.autoPause;
+      gameRef.current.screenShake = next.screenShake;
+      if (!next.screenShake) gameRef.current.shakeMag = 0;
+    }
+  }, []);
+  const saveCurrentCheckpoint = useCallback(async () => {
+    const game = gameRef.current;
+    if (!game || !game.initialized || game.ended) throw new Error("The world is still opening. Please try again in a moment.");
+    if (game.regionTransition) await game.regionTransition;
+    await saveCheckpoint(game.saveWorld());
+  }, [saveCheckpoint]);
+  const saveAndReturnToTitle = useCallback(async () => {
+    const game = gameRef.current;
+    if (!game || !game.initialized) throw new Error("The world is still opening. Please try again in a moment.");
+    if (game.regionTransition) await game.regionTransition;
+    await saveCheckpoint(game.saveWorld());
+    if (gameRef.current !== game) return;
+    setJournalOpen(false);
+    setAtlasOpen(false);
+    useGameStore.getState().reset();
+  }, [saveCheckpoint]);
   const setJournalVisibility = useCallback((open: boolean) => {
     gameRef.current?.setJournalOpen(open);
+    setAtlasOpen(false);
     setJournalOpen(open);
+  }, []);
+  const setAtlasVisibility = useCallback((open: boolean) => {
+    gameRef.current?.setJournalOpen(open);
+    setJournalOpen(false);
+    setAtlasOpen(open);
+  }, []);
+  useEffect(() => {
+    const pauseHidden = () => {
+      if (document.visibilityState === "hidden") gameRef.current?.onBlur();
+    };
+    document.addEventListener("visibilitychange", pauseHidden);
+    return () => document.removeEventListener("visibilitychange", pauseHidden);
   }, []);
   useEffect(() => {
     const toggleJournal = (event: KeyboardEvent) => {
@@ -153,6 +217,11 @@ export default function App() {
       // target guard exists so typing "l" does not toggle the panel, but applied
       // first it also swallowed Escape and stranded the player in the textarea
       // behind an on-screen button that reads "ESC / L / CLOSE".
+      if (event.key === "Escape" && atlasOpen) {
+        event.preventDefault();
+        setAtlasVisibility(false);
+        return;
+      }
       if (event.key === "Escape" && journalOpen) {
         event.preventDefault();
         setJournalVisibility(false);
@@ -160,6 +229,11 @@ export default function App() {
       }
       const target = event.target;
       if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || (target instanceof HTMLElement && target.isContentEditable)) return;
+      if (event.key.toLowerCase() === "m" && (screen === "overworld" || screen === "interior") && !dialogue) {
+        event.preventDefault();
+        setAtlasVisibility(!atlasOpen);
+        return;
+      }
       if (event.key.toLowerCase() === "l" && (screen === "overworld" || screen === "interior") && !dialogue) {
         event.preventDefault();
         setJournalVisibility(!journalOpen);
@@ -167,7 +241,7 @@ export default function App() {
     };
     window.addEventListener("keydown", toggleJournal);
     return () => window.removeEventListener("keydown", toggleJournal);
-  }, [screen, dialogue, journalOpen, setJournalVisibility]);
+  }, [screen, dialogue, journalOpen, atlasOpen, setJournalVisibility, setAtlasVisibility]);
   const callbacks: GameCallbacks = {
     onHud: (hudData) => setHud(hudData),
     onDialogue: (dialogueData) => setDialogue(dialogueData),
@@ -178,9 +252,10 @@ export default function App() {
   };
 
   const showGame = screen === "overworld" || screen === "interior" || screen === "pause";
+  const sound = useSoundscape({ hud, active: showGame, paused: paused || journalOpen || atlasOpen, dialogue: !!dialogue });
 
   return (
-    <div className="app-root relative h-[100dvh] w-full overflow-hidden bg-black font-serif text-amber-50">
+    <div className={`app-root relative h-[100dvh] w-full overflow-hidden bg-black font-serif text-amber-50${preferences.largeText ? " large-reading" : ""}${preferences.quietInterface ? " quiet-interface" : ""}${travelPreferences.highContrast ? " high-contrast" : ""}`}>
       {showGame && (
         <GameCanvas
           key={sessionId}
@@ -190,14 +265,15 @@ export default function App() {
           difficulty={difficulty}
           // A fresh engine starts with its journal closed; match it, or a journal
           // left open when the previous engine crashed covers a live world.
-          onReady={(g) => { gameRef.current = g; setJournalOpen(false); }}
+          onReady={(g) => { gameRef.current = g; g.setCameraZoom(preferences.cameraZoom); g.autoPause = travelPreferences.autoPause; g.screenShake = travelPreferences.screenShake; setJournalOpen(false); setAtlasOpen(false); setPinnedId(null); setLastSavedAt(null); }}
           onDispose={(g) => { if (gameRef.current === g) gameRef.current = null; }}
         />
       )}
 
-      {showGame && <HUD hud={hud} />}
+      {showGame && travelPreferences.atmosphere && <WorldAtmosphere region={hud.regionName} still={paused || journalOpen || atlasOpen || !!dialogue} />}
+      {showGame && <HUD hud={hud} pinnedId={pinnedId} onAtlas={!paused && !dialogue && !journalOpen && !atlasOpen ? () => setAtlasVisibility(true) : undefined} onLantern={!paused && !dialogue && !journalOpen && !atlasOpen ? () => { gameRef.current?.toggleLantern(); } : undefined} onEquipment={!paused && !dialogue && !journalOpen && !atlasOpen ? () => gameRef.current?.setPaused(true) : undefined} />}
 
-      {showGame && !paused && !dialogue && !journalOpen && (
+      {showGame && !paused && !dialogue && !journalOpen && !atlasOpen && (
         <VirtualControls
           onInput={(key, isDown) => gameRef.current?.setVirtualKey(key, isDown)}
           onToggleJournal={() => setJournalVisibility(!journalOpen)}
@@ -213,6 +289,8 @@ export default function App() {
         />
       )}
 
+      {showGame && atlasOpen && hud.navigation && <Atlas data={hud.navigation} pinnedId={pinnedId} onPin={setPinnedId} onClose={() => setAtlasVisibility(false)} />}
+
       {showGame && journalOpen && (
         <Journal
           entries={journal}
@@ -225,6 +303,21 @@ export default function App() {
         <PauseOverlay
           onResume={() => gameRef.current?.setPaused(false)}
           onRestart={restart}
+          onSaveAndReturn={saveAndReturnToTitle}
+          onSave={saveCurrentCheckpoint}
+          lastSavedAt={lastSavedAt}
+          travelPreferences={travelPreferences}
+          onTravelPreferences={changeTravelPreferences}
+          travelPreferencesSaved={travelPreferencesSaved}
+          equipment={hud.equipment}
+          onRelic={(id) => gameRef.current?.equipRelic(id) ?? false}
+          onTool={(id) => gameRef.current?.setCombatTool(id) ?? false}
+          preferences={preferences}
+          onPreferences={changePreferences}
+          preferencesSaved={preferencesSaved}
+          hud={hud}
+          voices={hud.voices}
+          soundSettings={<SoundSettings {...sound} />}
         />
       )}
 

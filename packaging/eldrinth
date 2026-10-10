@@ -1,0 +1,8 @@
+#!/bin/sh
+# Electron defaults to X11. On a Wayland-only session (no XWayland, DISPLAY unset) that
+# aborts with "Missing X server or $DISPLAY", so name the platform there. Sessions that
+# have a DISPLAY, or no WAYLAND_DISPLAY, keep Electron's own choice.
+if [ -n "${WAYLAND_DISPLAY:-}" ] && [ -z "${DISPLAY:-}" ]; then
+  set -- --ozone-platform=wayland "$@"
+fi
+exec /usr/lib/eldrinth/eldrinth "$@"

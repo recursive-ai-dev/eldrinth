@@ -41,7 +41,7 @@ mounts the game canvas and overlays HUD/menus.
 Key gameplay facts (handy for new contributors):
 
 - Move with **WASD / Arrow keys**, **Attack** with **J / Space**, **Dash** with **Shift**, **Speak/Read**
-  with **E**, open the **Journal** with **L**, **Pause** with **Esc / P**.
+  with **E**, toggle the **Lantern** with **R**, open the **Journal** with **L**, **Pause** with **Esc / P**.
 - Collect **9 Anima Shards**, each hidden in its own authored fortress, then return to the Glass Spire
   and decide whether to give them to Orithel.
 - HP starts at 18 (6 hearts). Each shard harvest reduces maximum health on a rising curve — free for the
@@ -158,6 +158,8 @@ eldrinth/
 │   │   ├── quests.ts          # Investigations, town projects, evidence, choices, rewards
 │   │   ├── escalation.ts      # Shard harvest costs, ward dialogue, warden + intake records
 │   │   ├── epilogue.ts        # Closing text assembled from the player's decisions
+│   │   ├── lantern.ts         # Concealed records, sight/range checks and journal copies
+│   │   ├── interactions.ts    # Shared HUD/action target selection
 │   │   ├── hazard.ts          # Environmental damage (embers, etc.)
 │   │   ├── regions.ts         # Region cache + web-worker source
 │   │   ├── escalation.ts      # Shard harvest costs, ward dialogue, warden journal entries
@@ -438,6 +440,18 @@ Append to `enemySpawns` in `map.ts` (overworld) or the `E` glyphs in a fortress 
 *behavior*, add a `type` to `EnemyType` (`types.ts`), add stats in `engine.ts`, and register a behavior in
 `AISystem.ts`.
 
+### Add concealed lamplight writing
+
+Add an entry to `LANTERN_RECORDS` in `game/lantern.ts` and provide geographic
+directions on an existing road notice through `addLanternDirections`. Coordinates
+are in tiles. Keep the plate on reachable, passable ground and away from ordinary
+signs. Concealed records stay outside `map.signs`; only a raised lantern with clear
+sight makes them interaction candidates. Rendering and interaction share that
+visibility rule. Reading writes a stable `lamplight:<id>` journal entry once;
+there is no save version or stat change. Verify reachability, sight occlusion,
+reading, rereading and cold-load persistence with `lantern.test.ts` and browser
+coverage. The current content contains one plate per outdoor region.
+
 ### Add a readable sign
 Append a record to the per-region `records` table in `map.ts`. Press **E** near it. Add `fact` to hook it
 into an investigation in `quests.ts`.
@@ -445,6 +459,14 @@ into an investigation in `quests.ts`.
 ### Add an investigation
 Add a `QuestDefinition` to `QUESTS` (`quests.ts`). Place its lead and evidence records in `map.ts` and wire
 rewards (health, stamina, blade, dash) through `resolveQuest`.
+
+### Regenerate equipment icons
+
+`npm run gen:equipment` reads the sibling `../shed-dev-sprites` checkout and writes
+only `src/assets/equipment/`. `npm run verify:equipment` regenerates in memory and
+checks recipes, pixels and source provenance. `--source PATH` selects another
+checkout. Equipment assets do not enter the world-atlas catalog, and builds need
+neither Python nor the sibling source. See `tools/spritegen/README.md`.
 
 ### Change controls
 Key bindings live in `InputSystem.ts`; the `engine.ts` step consumes them. The Title/Pause screens and

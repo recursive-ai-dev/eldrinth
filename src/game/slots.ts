@@ -140,9 +140,29 @@ export class SlotStore {
           this.dbPromise = Promise.resolve(db);
           this.persisted = saved;
         }
-        const result = action(db);
-        if (write && readable) this.persist(db);
-        return result;
+        if (write && !readable) throw new Error(this.status.reason ?? "Save records could not be read.");
+        if (!write) return action(db);
+
+        // SQLite is only a cache until localStorage accepts the exported bytes.
+        // A failed write must restore both the cache and its revision ownership,
+        // or an erase appears successful and a retry can conflict with itself.
+        const before = db.export();
+        const owned = new Map(this.owned);
+        const listed = new Map(this.listed);
+        try {
+          const result = action(db);
+          this.persist(db);
+          return result;
+        } catch (error) {
+          const SQL = await initSqlJs();
+          const previous = new SQL.Database(before);
+          db.close();
+          db = previous;
+          this.dbPromise = Promise.resolve(db);
+          this.owned = owned;
+          this.listed = listed;
+          throw error;
+        }
       };
       if (globalThis.navigator?.locks) return navigator.locks.request(DATABASE_KEY, locked);
       // Non-browser tests can use a single-process queue. In browsers lacking
@@ -218,7 +238,9 @@ export class SlotStore {
       // like a successful one: the title screen keeps showing the last save and
       // the player loses a whole run with no warning.
       console.error("Failed to persist save data:", error);
-      this.setStatus(false, describeWriteFailure(error), error);
+      const reason = describeWriteFailure(error);
+      this.setStatus(false, reason, error);
+      throw new Error(reason);
     }
   }
 

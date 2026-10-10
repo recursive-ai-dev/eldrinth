@@ -1,8 +1,12 @@
 import { useMemo, useState } from "react";
 import Modal from "./Modal";
 import type { JournalEntry } from "@/game/types";
+import { FIELD_GUIDE_TOTALS, filterJournal, journalAsText, journalSummary, type JournalOrder, type JournalStatus } from "@/game/fieldGuide";
+import FieldGuide from "./FieldGuide";
+import SpriteIcon from "./SpriteIcon";
+import "./journal.css";
 
-type TabId = "all" | "intake" | "warden" | "town" | "investigations" | "notes";
+type TabId = "all" | "lamplight" | "voices" | "intake" | "warden" | "town" | "investigations" | "expeditions" | "notes";
 
 interface TabDef {
   id: TabId;
@@ -12,14 +16,26 @@ interface TabDef {
 
 const TABS: TabDef[] = [
   { id: "all", label: "All Records", filter: () => true },
+  { id: "lamplight", label: "Lamplight", filter: (e) => e.id.startsWith("lamplight:") },
+  { id: "voices", label: "Voices", filter: (e) => e.id.startsWith("voice:") },
   { id: "intake", label: "Intake Cores", filter: (e) => e.id.startsWith("intake:") },
   { id: "warden", label: "Wardens", filter: (e) => e.id.startsWith("warden:") },
   { id: "town", label: "Townsfolk", filter: (e) => e.id.startsWith("town:") || (Boolean(e.source) && e.source!.includes("·") && !e.questId) },
   { id: "investigations", label: "Investigations", filter: (e) => Boolean(e.questId) },
-  { id: "notes", label: "Observations & Notes", filter: (e) => e.id.startsWith("personal:") || e.id.startsWith("bleed:") || (!e.questId && !e.id.startsWith("intake:") && !e.id.startsWith("warden:") && !e.id.startsWith("town:")) },
+  { id: "expeditions", label: "Expeditions", filter: (e) => e.id.startsWith("expedition:") },
+  { id: "notes", label: "Observations & Notes", filter: (e) => e.id.startsWith("personal:") || e.id.startsWith("bleed:") || (!e.questId && !e.id.startsWith("intake:") && !e.id.startsWith("warden:") && !e.id.startsWith("town:") && !e.id.startsWith("expedition:") && !e.id.startsWith("voice:") && !e.id.startsWith("lamplight:")) },
 ];
 
 function getEntryBadge(entry: JournalEntry): { label: string; borderCls: string; badgeCls: string } {
+  if (entry.id.startsWith("lamplight:")) {
+    return { label: "READ BY LAMPLIGHT", borderCls: "border-amber-200/50 bg-amber-950/20", badgeCls: "text-amber-100 border-amber-200/30 bg-amber-200/10" };
+  }
+  if (entry.id.startsWith("voice:")) {
+    return { label: "HEARD AT THE FIRE", borderCls: "border-orange-200/40 bg-orange-950/15", badgeCls: "text-orange-100 border-orange-200/30 bg-orange-200/10" };
+  }
+  if (entry.id.startsWith("expedition:")) {
+    return { label: entry.resolved ? "EXPEDITION COMPLETE" : "FIELD DISCOVERY", borderCls: "border-sky-300/50 bg-sky-950/20", badgeCls: "text-sky-200 border-sky-300/30 bg-sky-300/10" };
+  }
   if (entry.id.startsWith("intake:")) {
     return { label: "CORE DOCKET", borderCls: "border-teal-400/60 bg-teal-950/25", badgeCls: "text-teal-300 border-teal-400/40 bg-teal-400/10" };
   }
@@ -52,11 +68,19 @@ export default function Journal({
 }) {
   const [note, setNote] = useState("");
   const [activeTab, setActiveTab] = useState<TabId>("all");
+  const [search, setSearch] = useState("");
+  const [view, setView] = useState<"records" | "guide">("records");
+  const [status, setStatus] = useState<JournalStatus>("all");
+  const [order, setOrder] = useState<JournalOrder>("recorded");
+  const [feedback, setFeedback] = useState("");
+  const summary = useMemo(() => journalSummary(entries), [entries]);
 
   const addNote = () => {
-    if (!note.trim()) return;
-    onAddNote(note);
+    const trimmed = note.trim();
+    if (!trimmed) return;
+    onAddNote(trimmed);
     setNote("");
+    setFeedback("Observation added to your journal.");
   };
 
   const availableTabs = useMemo(() => {
@@ -71,8 +95,35 @@ export default function Journal({
   );
 
   const displayedEntries = useMemo(() => {
-    return entries.filter(activeTabDef.filter);
-  }, [entries, activeTabDef]);
+    return filterJournal(entries, { query: search, status, order, category: activeTabDef.filter });
+  }, [entries, activeTabDef, search, status, order]);
+
+  const hasFilters = search.trim() !== "" || status !== "all" || activeTabDef.id !== "all";
+  const resetFilters = () => { setSearch(""); setStatus("all"); setActiveTab("all"); };
+  const copyRecords = async () => {
+    try {
+      await navigator.clipboard.writeText(journalAsText(displayedEntries));
+      setFeedback(`Copied ${displayedEntries.length} ${displayedEntries.length === 1 ? "record" : "records"}.`);
+    } catch {
+      setFeedback("Clipboard unavailable. Use Export to keep a text copy.");
+    }
+  };
+  const exportRecords = () => {
+    let url: string | undefined;
+    try {
+      url = URL.createObjectURL(new Blob([journalAsText(displayedEntries)], { type: "text/plain;charset=utf-8" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "eldrinth-field-journal.txt";
+      document.body.appendChild(link);
+      try { link.click(); } finally { link.remove(); }
+      setFeedback(`Exported ${displayedEntries.length} ${displayedEntries.length === 1 ? "record" : "records"}.`);
+    } catch {
+      setFeedback("Export unavailable. You can select and copy the journal text.");
+    } finally {
+      if (url) { const downloadUrl = url; window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000); }
+    }
+  };
 
   return (
     <Modal
@@ -91,14 +142,14 @@ export default function Journal({
         // Journal prose is real text a player may need to copy, and the note
         // field is a real text field: selection is re-enabled for this panel
         // even though the game surface around it suppresses it.
-        className="selectable flex max-h-[86dvh] w-[min(820px,96vw)] flex-col rounded-xl border border-amber-200/25 bg-[#14100e]/95 p-6 shadow-2xl [overscroll-behavior:contain]"
+        className="journal-panel journal-workspace selectable flex max-h-[86dvh] w-[min(820px,96vw)] flex-col rounded-xl border border-amber-200/25 bg-[#14100e]/95 p-4 shadow-2xl [overscroll-behavior:contain] sm:p-6"
         onClick={(event) => event.stopPropagation()}
       >
         {/* Header */}
-        <div className="mb-4 flex items-baseline justify-between border-b border-amber-200/15 pb-3">
+        <div className="mb-4 flex flex-wrap items-baseline justify-between gap-3 border-b border-amber-200/15 pb-3">
           <div>
             <div className="font-title text-xs tracking-[.35em] text-amber-200/75">FIELD JOURNAL</div>
-            <h2 id="journal-heading" className="font-serif text-3xl text-amber-100">Notes, Cores &amp; Testimonies</h2>
+            <h2 id="journal-heading" className="font-serif text-2xl text-amber-100 sm:text-3xl">{view === "records" ? "Notes, Cores & Testimonies" : "The Traveller's Field Guide"}</h2>
           </div>
           <button
             onClick={onClose}
@@ -108,17 +159,30 @@ export default function Journal({
           </button>
         </div>
 
+        <div className="journal-view-switch" role="group" aria-label="Journal views">
+          <button aria-pressed={view === "records"} onClick={() => setView("records")}><SpriteIcon id="journal" size={24} />Records</button>
+          <button aria-pressed={view === "guide"} onClick={() => setView("guide")}><SpriteIcon id="chart" size={24} />Field guide</button>
+        </div>
+
+        <div className="journal-summary" aria-label="Journal progress">
+          <span><strong>{summary.records}</strong> {summary.records === 1 ? "record" : "records"}</span>
+          <span><strong>{summary.openInvestigations}</strong> open {summary.openInvestigations === 1 ? "investigation" : "investigations"}</span>
+          <span><strong>{summary.resolvedInvestigations}</strong> {summary.resolvedInvestigations === 1 ? "decision" : "decisions"}</span>
+          <span><strong>{summary.completedExpeditions}/{FIELD_GUIDE_TOTALS.expeditions}</strong> expeditions</span>
+          <span><strong>{summary.copiedLamplight}/{FIELD_GUIDE_TOTALS.inscriptions}</strong> inscriptions</span>
+        </div>
+
+        {view === "guide" ? <FieldGuide entries={entries} /> : <>
         {/* Tab filters */}
         {availableTabs.length > 1 && (
-          <div role="tablist" aria-label="Journal categories" className="mb-4 flex flex-wrap gap-1.5 border-b border-amber-200/10 pb-2">
+          <div role="group" aria-label="Journal categories" className="mb-4 flex flex-wrap gap-1.5 border-b border-amber-200/10 pb-2">
             {availableTabs.map((tab) => {
               const count = entries.filter(tab.filter).length;
               const isActive = activeTabDef.id === tab.id;
               return (
                 <button
                   key={tab.id}
-                  role="tab"
-                  aria-selected={isActive}
+                  aria-pressed={isActive}
                   onClick={() => setActiveTab(tab.id)}
                   className={`rounded-md border px-2.5 py-1 font-title text-[11px] tracking-wider transition ${
                     isActive
@@ -133,11 +197,25 @@ export default function Journal({
           </div>
         )}
 
+        <div className="mb-4 flex items-center gap-3">
+          <input type="search" aria-label="Search journal" placeholder="Search names, places, and your notes…" value={search} onChange={event => setSearch(event.target.value)} className="min-w-0 flex-1 rounded border border-amber-100/20 bg-black/30 px-3 py-2 text-sm text-amber-50 placeholder:text-amber-100/50" />
+          <span role="status" className="shrink-0 text-xs text-amber-100/70">{displayedEntries.length} of {entries.length} records</span>
+        </div>
+
+        <div className="journal-toolbar">
+          <label>Show<select aria-label="Record status" value={status} onChange={event => setStatus(event.target.value as JournalStatus)}><option value="all">All statuses</option><option value="open">Open threads</option><option value="resolved">Decisions & completions</option><option value="personal">My observations</option></select></label>
+          <label>Order<select aria-label="Record order" value={order} onChange={event => setOrder(event.target.value as JournalOrder)}><option value="recorded">Record order</option><option value="reverse">Reverse record order</option><option value="title">Title A–Z</option><option value="source">Source A–Z</option></select></label>
+          {hasFilters && <button onClick={resetFilters}>Clear filters</button>}
+          <button className="journal-export" onClick={copyRecords} disabled={!displayedEntries.length} title="Copy the records currently shown">Copy results</button>
+          <button onClick={exportRecords} disabled={!displayedEntries.length} title="Download the records currently shown as plain text">Export</button>
+        </div>
+
         {/* Content list with scrolling */}
-        <div className="flex-1 space-y-4 overflow-y-auto pr-2 [overscroll-behavior:contain]">
+        <div className="journal-records flex-1 space-y-4 overflow-y-auto pr-2 [overscroll-behavior:contain]">
           {displayedEntries.length === 0 ? (
-            <div className="py-8 text-center font-serif italic text-amber-100/75">
-              No entries recorded in this category yet. Explore ruins, speak with townsfolk, and investigate the Spire's fortresses to uncover the truth.
+            <div className="journal-empty font-serif italic">
+              <p>{hasFilters ? "No records match your filters. Try another name, place, or status." : "No entries recorded yet. Explore ruins, speak with townsfolk, and investigate the Spire's fortresses to uncover the truth."}</p>
+              {hasFilters ? <button onClick={resetFilters}>Show all records</button> : <button onClick={() => setView("guide")}>Explore first steps</button>}
             </div>
           ) : (
             displayedEntries.map((entry) => {
@@ -160,7 +238,7 @@ export default function Journal({
                       </span>
                     )}
                   </div>
-                  <p className="mt-2 font-serif text-sm leading-relaxed text-amber-50/90 whitespace-pre-line">
+                  <p className="reading-copy mt-2 font-serif text-sm leading-relaxed text-amber-50/90 whitespace-pre-line">
                     {entry.text}
                   </p>
                 </article>
@@ -178,6 +256,7 @@ export default function Journal({
             <textarea
               id="journal-note"
               value={note}
+              aria-describedby="journal-note-count"
               maxLength={1200}
               rows={2}
               placeholder="Record a landmark, rumour, or reflection (Ctrl+Enter to write)…"
@@ -185,7 +264,7 @@ export default function Journal({
               autoCorrect="off"
               autoCapitalize="sentences"
               enterKeyHint="enter"
-              onChange={(event) => setNote(event.target.value)}
+              onChange={(event) => { setNote(event.target.value); setFeedback(""); }}
               onKeyDown={(event) => {
                 if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
                   event.preventDefault();
@@ -196,12 +275,15 @@ export default function Journal({
             />
             <button
               onClick={addNote}
+              disabled={!note.trim()}
               className="self-end rounded border border-teal-200/30 px-3 py-1.5 font-title text-xs tracking-wider text-teal-100 transition hover:bg-teal-300/10"
             >
               WRITE
             </button>
           </div>
+          <div className="journal-note-meta"><span role="status" className="journal-feedback">{feedback}</span><span id="journal-note-count" className="journal-note-counter">{note.length} / 1200 characters</span></div>
         </div>
+        </>}
       </section>
     </Modal>
   );

@@ -12,6 +12,12 @@ async function travel(game: Game, region: string) {
 function harvest(game: Game) {
   Object.assign(game.player, game.map.shards[0]);
   game.checkPickups();
+  game.tryInteract();
+  if (game.dialogue) {
+    game.advanceLock = 0;
+    game.advanceDialogue();
+    game.chooseDialogue(`harvest:${game.world.regionId}`);
+  }
 }
 
 describe("legacy shard identity recovery", () => {

@@ -1,4 +1,4 @@
-import { TILE, MAP_W, MAP_H, SIGN_READ_RADIUS } from "./constants";
+import { TILE, MAP_W, MAP_H } from "./constants";
 import {
   type Dir,
   type Vec,
@@ -35,18 +35,23 @@ import { CombatSystem } from "./systems/CombatSystem";
 import { GameFlowSystem } from "./systems/GameFlowSystem";
 import { InputSystem } from "./systems/InputSystem";
 import { MovementSystem } from "./systems/MovementSystem";
+import { combatTool, equipmentData, equipmentEffects, equippedRelics, isRelicId, RELIC_SLOTS, type CombatToolId, type EquipmentData, type RelicId } from "./equipment";
+import { updateEncounters } from "./encounters";
+import { animaVoice, carriedVoices, harvestDialogue, SHARD_INTERACT_RADIUS, voiceJournalEntry } from "./voices";
+import { navigationData } from "./navigation";
+import { startGuard, tickGuard, tryParry, consumeRiposte, guardData } from "./guard";
+
+import { selectInteraction, interactionPrompt } from "./interactions";
+import { lanternRecordForRegion, lanternReveals, copyLanternRecord } from "./lantern";
 
 /* ----------------------------- constants ----------------------------- */
 // Player constants
 const PLAYER_RADIUS = 11;
 const PLAYER_START_HP = 18;
 const PLAYER_MAX_STAMINA = 100;
-const PLAYER_DASH_STAMINA_COST = 35;
-const PLAYER_STAMINA_REGEN = 28;
 const PLAYER_STAMINA_REGEN_DELAY = 0.45;
 const PLAYER_SPEED = 152;
 const PLAYER_ATTACK_DURATION = 0.2;
-const PLAYER_ATTACK_COOLDOWN = 0.16;
 const PLAYER_ATTACK_DAMAGE = 1;
 const PLAYER_DASH_DURATION = 0.16;
 const PLAYER_DASH_COOLDOWN = 0.62;
@@ -96,8 +101,6 @@ const DIFFICULTY_TUNING = {
 } as const;
 
 // Interaction distances
-const INTERACT_NPC_DISTANCE = 48;
-const INTERACT_SIGN_DISTANCE = SIGN_READ_RADIUS;
 /** Walk-through region gates fire when the player is this close to the threshold. */
 const REGION_GATE_RADIUS = TILE * 1.35;
 
@@ -164,6 +167,15 @@ export class Game {
   cssH = 600;
   viewW = 800;
   viewH = 600;
+  cameraZoom = CAMERA_ZOOM;
+  /** Carried tool, available to every pilgrimage; discoveries live in the journal. */
+  lanternOn = false;
+
+  get lamplightRecord() { return lanternRecordForRegion(this.world.regionId); }
+  get revealedLamplightRecord() {
+    const record = this.lamplightRecord;
+    return record && this.player?.dying <= 0 && lanternReveals(record, this.player, this.map, this.lanternOn) ? record : undefined;
+  }
   mapPxW = 0;
   mapPxH = 0;
 
@@ -175,6 +187,10 @@ export class Game {
   private regionAbort = new AbortController();
   /** Dynamic inhabitants are retained per region, while static terrain stays cached by RegionRepository. */
   private changingRegion = false;
+  private transitionPromise: Promise<void> | null = null;
+
+  /** Saves must wait until a transition, including a death respawn, finishes. */
+  get regionTransition(): Promise<void> | null { return this.transitionPromise; }
   /** Set when the player dies somewhere whose half-cleared state must not persist. */
   private discardCurrentRegion = false;
   private regionGateCooldown = 0;
@@ -353,6 +369,9 @@ export class Game {
         relics: [],
         dashCostDiscount: 0,
         attackBonus: 0,
+        equippedRelics: [],
+        combatTool: "wayblade",
+        attackWindup: 0,
       };
 
       this.restoreOrPopulateRegion();
@@ -402,6 +421,7 @@ export class Game {
       this.items = stored.items;
       this.boss = stored.enemies.find((enemy) => enemy.id === stored.bossId) ?? null;
       this.bossSpawned = stored.bossSpawned;
+      for (const enemy of this.enemies) if (enemy.alive) this.recoverBlockedActor(enemy);
       return;
     }
     this.enemies = [];
@@ -441,8 +461,16 @@ export class Game {
     this.world.regions[this.world.regionId] = { enemies: this.enemies, items: this.items, bossId: this.boss?.id ?? null, bossSpawned: this.bossSpawned };
   }
 
-  private async changeRegion(exit: RegionExit) {
-    if (this.changingRegion || this.destroyed) return;
+  private changeRegion(exit: RegionExit): Promise<void> {
+    if (this.changingRegion || this.destroyed) return Promise.resolve();
+    const transition = this.performRegionChange(exit).finally(() => {
+      if (this.transitionPromise === transition) this.transitionPromise = null;
+    });
+    this.transitionPromise = transition;
+    return transition;
+  }
+
+  private async performRegionChange(exit: RegionExit) {
     this.changingRegion = true;
     const previousId = this.world.regionId;
     try {
@@ -464,6 +492,7 @@ export class Game {
       this.texts = [];
       this.player.x = exit.destination.x;
       this.player.y = exit.destination.y;
+      this.recoverBlockedActor(this.player);
       this.tileRenderer = new TileChunkRenderer(this.map);
       this.centerCam();
       this.tileRenderer.warm(this.cam, this.viewW, this.viewH);
@@ -474,7 +503,11 @@ export class Game {
       this.msg(`You arrive in ${this.map.regionName}.`);
       this.pushHud();
     } catch (error) {
-      if (!this.destroyed) console.error("Region transition failed:", error);
+      if (!this.destroyed) {
+        console.error("Region transition failed:", error);
+        this.gameLoop.stop();
+        this.cb.onFatal?.(error);
+      }
     } finally {
       this.changingRegion = false;
     }
@@ -512,20 +545,24 @@ export class Game {
       throw new Error(`Region ${snapshot.regionId} must be acquired before loading its world snapshot.`);
     }
     this.world.restore(snapshot);
+    this.lanternOn = false;
+    this.input.clear();
     this.rememberRegion();
     this.publishJournal();
     this.cb.onInterior(isInteriorRegion(this.world.regionId));
     this.wardSet = new Set(this.map.wardTiles);
     this.syncMovementSystem();
+    this.recoverBlockedActor(this.player);
+    for (const enemy of this.enemies) if (enemy.alive) this.recoverBlockedActor(enemy);
     this.centerCam();
     this.pushHud();
   }
 
   /* ----------------------------- map / collision ----------------------------- */
-  findWalkableTile(tx: number, ty: number): Vec {
+  findWalkableTile(tx: number, ty: number, bodyRadius = 0): Vec {
     // Search in expanding rings using Chebyshev distance (max of x,y distance)
     // This ensures we find the closest walkable tile
-    for (let r = 0; r < 7; r++) {
+    for (let r = 0; r < (bodyRadius > 0 ? 16 : 7); r++) {
       for (let dy = -r; dy <= r; dy++) {
         for (let dx = -r; dx <= r; dx++) {
           // Only check tiles at exactly Chebyshev distance r (the perimeter)
@@ -535,13 +572,22 @@ export class Game {
           const y = ty + dy;
           if (x < 0 || y < 0 || x >= this.map.width || y >= this.map.height) continue;
           const i = y * this.map.width + x;
-          if (!this.solidAtIdx(i))
-            return { x: x * TILE + TILE / 2, y: y * TILE + TILE / 2 };
+          const position = { x: x * TILE + TILE / 2, y: y * TILE + TILE / 2 };
+          if (!this.solidAtIdx(i) && (bodyRadius <= 0 || !this.hitsSolid(position.x, position.y, bodyRadius)))
+            return position;
         }
       }
     }
     // Fallback to original position if no walkable tile found
     return { x: tx * TILE + TILE / 2, y: ty * TILE + TILE / 2 };
+  }
+
+  /** New authored terrain may occupy a coordinate from an older checkpoint. */
+  private recoverBlockedActor(actor: { x: number; y: number; r: number }) {
+    if (!this.hitsSolid(actor.x, actor.y, actor.r)) return;
+    const position = this.findWalkableTile(Math.floor(actor.x / TILE), Math.floor(actor.y / TILE), actor.r);
+    actor.x = position.x;
+    actor.y = position.y;
   }
 
   syncMovementSystem() {
@@ -663,12 +709,16 @@ export class Game {
     if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(k)) e.preventDefault();
   };
   onKeyUp = (_e: KeyboardEvent) => undefined;
-  onBlur = () => undefined;
+  autoPause = true;
+  screenShake = true;
+  onBlur = () => {
+    if (this.autoPause && this.initialized && !this.ended && !this.paused && !this.journalOpen && !this.dialogue) this.setPaused(true);
+  };
   onResize = () => this.resize();
 
   setPaused(b: boolean) {
     this.paused = b;
-    if (b) this.input.clear();
+    this.input.clear();
     this.syncMovementSystem();
     this.cb.onPause(b);
   }
@@ -681,6 +731,39 @@ export class Game {
   }
   setVirtualKey(key: string, isDown: boolean) {
     this.input.setKey(key, isDown);
+  }
+
+  toggleLantern(): boolean {
+    if (!this.initialized || this.paused || this.journalOpen || this.dialogue || this.ended || this.changingRegion || this.player.dying > 0) return false;
+    this.lanternOn = !this.lanternOn;
+    this.msg(this.lanternOn ? "Lantern raised. Bring its light close to scraped brass; E copies the writing." : "Lantern shuttered.");
+    this.updatePrompt();
+    this.pushHud();
+    return true;
+  }
+
+  getEquipment(): EquipmentData {
+    return equipmentData(this.player);
+  }
+
+  /** Loadout changes are safe while paused; permanent rewards are never rewritten. */
+  equipRelic(id: RelicId): boolean {
+    if (!this.initialized || this.ended || this.changingRegion || this.dialogue || this.player.dying > 0 || !isRelicId(id) || !this.player.relics.includes(id)) return false;
+    const equipped = equippedRelics(this.player);
+    if (equipped.includes(id)) this.player.equippedRelics = equipped.filter((relic) => relic !== id);
+    else {
+      if (equipped.length >= RELIC_SLOTS) return false;
+      this.player.equippedRelics = [...equipped, id];
+    }
+    this.pushHud();
+    return true;
+  }
+
+  setCombatTool(id: CombatToolId): boolean {
+    if (!this.initialized || this.ended || this.changingRegion || this.dialogue || this.player.dying > 0 || this.player.attacking || this.player.dashing || (id !== "wayblade" && id !== "gravehammer")) return false;
+    this.player.combatTool = id;
+    this.pushHud();
+    return true;
   }
 
   /* ----------------------- fixed simulation pipeline ----------------------- */
@@ -706,8 +789,10 @@ export class Game {
   }
 
   private processInputCommands() {
+    // UI key presses must not become delayed toggles after a menu closes.
+    if (this.paused || this.journalOpen || this.changingRegion || this.dialogue || this.ended || this.player.dying > 0) this.input.consumePressed("r");
     if (this.journalOpen || this.changingRegion) return;
-    if (this.input.consumePressed("escape") || this.input.consumePressed("p")) {
+    if (this.input.consumePressed("escape") || this.input.consumePressed("p") || this.input.consumePressed("i")) {
       if (!this.dialogue && !this.ended) this.togglePause();
       return;
     }
@@ -715,7 +800,7 @@ export class Game {
     if (this.dialogue) {
       if (this.dialogue.choices) {
         for (let i = 0; i < this.dialogue.choices.length; i++) {
-          if (this.input.consumePressed(String(i + 1))) { this.chooseDialogue(this.dialogue.choices[i].id); break; }
+          if (this.input.consumePressed(i === 9 ? "0" : String(i + 1))) { this.chooseDialogue(this.dialogue.choices[i].id); break; }
         }
         return;
       }
@@ -724,7 +809,14 @@ export class Game {
       }
       return;
     }
-    if (this.input.consumePressed(" ") || this.input.consumePressed("j")) this.startAttack();
+    if (this.input.consumePressed("r")) this.toggleLantern();
+    if (this.input.consumePressed("q")) {
+      if (this.setCombatTool(combatTool(this.player).id === "wayblade" ? "gravehammer" : "wayblade")) {
+        this.msg(`${combatTool(this.player).name} ready.`);
+      }
+    }
+    if (this.input.consumePressed("f")) this.startGuard();
+    else if (this.input.consumePressed(" ") || this.input.consumePressed("j")) this.startAttack();
     else if (this.input.consumePressed("shift")) this.startDash();
     else if (this.input.consumePressed("e") || this.input.consumePressed("enter")) this.tryInteract();
   }
@@ -749,6 +841,10 @@ export class Game {
     this.updateProjectiles(dt);
     this.updateParticles(dt);
     this.updateItems(dt);
+    if (updateEncounters(this.world, (type, x, y) => this.makeEnemy(type, x, y))) {
+      this.publishJournal();
+      this.pushHud();
+    }
     for (let i = this.texts.length - 1; i >= 0; i--) {
       const t = this.texts[i];
       t.life -= dt;
@@ -778,30 +874,27 @@ export class Game {
   }
 
   updatePrompt() {
-    if (this.dialogue || this.ended) {
+    if (this.dialogue || this.ended || this.player.dying > 0) {
       this.prompt = "";
       return;
     }
-    this.prompt = this.flow.updatePrompt({
-      player: this.player,
-      enemies: this.enemies,
-      boss: this.boss,
-      shards: this.shards,
-      totalShards: this.totalShards,
-      wardUnlocked: this.wardUnlocked,
-      bossSpawned: this.bossSpawned,
-      message: this.message,
-      messageId: this.messageId,
-      prompt: this.prompt,
-      dialogue: this.dialogue,
-      map: this.map,
-      items: this.items,
-    });
+    const selection = this.selectCurrentInteraction();
+    this.prompt = selection?.kind === "sign" && selection.target === this.revealedLamplightRecord
+      ? "Press E to read lamplight writing"
+      : interactionPrompt(selection);
+  }
+
+  private selectCurrentInteraction() {
+    const record = this.revealedLamplightRecord;
+    return selectInteraction({ player: this.player, items: this.items, map: record
+      ? { ...this.map, signs: [...this.map.signs, record] } : this.map });
   }
 
   /* ----------------------------- player ----------------------------- */
   updatePlayer(dt: number) {
     const p = this.player;
+    tickGuard(p, dt);
+    const effects = equipmentEffects(p);
     if (Math.abs(p.kx) > 1 || Math.abs(p.ky) > 1) this.moveEntity(p, p.kx * dt, p.ky * dt);
     p.kx -= p.kx * Math.min(1, dt * 9);
     p.ky -= p.ky * Math.min(1, dt * 9);
@@ -828,8 +921,10 @@ export class Game {
     if (k.has("w") || k.has("arrowup")) my -= 1;
     if (k.has("s") || k.has("arrowdown")) my += 1;
     if (mx || my) {
-      if (Math.abs(mx) >= Math.abs(my)) p.dir = mx > 0 ? "right" : "left";
-      else p.dir = my > 0 ? "down" : "up";
+      if ((p.guardTimer ?? 0) <= 0 && (!p.attacking || combatTool(p).id !== "gravehammer")) {
+        if (Math.abs(mx) >= Math.abs(my)) p.dir = mx > 0 ? "right" : "left";
+        else p.dir = my > 0 ? "down" : "up";
+      }
     }
 
     if (p.dashing) {
@@ -842,7 +937,8 @@ export class Game {
       const len = Math.hypot(mx, my);
       mx /= len;
       my /= len;
-      this.moveEntity(p, mx * p.speed * dt, my * p.speed * dt);
+      const movement = effects.movement * (p.attacking ? combatTool(p).movement : 1) * ((p.guardTimer ?? 0) > 0 ? 0.5 : 1);
+      this.moveEntity(p, mx * p.speed * movement * dt, my * p.speed * movement * dt);
       p.walkT += dt * 16;
     } else {
       // Generated walk sheets reserve frame zero as the neutral pose. Reset
@@ -854,14 +950,15 @@ export class Game {
     p.dashCd = Math.max(0, p.dashCd - dt);
     p.staminaRegenDelay = Math.max(0, p.staminaRegenDelay - dt);
     if (p.staminaRegenDelay <= 0 && !p.dashing) {
-      p.stamina = Math.min(p.maxStamina, p.stamina + PLAYER_STAMINA_REGEN * dt);
+      p.stamina = Math.min(p.maxStamina, p.stamina + effects.staminaRegen * dt);
     }
     p.invuln = Math.max(0, p.invuln - dt);
     p.hurtFlash = Math.max(0, p.hurtFlash - dt);
 
     if (p.attacking) {
       p.attackTimer -= dt;
-      this.doAttackHit();
+      p.attackWindup = Math.max(0, (p.attackWindup ?? 0) - dt);
+      if (p.attackWindup <= 0) this.doAttackHit();
       if (p.attackTimer <= 0) {
         p.attacking = false;
         p.swingHit.clear();
@@ -915,17 +1012,23 @@ export class Game {
 
   startAttack() {
     const p = this.player;
-    if (this.ended || p.dying > 0 || p.attacking || p.attackCd > 0 || p.dashing) return;
+    const tool = combatTool(p);
+    const effects = equipmentEffects(p);
+    if (this.ended || p.dying > 0 || p.attacking || p.attackCd > 0 || p.dashing || (p.guardTimer ?? 0) > 0 || p.stamina < tool.staminaCost) return;
     p.attacking = true;
+    p.attackDur = tool.duration;
     p.attackTimer = p.attackDur;
-    p.attackCd = p.attackDur + PLAYER_ATTACK_COOLDOWN;
+    p.attackWindup = tool.windup;
+    p.attackCd = p.attackDur + tool.recovery + effects.attackRecovery;
     p.swingHit.clear();
-    p.swingDmg = PLAYER_ATTACK_DAMAGE + p.attackBonus;
+    p.swingDmg = tool.damage + p.attackBonus + effects.attackBonus + consumeRiposte(p);
+    p.stamina -= tool.staminaCost;
+    if (tool.staminaCost > 0) p.staminaRegenDelay = p.attackDur + PLAYER_STAMINA_REGEN_DELAY;
   }
   startDash() {
     const p = this.player;
-    const dashCost = Math.max(10, PLAYER_DASH_STAMINA_COST - p.dashCostDiscount);
-    if (this.ended || p.dying > 0 || p.dashing || p.dashCd > 0 || p.stamina < dashCost) return;
+    const dashCost = equipmentEffects(p).dashCost;
+    if (this.ended || p.dying > 0 || p.dashing || (p.guardTimer ?? 0) > 0 || p.dashCd > 0 || p.stamina < dashCost || (p.attacking && combatTool(p).id === "gravehammer")) return;
     p.dashing = true;
     p.dashTimer = PLAYER_DASH_DURATION;
     p.dashCd = PLAYER_DASH_COOLDOWN;
@@ -934,6 +1037,20 @@ export class Game {
     p.dashDir = p.dir;
     p.invuln = Math.max(p.invuln, PLAYER_INVULN_DASH);
     this.burst(p.x, p.y, "rgba(180,220,255,0.8)", 6);
+  }
+
+  startGuard() {
+    if (this.paused || this.dialogue || this.ended || this.journalOpen || this.changingRegion) return;
+    if (startGuard(this.player)) {
+      // Commands precede movement in the tick. Face the direction pressed with
+      // F before locking the guard, rather than guarding yesterday's facing.
+      const keys = this.input.keys;
+      const mx = Number(keys.has("d") || keys.has("arrowright")) - Number(keys.has("a") || keys.has("arrowleft"));
+      const my = Number(keys.has("s") || keys.has("arrowdown")) - Number(keys.has("w") || keys.has("arrowup"));
+      if (mx || my) this.player.dir = Math.abs(mx) >= Math.abs(my) ? (mx > 0 ? "right" : "left") : (my > 0 ? "down" : "up");
+      this.ring(this.player.x, this.player.y, "#ffe0a0");
+      this.pushHud();
+    }
   }
 
   attackBox(p: Player) {
@@ -1005,6 +1122,18 @@ export class Game {
   damagePlayer(dmg: number, fx: number, fy: number) {
     const p = this.player;
     if (p.invuln > 0 || p.dashing || this.ended || p.dying > 0) return;
+    if (dmg > 0 && tryParry(p, fx, fy)) {
+      this.burst(p.x, p.y, "#ffe0a0", 18);
+      this.addText(p.x, p.y - 24, "PARRY", "#ffe0a0", 17);
+      this.msg("A breath stolen back. Strike within two seconds.");
+      return;
+    }
+    if (dmg > 0 && equipmentEffects(p).absorbHits && p.stamina >= 18) {
+      p.stamina -= 18;
+      p.staminaRegenDelay = PLAYER_STAMINA_REGEN_DELAY;
+      dmg = Math.max(0, dmg - 1);
+      this.addText(p.x, p.y - 18, "WARD", "#ffd28a", 12);
+    }
     p.hp -= dmg;
     p.invuln = this.difficultyTuning.hitInvulnerability;
     p.hurtFlash = PLAYER_HURT_FLASH;
@@ -1021,66 +1150,87 @@ export class Game {
     }
   }
 
+  /** Shards are decisions; only healing draughts are collected by touch. */
   checkPickups() {
     const p = this.player;
     for (const it of this.items) {
-      if (it.taken) continue;
-      if (Math.hypot(p.x - it.x, p.y - it.y) < p.r + 15) {
-        it.taken = true;
-        if (it.type === "shard") {
-          const vessel = this.world.regionId;
-          // Identity, not count, is what makes a shard takeable once. A stale
-          // item from a region restored before this was recorded, or a shard in
-          // a region that already yielded one, must not re-award.
-          if (this.world.harvestedShards.has(vessel)) continue;
-          this.world.harvestedShards.add(vessel);
-          this.shards = this.world.harvestedShards.size;
-          // Carrying them makes the blade cut deeper. See shardBladeBonus().
-          p.attackBonus += shardBladeBonus(this.shards) - shardBladeBonus(this.shards - 1);
-          const harvested = applyHarvestCost(p.maxHp, p.hp, this.shards);
-          p.maxHp = harvested.maxHp;
-          p.hp = harvested.hp;
-          this.shardsBurst(it.x, it.y, "#46f0d8", 18);
-          this.addText(it.x, it.y, "ANIMA SHARD", "#5ff7df", 16);
-          const bleed = shardBleedEntry(this.shards);
-          if (bleed && !this.world.journal.some((entry) => entry.id === bleed.id)) {
-            this.world.journal.push(bleed);
-            this.publishJournal();
-          }
-          if (this.world.regionId.startsWith("fortress.")) {
-            const intake = fortressShardIntakeEntry(this.world.regionId);
-            if (intake && !this.world.journal.some((entry) => entry.id === intake.id)) {
-              this.world.journal.push(intake);
-              this.publishJournal();
-            }
-            // The reliquary's mirrors are one half of Barris's investigation.
-            // Record the discovery even if the player meets him only later.
-            if (this.world.regionId === "fortress.old-lands-reliquary" && learnFact(this.world.quests, "pilgrim-reflection")) {
-              this.publishJournal();
-            }
-          }
-          if (this.shards >= this.totalShards) {
-            this.wardUnlocked = true;
-            this.syncMovementSystem();
-            this.msg(wardUnlockMessage(this.shards));
-            this.burst(it.x, it.y, "#46f0d8", 30);
-            this.ring(this.map.bossCenter.x, this.map.bossCenter.y, "#46f0d8");
-          } else {
-            this.msg(shardPickupMessage(this.shards, this.totalShards));
-          }
-        } else {
-          const heal = 4;
-          p.hp = Math.min(p.maxHp, p.hp + heal);
-          this.addText(it.x, it.y, `+${heal}`, "#7fffa0", 14);
-          this.msg("You drink the elixir. Wounds knit.");
-        }
+      if (it.type === "shard" && this.world.harvestedShards.has(this.world.regionId)) it.taken = true;
+      if (it.taken || it.type === "shard") continue;
+      if (Math.hypot(p.x - it.x, p.y - it.y) >= p.r + 15) continue;
+      it.taken = true;
+      p.hp = Math.min(p.maxHp, p.hp + 4);
+      this.addText(it.x, it.y, "+4", "#7fffa0", 14);
+      this.msg("You drink the elixir. Wounds knit.");
+    }
+    this.items = this.items.filter((item) => !item.taken);
+  }
+
+  private harvestShard(regionId: string): boolean {
+    const p = this.player;
+    if (regionId !== this.world.regionId || p.dying > 0 || this.ended) return false;
+    const it = this.items.find((item) => item.type === "shard" && !item.taken && Math.hypot(p.x - item.x, p.y - item.y) < SHARD_INTERACT_RADIUS);
+    if (!it) return false;
+    const vessel = this.world.regionId;
+    // Identity, not count, is what makes a shard takeable once. A stale
+    // item from a region restored before this was recorded, or a shard in
+    // a region that already yielded one, must not re-award.
+    if (this.world.harvestedShards.has(vessel)) return false;
+    it.taken = true;
+    this.world.harvestedShards.add(vessel);
+    this.shards = this.world.harvestedShards.size;
+    // Carrying them makes the blade cut deeper. See shardBladeBonus().
+    p.attackBonus += shardBladeBonus(this.shards) - shardBladeBonus(this.shards - 1);
+    const harvested = applyHarvestCost(p.maxHp, p.hp, this.shards);
+    p.maxHp = harvested.maxHp;
+    p.hp = harvested.hp;
+    this.shardsBurst(it.x, it.y, "#46f0d8", 18);
+    this.addText(it.x, it.y, "ANIMA SHARD", "#5ff7df", 16);
+    const bleed = shardBleedEntry(this.shards);
+    if (bleed && !this.world.journal.some((entry) => entry.id === bleed.id)) {
+      this.world.journal.push(bleed);
+      this.publishJournal();
+    }
+    if (this.world.regionId.startsWith("fortress.")) {
+      const intake = fortressShardIntakeEntry(this.world.regionId);
+      if (intake && !this.world.journal.some((entry) => entry.id === intake.id)) {
+        this.world.journal.push(intake);
+        this.publishJournal();
+      }
+      // The reliquary's mirrors are one half of Barris's investigation.
+      // Record the discovery even if the player meets him only later.
+      if (this.world.regionId === "fortress.old-lands-reliquary" && learnFact(this.world.quests, "pilgrim-reflection")) {
+        this.publishJournal();
       }
     }
-    for (let i = this.items.length - 1; i >= 0; i--) {
-      if (this.items[i].taken) {
-        this.items.splice(i, 1);
-      }
+    if (this.shards >= this.totalShards) {
+      this.wardUnlocked = true;
+      this.syncMovementSystem();
+      this.msg(wardUnlockMessage(this.shards));
+      this.burst(it.x, it.y, "#46f0d8", 30);
+      this.ring(this.map.bossCenter.x, this.map.bossCenter.y, "#46f0d8");
+    } else {
+      this.msg(shardPickupMessage(this.shards, this.totalShards));
     }
+    this.items = this.items.filter((item) => !item.taken);
+    this.pushHud();
+    return true;
+  }
+
+  private openShardChoice() {
+    const encounter = harvestDialogue(this.world.regionId, this.shards + 1, this.player.maxHp);
+    if (!encounter || this.world.harvestedShards.has(this.world.regionId)) return;
+    this.pendingChoices = encounter.choices;
+    this.openDialogue(encounter.lines, encounter.voice.name, "#9ff7e6", undefined, "A PERSON INSIDE THE VESSEL");
+  }
+
+  private openFireVoices() {
+    const voices = carriedVoices(this.world.harvestedShards);
+    if (voices.length === 0 || !this.map.campfires.some((fire) => Math.hypot(this.player.x - fire.x, this.player.y - fire.y) < 52)) return;
+    this.pendingChoices = [
+      ...voices.map((voice) => ({ id: `voice:${voice.id}`, label: `${voice.name}${this.world.journal.some((entry) => entry.id === `voice:${voice.id}`) ? " · listen again" : " · listen"}` })),
+      { id: "leave", label: "Let the fire settle." },
+    ];
+    this.openDialogue(["Away from the machinery, the voices can hear themselves. You need nothing from them here. Say a name and listen."], "Names in the Fire", "#ffd28a", undefined, "THE PEOPLE YOU CARRY");
   }
 
   private playerInTownSafeZone(): boolean {
@@ -1192,6 +1342,26 @@ export class Game {
       (pr) => {
         this.burst(pr.x, pr.y, pr.color, 6);
       },
+      {
+        onDeflect: (pr) => {
+          if (!equipmentEffects(this.player).reflectBolts) return false;
+          pr.friendly = true;
+          pr.vx = -pr.vx;
+          pr.vy = -pr.vy;
+          pr.color = "#ffd28a";
+          pr.life = Math.max(pr.life, 1);
+          this.burst(pr.x, pr.y, pr.color, 6);
+          return true;
+        },
+        onFriendlyHit: (pr) => {
+          const enemy = this.enemies.find((e) => e.alive && Math.hypot(pr.x - e.x, pr.y - e.y) < pr.r + e.r);
+          if (!enemy) return false;
+          const dir: Dir = Math.abs(pr.vx) >= Math.abs(pr.vy) ? (pr.vx >= 0 ? "right" : "left") : (pr.vy >= 0 ? "down" : "up");
+          this.hitEnemy(enemy, pr.dmg, dir);
+          this.burst(pr.x, pr.y, pr.color, 6);
+          return true;
+        },
+      },
     );
   }
 
@@ -1266,6 +1436,7 @@ export class Game {
     }
   }
   shake(n: number) {
+    if (!this.screenShake) return;
     this.shakeMag = Math.min(10, Math.max(this.shakeMag, n));
   }
 
@@ -1340,6 +1511,29 @@ export class Game {
       this.dialogue = null;
       this.pendingChoices = null;
       this.cb.onDialogue(null);
+      return;
+    }
+    if (id.startsWith("harvest:")) {
+      const regionId = id.slice("harvest:".length);
+      const harvested = this.harvestShard(regionId);
+      this.dialogue = null;
+      this.pendingChoices = null;
+      this.cb.onDialogue(null);
+      if (harvested) this.msg(`${animaVoice(regionId)?.name ?? "Someone"} comes with you. Rest at a wayfire to listen. ${shardPickupMessage(this.shards, this.totalShards)}`);
+      return;
+    }
+    if (id === "fire:voices") { this.openFireVoices(); return; }
+    if (id.startsWith("voice:")) {
+      const regionId = id.slice("voice:".length);
+      const voice = animaVoice(regionId);
+      if (!voice || !this.world.harvestedShards.has(regionId) || !this.map.campfires.some((fire) => Math.hypot(this.player.x - fire.x, this.player.y - fire.y) < 52)) return;
+      const entry = voiceJournalEntry(regionId)!;
+      if (!this.world.journal.some((existing) => existing.id === entry.id)) {
+        this.world.journal.push(entry);
+        this.publishJournal();
+      }
+      this.pendingChoices = [{ id: "fire:voices", label: "Say another name." }, { id: "leave", label: "Sit quietly, then rise." }];
+      this.openDialogue([voice.memory], voice.name, "#ffd28a", undefined, "BESIDE THE FIRE · A MEMORY OFFERED");
       return;
     }
     if (id === "topics") { this.openWatcherTopics(); return; }
@@ -1487,62 +1681,40 @@ export class Game {
       if (this.pendingChoices && this.dialogue.index === this.dialogueLines.length - 1) {
         this.dialogue.choices = this.pendingChoices;
         this.pendingChoices = null;
+        // A number pressed while earlier prose was showing is not consent to
+        // a choice the player has only now been allowed to read.
+        this.input.clear();
       }
       this.cb.onDialogue(this.dialogue);
     }
   }
   tryInteract() {
     const p = this.player;
-    const doorway = this.map.exits.find((exit) => exit.requiresInteraction && Math.hypot(p.x - (exit.x * TILE + TILE / 2), p.y - (exit.y * TILE + TILE / 2)) < INTERACT_SIGN_DISTANCE);
-    const townNpc = this.map.npcs.find((npc) => Math.hypot(p.x - npc.x, p.y - npc.y) < INTERACT_NPC_DISTANCE);
-
-    const doorwayDist = doorway ? Math.hypot(p.x - (doorway.x * TILE + TILE / 2), p.y - (doorway.y * TILE + TILE / 2)) : Infinity;
-    const npcDist = townNpc ? Math.hypot(p.x - townNpc.x, p.y - townNpc.y) : Infinity;
-
-    if (townNpc && npcDist < doorwayDist) {
-      this.speakWithTownNpc(townNpc);
-      return;
-    }
-    if (doorway) {
-      void this.changeRegion(doorway);
-      return;
-    }
-    const fire = this.map.campfires.find((campfire) => Math.hypot(p.x - campfire.x, p.y - campfire.y) < 52);
-    if (fire) {
-      this.restAtCampfire(fire);
-      return;
-    }
-    if (townNpc) {
-      this.speakWithTownNpc(townNpc);
-      return;
-    }
-    const npc = this.map.npc;
-    if (Math.hypot(p.x - npc.x, p.y - npc.y) < INTERACT_NPC_DISTANCE) {
-      this.openWatcherTopics();
-      return;
-    }
-    // Nearest sign wins rather than whichever happens to come first in the
-    // array. Two signs inside reading distance of the same tile used to make
-    // the second one permanently unreadable, which buried hand-written evidence
-    // notes under the generic road markers generated on fortress gates.
-    let nearestSign: import("./types").SignData | null = null;
-    let nearestSignDist = INTERACT_SIGN_DISTANCE;
-    for (const s of this.map.signs) {
-      const sx = s.x * TILE + TILE / 2;
-      const sy = s.y * TILE + TILE / 2;
-      const dist = Math.hypot(p.x - sx, p.y - sy);
-      if (dist >= nearestSignDist) continue;
-      nearestSign = s;
-      nearestSignDist = dist;
-    }
-    if (nearestSign) {
-      if (nearestSign.townId) {
-        this.openTownProjects(nearestSign.townId);
+    if (this.dialogue || this.paused || this.ended || this.changingRegion || p.dying > 0) return;
+    const selection = this.selectCurrentInteraction();
+    if (!selection) return;
+    switch (selection.kind) {
+      case "shard": this.openShardChoice(); return;
+      case "npc": this.speakWithTownNpc(selection.target); return;
+      case "doorway": void this.changeRegion(selection.target); return;
+      case "fire": this.restAtCampfire(selection.target); return;
+      case "watcher": this.openWatcherTopics(); return;
+      case "sign": {
+        const sign = selection.target;
+        const record = this.revealedLamplightRecord;
+        if (record && sign === record) {
+          if (copyLanternRecord(this.world.journal, record, this.map.regionName)) {
+            this.publishJournal();
+            this.msg("Lamplight writing copied to your journal.");
+          }
+          this.openDialogue([record.text], record.title, "#f4d69b", undefined, "LAMPLIGHT · CONCEALED WRITING");
+        } else if (sign.townId) this.openTownProjects(sign.townId);
+        else {
+          this.discoverNote(sign);
+          this.openDialogue([sign.text], sign.title ?? "Unmarked Field Note", "#cdbf9a");
+        }
         return;
       }
-      this.discoverNote(nearestSign);
-      this.openDialogue([nearestSign.text], nearestSign.title ?? "Unmarked Field Note", "#cdbf9a");
-      return;
     }
   }
 
@@ -1952,6 +2124,8 @@ export class Game {
     p.stamina = p.maxStamina;
     if (!p.relics.includes(fire.relic)) {
       p.relics.push(fire.relic);
+      const equipped = equippedRelics(p);
+      if (equipped.length < RELIC_SLOTS) p.equippedRelics = [...equipped, fire.relic];
       const rewards = {
         emberheart: () => { p.maxHp += 2; p.hp = p.maxHp; return "EMBERHEART — maximum health +2"; },
         ashstep: () => { p.dashCostDiscount += 12; return "ASHSTEP — dash stamina cost -12"; },
@@ -1960,10 +2134,14 @@ export class Game {
       } as const;
       const reward = rewards[fire.relic]();
       this.burst(fire.x, fire.y, "#ffbf66", 20);
-      this.openDialogue([`The flames recognise you and read you over, the way a clerk reads a docket. ${reward}.`, "This wayfire is your refuge now. Death returns you here, resting restores your strength, and everything you are carrying is noted down somewhere you cannot see."], fire.name, "#ffd28a");
+      if (carriedVoices(this.world.harvestedShards).length > 0) {
+        this.pendingChoices = [{ id: "fire:voices", label: "Listen to the people you carry." }, { id: "leave", label: "Leave the fire." }];
+      }
+      this.openDialogue([`The flames recognise you and read you over, the way a clerk reads a docket. ${reward}. This gift is permanent.`, `The relic can also be attuned in one of three slots. Press I to inspect its power and its cost.${equipped.length < RELIC_SLOTS ? " It is attuned now." : " All three slots are occupied; choose which relic to release."}`, "This wayfire is your refuge now. Death returns you here, resting restores your strength, and everything you are carrying is noted down somewhere you cannot see."], fire.name, "#ffd28a");
     } else {
       this.msg(`${fire.name} restores your strength.`);
       this.burst(fire.x, fire.y, "#ffbf66", 10);
+      this.openFireVoices();
     }
   }
 
@@ -1972,6 +2150,9 @@ export class Game {
     if (!point) return;
     const p = this.player;
     p.dying = 0;
+    p.guardTimer = 0;
+    p.guardCooldown = 0;
+    p.riposteTimer = 0;
     p.hp = p.maxHp;
     p.stamina = p.maxStamina;
     p.invuln = 1.5;
@@ -1979,6 +2160,7 @@ export class Game {
     p.ky = 0;
     p.dashing = false;
     p.attacking = false;
+    p.attackWindup = 0;
     p.swingHit.clear();
     this.projectiles = [];
     if (point.regionId === this.world.regionId) {
@@ -2021,6 +2203,8 @@ export class Game {
       deaths: this.world.deaths,
       shards: this.shards,
       totalShards: this.totalShards,
+      carriedNames: carriedVoices(this.world.harvestedShards).map((voice) => voice.name),
+      heardNames: carriedVoices(this.world.harvestedShards).filter((voice) => this.world.journal.some((entry) => entry.id === `voice:${voice.id}`)).map((voice) => voice.name),
     });
   }
 
@@ -2048,8 +2232,12 @@ export class Game {
     });
   }
   pushHud() {
+    const discoveredIds = new Set(this.world.atlasDiscoveries[this.world.regionId] ?? []);
+    const navigation = navigationData({ regionId: this.world.regionId, map: this.map, player: this.player, journal: this.world.journal, checkpoint: this.world.checkpoint, discoveredIds });
+    for (const landmark of navigation.landmarks) discoveredIds.add(landmark.id);
+    this.world.atlasDiscoveries[this.world.regionId] = [...discoveredIds];
     this.cb.onHud(
-      this.flow.buildHud({
+      { ...this.flow.buildHud({
         player: this.player,
         enemies: this.enemies,
         boss: this.boss,
@@ -2063,11 +2251,23 @@ export class Game {
         dialogue: this.dialogue,
         map: this.map,
         items: this.items,
-      }),
+      }), navigation, journey: { seconds: this.world.simulationTime, deaths: this.world.deaths, difficulty: this.world.difficulty }, lantern: { lit: this.lanternOn }, equipment: this.getEquipment(), guard: guardData(this.player), voices: carriedVoices(this.world.harvestedShards).map((voice) => ({ id: voice.id, name: voice.name, heard: this.world.journal.some((entry) => entry.id === `voice:${voice.id}`) })) },
     );
   }
 
   /* ----------------------------- camera / resize ----------------------------- */
+  getCameraZoom(): number { return this.cameraZoom; }
+
+  setCameraZoom(zoom: number) {
+    if (!Number.isFinite(zoom)) return;
+    this.cameraZoom = Math.round(clamp(zoom, 1, 2) * 4) / 4;
+    this.resize();
+    if (this.initialized) {
+      this.centerCam();
+      this.tileRenderer.warm(this.cam, this.viewW, this.viewH);
+    }
+  }
+
   resize() {
     const rect = this.canvas.getBoundingClientRect();
     this.cssW = Math.max(320, Math.floor(rect.width));
@@ -2075,10 +2275,9 @@ export class Game {
     this.dpr = Math.min(2, window.devicePixelRatio || 1);
     this.canvas.width = Math.floor(this.cssW * this.dpr);
     this.canvas.height = Math.floor(this.cssH * this.dpr);
-    // Camera math works in world pixels. Rendering those pixels at 1.2× means
-    // the visible world is 1 / 1.2 of the CSS canvas in each direction.
-    this.viewW = this.cssW / CAMERA_ZOOM;
-    this.viewH = this.cssH / CAMERA_ZOOM;
+    // Viewport, chunk culling and render transforms all use the same scale.
+    this.viewW = this.cssW / this.cameraZoom;
+    this.viewH = this.cssH / this.cameraZoom;
     if (this.initialized) {
       this.clampCamera();
       this.tileRenderer.warm(this.cam, this.viewW, this.viewH);

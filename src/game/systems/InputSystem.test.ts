@@ -62,6 +62,21 @@ describe("InputSystem", () => {
     input.destroy();
   });
 
+  it("does not turn an OS repeat into a fresh choice after dialogue clears input", () => {
+    const input = new InputSystem();
+    input.bind({});
+    mockWindow.dispatchEvent(createKeyboardEvent("keydown", "1"));
+    input.clear();
+    const repeated = createKeyboardEvent("keydown", "1");
+    Object.defineProperty(repeated, "repeat", { value: true });
+    mockWindow.dispatchEvent(repeated);
+    expect(input.consumePressed("1")).toBe(false);
+    mockWindow.dispatchEvent(createKeyboardEvent("keyup", "1"));
+    mockWindow.dispatchEvent(createKeyboardEvent("keydown", "1"));
+    expect(input.consumePressed("1")).toBe(true);
+    input.destroy();
+  });
+
   it("invokes keydown and keyup handlers if registered", () => {
     const input = new InputSystem();
     const onKeyDown = vi.fn();

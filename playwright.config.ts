@@ -6,6 +6,8 @@ export default defineConfig({
   workers: 1,
   timeout: 30_000,
   use: {
+    // Optional installed-browser channel for local runs; CI uses bundled Chromium.
+    channel: process.env.PLAYWRIGHT_CHANNEL || undefined,
     baseURL: "http://127.0.0.1:4173/eldrinth/",
     viewport: { width: 1280, height: 800 },
     trace: "retain-on-failure",

@@ -21,6 +21,8 @@ export interface EpilogueInput {
   deaths: number;
   shards: number;
   totalShards: number;
+  carriedNames?: string[];
+  heardNames?: string[];
 }
 
 /** The choice each investigation resolves to, in one flat lookup. */
@@ -68,6 +70,14 @@ const PROJECT_FATE: Record<string, string> = {
 
 export function epilogueLines(input: EpilogueInput): string[] {
   const lines: string[] = [];
+  if (input.carriedNames?.length) {
+    lines.push(`I carried ${input.carriedNames.join(", ")}. Those are their names. The count was never enough.`);
+    if (input.heardNames?.length) {
+      lines.push(`Beside the fire, I listened to ${input.heardNames.join(", ")}. For that little while, nobody asked them to be useful. I have kept what they chose to tell me.`);
+    } else {
+      lines.push("I never sat beside a fire long enough to hear what they wanted to say. There were voices. I kept walking.");
+    }
+  }
   const resolved = INVESTIGATION_ORDER.filter((id) => input.progress.resolutions[id]);
 
   if (resolved.length === 0) {

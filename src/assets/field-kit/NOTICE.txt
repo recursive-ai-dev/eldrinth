@@ -1,0 +1,19 @@
+Eldrinth field kit imagery
+
+Generated from Shed Dev Sprites (Apache License 2.0).
+Source: ../shed-dev-sprites, https://github.com/recursive-ai-dev/shed-dev-sprites
+The full upstream license is included in LICENSE.apache-2.0.
+
+Recipes, seeds, source revision, generator fingerprint, and pixel/file checksums
+are recorded in manifest.json. The boss is rendered at its world size (64px)
+and reduced to 32px with nearest-neighbor sampling; other art is rendered at
+32px without recoloring. The book, scroll, shield, sword, coin, door, settlement,
+terrain samples, and cave charts supply icons for field guide and atlas controls.
+
+Rebuild: python3 tools/spritegen/gen_field_kit.py
+Verify:  python3 tools/spritegen/gen_field_kit.py --check
+Review:  python3 tools/spritegen/gen_field_kit.py --check --contact-sheet /tmp/field-kit.png
+
+The game uses committed PNGs; neither Python nor the source checkout is needed
+to play or build Eldrinth. Transparent symbols are decorative by default;
+SpriteIcon accepts a label when the image itself carries information.

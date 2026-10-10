@@ -1,9 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { slotStore, SlotStore } from "./slots";
+import { SlotStore } from "./slots";
 import { isDifficulty, normalizeDifficulty } from "./types";
 import { WorldState } from "./core/WorldState";
 
 describe("Difficulty validation & SlotStore", () => {
+  let slotStore: SlotStore;
+  beforeEach(() => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+    });
+    slotStore = new SlotStore();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
   function makeSnapshot(difficulty?: any) {
     const world = new WorldState();
     world.player = {
@@ -209,12 +220,42 @@ describe("Difficulty validation & SlotStore", () => {
       const a = new SlotStore();
       await a.save(1, makeSnapshot("story"));
       const before = [...storage.entries()];
-      vi.spyOn(localStorage, "setItem").mockImplementation(() => { throw new DOMException("Full", "QuotaExceededError"); });
-      await a.save(1, makeSnapshot("brutal"));
+      const write = vi.spyOn(localStorage, "setItem").mockImplementation(() => { throw new DOMException("Full", "QuotaExceededError"); });
+      await expect(a.save(1, makeSnapshot("brutal"))).rejects.toThrow("storage is full");
       expect(a.getStatus().ok).toBe(false);
       expect(a.getStatus().reason).toContain("storage is full");
       expect([...storage.entries()]).toEqual(before);
+      expect((await a.load(1))?.difficulty).toBe("story");
       expect((await new SlotStore().load(1))?.difficulty).toBe("story");
+      write.mockRestore();
+      await a.save(1, makeSnapshot("brutal"));
+      expect((await new SlotStore().load(1))?.difficulty).toBe("brutal");
+      expect(a.getStatus().ok).toBe(true);
+    });
+
+    it("keeps an erase visible and retryable when storage refuses the deletion", async () => {
+      const a = new SlotStore();
+      await a.save(1, makeSnapshot("story"));
+      await a.list();
+      const before = [...storage.entries()];
+      const write = vi.spyOn(localStorage, "setItem").mockImplementation(() => { throw new DOMException("Full", "QuotaExceededError"); });
+      await expect(a.remove(1)).rejects.toThrow("storage is full");
+      expect((await a.list()).map(slot => slot.id)).toEqual([1]);
+      expect([...storage.entries()]).toEqual(before);
+      write.mockRestore();
+      await a.remove(1);
+      expect(await new SlotStore().list()).toEqual([]);
+    });
+
+    it("rejects writes while storage cannot be read and keeps the cached record intact", async () => {
+      const a = new SlotStore();
+      await a.save(1, makeSnapshot("story"));
+      const read = vi.spyOn(localStorage, "getItem").mockImplementation(() => { throw new DOMException("Blocked", "SecurityError"); });
+      await expect(a.save(1, makeSnapshot("brutal"))).rejects.toThrow("blocking local storage");
+      read.mockRestore();
+      expect((await a.load(1))?.difficulty).toBe("story");
+      await a.save(1, makeSnapshot("brutal"));
+      expect((await new SlotStore().load(1))?.difficulty).toBe("brutal");
     });
 
     it("never treats corrupt stored bytes as a new empty database", async () => {

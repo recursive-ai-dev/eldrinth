@@ -228,7 +228,7 @@ const FORTRESS_SHARD_INTAKES: Record<string, { id: string; title: string; text: 
   "fortress.starfall-watch": {
     id: "intake:orren",
     title: "Intake Docket 0,001: Master Orren",
-    text: "Docket 0,001. Orren, Lead Investigator. Cause: Self-administered prototype trial. Core function: Autonomous core defense. — Master Orren's core came away with a jagged iron ring still fused to it. As his consciousness unraveled, he asked one final question: 'Did the work endure?'",
+    text: "Docket 0,001. Orren, Lead Investigator. Cause: Self-administered prototype trial. Core function: Autonomous core defense. — Master Orren's core came away with a jagged iron ring still fused to it. As his voice steadied inside me, he asked the question he had been keeping ready: 'Did the work endure?'",
   },
 };
 

@@ -270,8 +270,9 @@ describe("shard intake recording in fortresses", () => {
       addText() {},
       publishJournal() {},
       msg() {},
+      pushHud() {},
     };
-    (Game.prototype as any).checkPickups.call(ctx);
+    (Game.prototype as any).harvestShard.call(ctx, "fortress.old-lands-archive");
     expect(ctx.shards).toBe(1);
     expect(ctx.world.harvestedShards.has("fortress.old-lands-archive")).toBe(true);
     expect(journal.some((entry) => entry.id === "intake:vaelen")).toBe(true);

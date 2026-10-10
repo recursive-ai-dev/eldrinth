@@ -15,9 +15,9 @@ Four investigations run alongside the main pilgrimage, and each one is an accoun
 
 Discoveries can be made in any order. Once enough evidence is brought back to Orithel, the player chooses the outcome and receives one permanent, saveable reward — every choice folds a still-conscious person into the player's own equipment or extinguishes them outright; there is no option that costs nothing. The journal also accepts player-written observations. Region inhabitants, collected shards, quest decisions, wayfire checkpoints, relics, and notes survive saving, refreshes, deaths, and return trips.
 
-## Milestone 2 — Make each expedition play differently
+## Milestone 2 — Make each expedition play differently (partly implemented in 1.1)
 
-Add small, authored activity sites to each region: a hazardous crossing, a combat arena, a hidden refuge, and one optional encounter with a unique rule. Each site should offer a clue, material, or relationship rather than generic loot.
+Four optional authored sites now extend the frontier: the Hollow of the Uncounted in the Old Lands, Ashglass Causeway in Cinderwild, the Drowned Court on the Moonlit Coast, and the Listening Ring in Starfall Moors. They offer a hidden refuge, a hazardous crossing, a combat arena, and an encounter with its own rule. Each has geographic directions, a journal record and a permanent reward that cannot be collected twice. Existing saves can discover the new sites.
 
 All nine shards now sit inside their own enterable fortresses rather than in open-field clearings. Each fortress has a distinct 26×19 authored layout, its own gate and return route, no wayfire to rest at, darkness, ember hazards, a warden, and a journal record of what was guarding the vessel. Dying inside resets that fortress's enemies rather than the run itself. It does **not** put a shard back: taking one is recorded against the vessel, not the pickup, so a retry cannot re-award it. The harvest cost is billed once per person, permanently.
 
@@ -25,14 +25,17 @@ Frontier and overworld maps are expanded to 200×140 tiles, making the expeditio
 
 Four regional settlements (Ilyarael Township, Cinder Haven, Oarsman's Bight, and Crater Watch) now offer refuge, healers, and oral histories. Every fortress shard has its own historical intake docket and trapped conscious persona recorded in the player's journal when harvested.
 
-Build a light equipment layer around meaningful tradeoffs: two active tools and three relic slots, with effects that change play patterns such as projectile-deflecting dashes, a slower heavy strike, or a lantern that reveals concealed messages. Expand enemy telegraphs and give each region one elite behavior that changes how the player uses space.
+The equipment layer ships in 1.1: a fast Wayblade, a slower Gravehammer with a stamina cost, and three relic slots. Attuned relics can absorb hit damage, deflect projectiles during a dash, accelerate stamina recovery, or strengthen attacks, each with a cost to another part of the loadout. The loadout is visible in the pause menu, and `Q` switches tools during play. Legacy saves preserve their permanent bonuses and begin with their owned relics unattuned.
 
-**Not shipped in v1.** The equipment layer, the per-region elite behaviours, and the four
-authored activity sites above are designed but not implemented. What v1 does have is telegraphed
-enemy specials (`AISystem` `spell` / `lunge` / `burst` wind-ups) and a wayfire relic that grants
-one of four stat bonuses. Wayfire relics are bookkeeping in `player.relics` used to prevent
-duplicate grants; they are not rendered, equipped, or read by the HUD. Treat the paragraph above as
-a specification, not a changelog entry.
+The next additive sprint, **The Lamplighter's Margin**, implements the lantern:
+raise it with `R` or the HUD button to reveal four concealed brass-plate accounts,
+then copy them to the field journal with `E`. Road notices describe their locations
+through geography. The lamp also widens personal light in dark interiors. It adds
+no required shard, reward farming, fuel economy, or save-version change. Equipment
+and relic illustrations come from the local `shed-dev-sprites` source, with
+reproducible recipes and provenance alongside the committed assets.
+
+**Still planned:** a distinct elite behavior for each region. Existing enemies retain their telegraphed `spell`, `lunge` and `burst` wind-ups. The four new sites are optional additions to the completed main pilgrimage; they do not add another shard requirement.
 
 ## Milestone 3 — Turn knowledge into mastery
 
@@ -50,6 +53,6 @@ actually gate gameplay, completion records, and alternate route conditions.
 
 ## Production bar
 
-Keep the browser-only build, with the old single-file constraint deliberately dropped so real sprite and tile atlases can ship as image assets (see the procedural sprite pipeline design spec). Every saveable gameplay change needs a deterministic state test, and every new landmark needs a visible in-world silhouette, a journal record, and directions expressed through geography rather than coordinates or markers. Performance work focuses on stable frame times during boss patterns and clean recovery from tab suspension or a failed region load.
+Keep the static browser build and offline Linux desktop package, with the old single-file constraint deliberately dropped so real sprite and tile atlases can ship as image assets (see the procedural sprite pipeline design spec). Every saveable gameplay change needs a deterministic state test, and every new landmark needs a visible in-world silhouette, a journal record, and directions expressed through geography rather than coordinates or markers. Performance work focuses on stable frame times during boss patterns and clean recovery from tab suspension or a failed region load. Desktop releases also verify installed assets, sandbox permissions, and saves across native close/reopen.
 
 Content rating is a hard M. The full story now reads as institutional atrocity told in flat clerical language — the machine at the world's heart is built out of living minds, the nine shards are nine people still conscious inside it, and the game states this plainly rather than softening it. A content warning gates first launch (and only first launch; it is not shown again once acknowledged) and discloses institutional violence and the killing of children. Nothing in the approved copy is decorative shock — it is load-bearing to the premise — and it should not be walked back in future work without a deliberate decision to do so.

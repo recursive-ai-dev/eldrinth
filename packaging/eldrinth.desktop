@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=ELDRINTH
+GenericName=Dark fantasy action RPG
+Comment=Seek nine Anima Shards in The Unbound Spire
+Exec=eldrinth
+TryExec=eldrinth
+Icon=eldrinth
+Terminal=false
+Categories=Game;RolePlaying;
+Keywords=RPG;fantasy;adventure;
+StartupWMClass=eldrinth

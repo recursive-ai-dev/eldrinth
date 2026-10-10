@@ -18,6 +18,7 @@ vi.mock("@/game/engine", () => {
         callbacks,
         options,
         initialized: false,
+        regionTransition: null as Promise<void> | null,
         ended: false,
         destroyed: false,
         started: false,
@@ -429,6 +430,47 @@ describe("GameCanvas Component Lifecycle Integration Tests", () => {
       log.mockRestore();
       vi.useRealTimers();
     }
+  });
+
+  it("waits for a respawn destination and the persistence promise before reporting a desktop checkpoint complete", async () => {
+    let finishTransition!: () => void;
+    let finishSave!: () => void;
+    const transition = new Promise<void>(resolve => { finishTransition = resolve; });
+    const persisted = new Promise<void>(resolve => { finishSave = resolve; });
+    const onCheckpoint = vi.fn(() => persisted);
+    await act(async () => {
+      root.render(<GameCanvas callbacks={defaultCallbacks} onCheckpoint={onCheckpoint} />);
+    });
+    const game = mockGameInstances[0];
+    game.regionTransition = transition;
+    let complete = false;
+    const saved = window.eldrinthCheckpoint!().then(() => { complete = true; });
+    expect(onCheckpoint).not.toHaveBeenCalled();
+    await act(async () => {
+      game.world.regionId = "overworld";
+      game.regionTransition = null;
+      finishTransition();
+    });
+    expect(onCheckpoint).toHaveBeenCalledOnce();
+    expect(complete).toBe(false);
+    finishSave();
+    await saved;
+    expect(complete).toBe(true);
+  });
+
+  it("does not finish a pending transition checkpoint after its canvas is disposed", async () => {
+    let finishTransition!: () => void;
+    const onCheckpoint = vi.fn();
+    await act(async () => {
+      root.render(<GameCanvas callbacks={defaultCallbacks} onCheckpoint={onCheckpoint} />);
+    });
+    mockGameInstances[0].regionTransition = new Promise<void>(resolve => { finishTransition = resolve; });
+    const saved = window.eldrinthCheckpoint!();
+    await act(async () => { root.unmount(); });
+    finishTransition();
+    await saved;
+    expect(onCheckpoint).not.toHaveBeenCalled();
+    expect(window.eldrinthCheckpoint).toBeUndefined();
   });
 
   it("loading a save through GameCanvas: pre-sets region before init and restores snapshot after init", async () => {

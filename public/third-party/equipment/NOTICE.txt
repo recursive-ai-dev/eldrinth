@@ -1,0 +1,13 @@
+Eldrinth equipment and lantern imagery
+
+Generated from Shed Dev Sprites (Apache License 2.0).
+Source: https://github.com/recursive-ai-dev/shed-dev-sprites
+The full upstream license is included in LICENSE.apache-2.0.
+
+These seven 32px icons use the upstream item and lantern prop generators
+without image postprocessing. Recipes, seeds, source revision, generator
+fingerprint, and pixel/file checksums are recorded in
+src/assets/equipment/manifest.json in the Eldrinth source repository.
+
+Rebuild: python3 tools/spritegen/gen_equipment_icons.py
+Verify:  python3 tools/spritegen/gen_equipment_icons.py --check
