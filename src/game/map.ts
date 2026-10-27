@@ -819,7 +819,7 @@ export function generateMap(regionId = "overworld"): MapData {
       y: 76,
       title: "The Courier's Orders",
       fact: "courier-orders",
-      text: "Deliver the vessel to the collector at the broken shrine northeast of the Cinderwild's central circle. Do not open it. Do not listen to it. Beneath the seal, in a hand that tore the paper: ‘It has a child's voice. I have read this four times looking for the part where this is something other than what it fucking is. It isn't there. It was never going to be there.’",
+      text: "Deliver the vessel to the collector at the broken shrine northeast of the Cinderwild's central circle. Do not open it. Do not listen to it. Beneath the seal, in a hand that tore the paper: ‘There is a man alive inside it. I have read this four times looking for the part where this is something other than what it fucking is. It isn't there. It was never going to be there.’",
     },
     {
       x: 78,

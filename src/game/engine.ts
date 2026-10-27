@@ -1826,7 +1826,7 @@ export class Game {
           "town:cinderwild:outrunner": {
             default: "The shrine road runs hot after noon. Take the high side of the ravine; the ash slides only once before it takes you.",
             withShards: "You have that core-light under your ribs now. The ravines notice heat. Keep moving.",
-            resolved: "Whatever you chose for the child, do not let anyone tell you it was an easy choice. Easy is a word people use when they were not there.",
+            resolved: "Whatever you chose for Roryn, do not let anyone tell you it was an easy choice. Easy is a word people use when they were not there.",
           },
           "town:moonlit:blind-oar": {
             default: "Hear the water before you trust the ground. The sandbars hum when the tide is carrying a body beneath them.",
@@ -1908,7 +1908,7 @@ export class Game {
       "town:moonlit:dredger": {
         id: "town:moonlit:dredger",
         title: "The Last Evacuation Barge",
-        text: "Forty sailed and thirty-nine were left behind on the pier. The Beacon Keeper didn't lose the ledger; he balanced it. I've dragged forty-one chests out of the breakers, and half of them were filled with children's shoes and silver hairpins traded to buy passage that never came. If you find the Salt Graves, don't look for bones. The tide took what was left after the collectors were done.",
+        text: "Forty sailed and thirty-nine were left behind on the pier. The Beacon Keeper didn't lose the ledger; he balanced it. I've dragged forty-one chests out of the breakers, and half of them were filled with work boots and silver hairpins traded to buy passage that never came. If you find the Salt Graves, don't look for bones. The tide took what was left after the collectors were done.",
         source: "Mistress Morveth · Oarsman's Bight",
       },
       "town:starfall:stargazer": {
@@ -2014,7 +2014,7 @@ export class Game {
       cinderwild: {
         id: "codex:fortress:cinderwild",
         title: "The Furnace Cohorts of the Cinderwild",
-        text: "Furnace manifests reveal the two load-bearing minds of the Cinderwild: young Roryn at the Broken Shrine, a seven-year-old child whose courier died in the ash ravines trying to shield his vessel; and Decurion Kaelen at the Ruined Watchpost, who was ordered to maintain border interdiction during the evacuation and starved in his plate armor waiting nine hundred years for relief.",
+        text: "Furnace manifests reveal the two load-bearing minds of the Cinderwild: Roryn at the Broken Shrine, an adult wagoner whose courier died in the ash ravines trying to shield his vessel; and Decurion Kaelen at the Ruined Watchpost, who was ordered to maintain border interdiction during the evacuation and starved in his plate armor waiting nine hundred years for relief.",
         source: "Cinder Haven Field Codex",
       },
       moonlit: {
@@ -2092,7 +2092,7 @@ export class Game {
         "town:ilyarael:scrivener": `The ink on your skin is vibrating at the frequency of the archive. Vaelen's duplicate ledgers, Theon's crystal matrices, Morwyn's seal... they are all crying out from within your chest. You carry ${this.shards} of their minds now.`,
         "town:ilyarael:healer": `When I place my hands on your collar, I feel nine hundred years of unresolvable torment. You are carrying ${this.shards} living minds inside a mortal body. Please, tread softly before the burden breaks you.`,
         "town:ilyarael:smith": `Seven pilgrims before you carried those cores. Each one stood a little heavier, a little stiffer. With ${this.shards} shards, you don't even walk like a man anymore. Watch your step.`,
-        "town:cinderwild:kilnmaster": `Your chest is glowing like a furnace door left unlatched. You carry ${this.shards} shards. Young Roryn and Decurion Kaelen... I can smell the furnace ash on you from three paces away.`,
+        "town:cinderwild:kilnmaster": `Your chest is glowing like a furnace door left unlatched. You carry ${this.shards} shards. Roryn and Decurion Kaelen... I can smell the furnace ash on you from three paces away.`,
         "town:cinderwild:healer": `The sulfur paste barely cools your skin now. The heat isn't fever; it is the radiant combustion of ${this.shards} Anima cores anchoring your bloodstream.`,
         "town:cinderwild:outrunner": `The ash ravines answer the light under your ribs. Every beast between here and the spire can see that beacon. With ${this.shards} cores, there are no quiet roads left.`,
         "town:moonlit:dredger": `You smell of the drowned harbor and the Spire's cold salt. Maris and Alden are speaking through your breath. You have ${this.shards} of them. Don't let their names wash away.`,

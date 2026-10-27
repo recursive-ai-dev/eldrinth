@@ -77,7 +77,7 @@ export function wardUnlockMessage(count: number): string {
 /** Entries the player did not write, in the courier's hand, from the sixth shard on. */
 const SHARD_BLEED: Record<number, string> = {
   6: "I have read this four times looking for the part where it is something other than what it is. It isn't there. It was never going to be there.",
-  7: "It has a child's voice.",
+  7: "There is a man alive inside it.",
   8: "Do not surrender it. Do not surrender it. Do not surrender it.",
 };
 
@@ -202,8 +202,8 @@ const FORTRESS_SHARD_INTAKES: Record<string, { id: string; title: string; text: 
   },
   "fortress.cinderwild-shrine": {
     id: "intake:roryn",
-    title: "Intake Docket 4,411: Roryn, Ward of St. Elun",
-    text: "Docket 4,411. Roryn, ward of St. Elun. Cause: General replenishment cohort IV. Core function: Baseline emotional dampening. — Roryn's voice in the core was thin, like greaseproof paper vibrating in a draft. He asked whether his mother had come back to the wagon yet. When the light transferred into my chest, the cold made my ribs ache.",
+    title: "Intake Docket 4,411: Roryn, Wagoner of St. Elun",
+    text: "Docket 4,411. Roryn, wagoner of St. Elun. Cause: General replenishment cohort IV. Core function: Baseline emotional dampening. — Roryn's voice in the core was thin, like greaseproof paper vibrating in a draft. He asked whether his fellow drivers had returned to the depot yet. When the light transferred into my chest, the cold made my ribs ache.",
   },
   "fortress.cinderwild-watchpost": {
     id: "intake:kaelen",

@@ -27,7 +27,7 @@ describe("epilogue", () => {
       progress: progressWith({ courier: "bind", salt: "mercy", dawn: "temper" }),
     }).join(" ");
 
-    expect(lines).toMatch(/gave the child to your blade/);
+    expect(lines).toMatch(/gave Roryn to your blade/);
     expect(lines).toMatch(/let the names stay quiet/);
     expect(lines).toMatch(/folded the astronomer into your blade/);
   });

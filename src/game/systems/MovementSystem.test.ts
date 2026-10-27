@@ -34,3 +34,37 @@ describe("MovementSystem tile-shape collision", () => {
     expect(system.hitsSolid(16, 30, 4, 35)).toBe(false);
   });
 });
+
+
+describe("character ground footprint", () => {
+  it("allows the upper body to overlap the north wall in a narrow passage", () => {
+    const system = movement([
+      T.ROCK, T.ROCK, T.ROCK,
+      T.GRASS, T.GRASS, T.GRASS,
+      T.ROCK, T.ROCK, T.ROCK,
+    ], 3, 3);
+    const actor = { x: 16, y: 33, r: 10 };
+    system.moveEntity(actor, 48, 0);
+    expect(actor.x).toBe(64);
+    expect(system.hitsSolid(actor.x, actor.y, actor.r)).toBe(false);
+    system.moveY(actor, -8);
+    expect(actor.y).toBeGreaterThanOrEqual(32);
+    expect(actor.y).toBeLessThan(32.1);
+    system.moveY(actor, 40);
+    expect(actor.y + actor.r).toBeLessThanOrEqual(64);
+    expect(actor.y + actor.r).toBeGreaterThan(63.9);
+  });
+
+  it("still blocks the sides and the feet while leaving the upper half free", () => {
+    const system = movement([
+      T.ROCK, T.ROCK, T.ROCK,
+      T.ROCK, T.GRASS, T.ROCK,
+      T.ROCK, T.ROCK, T.ROCK,
+    ], 3, 3);
+    expect(system.hitsSolid(48, 32, 10)).toBe(false);
+    expect(system.hitsSolid(48, 31, 10)).toBe(true);
+    expect(system.hitsSolid(41, 40, 10)).toBe(true);
+    expect(system.hitsSolid(55, 40, 10)).toBe(true);
+    expect(system.hitsSolid(48, 55, 10)).toBe(true);
+  });
+});

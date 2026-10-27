@@ -1,5 +1,7 @@
 # The Harvest Narrative Rewrite Implementation Plan
 
+> Narrative revision (2026-10-27): child killing and child harvesting are excluded. All harvested people are adults; Roryn is an adult wagoner. Historical child-victim material below is superseded and must not be reintroduced. See current source and ROADMAP.md.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Rewrite Eldrinth's premise and every line of text so that gathering

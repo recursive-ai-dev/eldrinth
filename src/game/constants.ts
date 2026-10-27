@@ -47,7 +47,7 @@ export interface TileDefinition {
   shape: TileShape;
   /** Optional named gameplay event; triggers never block by themselves. */
   trigger?: string;
-  /** Drawn after actors so they can pass behind a tall asset. */
+  /** Depth-sorted with actors so they can pass behind or in front of the asset. */
   tall?: boolean;
   /** Health cost per application for standing on this tile. */
   harm?: number;
@@ -80,7 +80,7 @@ export const TILE_DEFINITIONS: Readonly<Record<number, TileDefinition>> = {
   [T.EMBERS]: { shape: "none", harm: 1 },
   [T.HOUSE_WALL]: BLOCKING,
   [T.INTERIOR_FLOOR]: PASSABLE,
-  [T.INTERIOR_WALL]: BLOCKING,
+  [T.INTERIOR_WALL]: { ...BLOCKING, tall: true },
 };
 
 export function tileDefinition(tile: number): TileDefinition {

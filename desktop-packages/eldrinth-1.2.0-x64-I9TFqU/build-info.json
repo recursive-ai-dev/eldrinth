@@ -1,0 +1,28 @@
+{
+  "generator": "npm-to-deb 1.0.1",
+  "createdAt": "2026-10-27T10:09:05.695Z",
+  "mode": "electron",
+  "packageName": "eldrinth",
+  "title": "ELDRINTH",
+  "version": "1.2.0",
+  "appId": "local.npm.eldrinth",
+  "metadataNote": "Null metadata is inherited from the existing application or electron-builder configuration.",
+  "architecture": "x64",
+  "node": "26.12.0",
+  "buildScript": "build",
+  "buildArgs": [],
+  "staticOutput": null,
+  "maintainer": "recursive-ai-dev <psychcoherence@gmail.com>",
+  "homepage": "https://github.com/recursive-ai-dev/eldrinth",
+  "requestedElectron": "44.9.3",
+  "requestedBuilder": "26",
+  "electronVersion": "44.9.3",
+  "builderVersion": "26.18.0",
+  "debian": {
+    "Package": "eldrinth",
+    "Version": "1.2.0",
+    "Architecture": "amd64"
+  },
+  "file": "eldrinth_1.2.0_amd64.deb",
+  "sha256": "3659818318e8ab294f0da59d78dd80e95a1069b111b1a6617a30bd7115218909"
+}

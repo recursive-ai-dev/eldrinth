@@ -46,7 +46,8 @@ export class MovementSystem {
   hitsSolid(x: number, y: number, r: number, previousY = y): boolean {
     const minX = Math.floor((x - r) / TILE);
     const maxX = Math.floor((x + r) / TILE);
-    const minY = Math.floor((y - r) / TILE);
+    // Terrain uses only the lower half of the body; combat keeps its full radius.
+    const minY = Math.floor(y / TILE);
     const maxY = Math.floor((y + r) / TILE);
     for (let ty = minY; ty <= maxY; ty++) {
       for (let tx = minX; tx <= maxX; tx++) {
@@ -55,13 +56,13 @@ export class MovementSystem {
         const shape: TileShape = !this.map.wardUnlocked && this.map.wardTiles.has(index)
           ? "solid"
           : tile === undefined ? "solid" : tileDefinition(tile).shape;
-        if (this.shapeHitsCircle(shape, tx, ty, x, y, r, previousY)) return true;
+        if (this.shapeHitsFootprint(shape, tx, ty, x, y, r, previousY)) return true;
       }
     }
     return false;
   }
 
-  private shapeHitsCircle(shape: TileShape, tx: number, ty: number, x: number, y: number, r: number, previousY: number): boolean {
+  private shapeHitsFootprint(shape: TileShape, tx: number, ty: number, x: number, y: number, r: number, previousY: number): boolean {
     if (shape === "none" || shape === "trigger") return false;
     const left = tx * TILE;
     const top = ty * TILE;
@@ -71,11 +72,12 @@ export class MovementSystem {
     if (shape === "slopeUpLeft" || shape === "slopeUpRight") {
       const localX = clamp(x, left, left + TILE) - left;
       const surface = top + (shape === "slopeUpLeft" ? localX : TILE - localX);
-      return x + r > left && x - r < left + TILE && y + r > surface && y - r < top + TILE;
+      return x + r > left && x - r < left + TILE && y + r > surface && y < top + TILE;
     }
     const nearX = clamp(x, left, left + TILE);
-    const nearY = clamp(y, top, top + TILE);
-    return (x - nearX) ** 2 + (y - nearY) ** 2 < r ** 2;
+    const centerY = y + r / 2;
+    const nearY = clamp(centerY, top, top + TILE);
+    return (x - nearX) ** 2 + ((centerY - nearY) * 2) ** 2 < r ** 2;
   }
 
   moveX(e: SolidBody, dx: number) {

@@ -109,7 +109,7 @@ export default function IntroSequence({ onComplete }: { onComplete: () => void }
               ))}
             </div>
             <p>They began with prisoners. Then the poor.</p>
-            <p className="intro-line-delay-2 intro-accent">Then, when those ran out, their own children.</p>
+            <p className="intro-line-delay-2 intro-accent">Then, when those ran out, their own officials.</p>
           </div>
         )}
 

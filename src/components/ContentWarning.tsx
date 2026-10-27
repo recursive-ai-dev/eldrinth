@@ -49,8 +49,8 @@ export default function ContentWarning({ onAcknowledge }: { onAcknowledge: () =>
         <h1 id="content-warning-heading" className="font-title text-2xl tracking-[0.3em] text-rose-200/90">BEFORE YOU BEGIN</h1>
         <p className="mt-8 font-serif text-base leading-relaxed text-amber-50/80">
           Eldrinth is a story about people who built a machine out of other people and
-          then wrote it down neatly. It contains institutional violence and the killing
-          of children, described plainly and in the administrative language the
+          then wrote it down neatly. It contains institutional violence and death,
+          described plainly and in the administrative language the
           institutions used.
         </p>
         <p className="mt-4 font-serif text-base leading-relaxed text-amber-50/80">

@@ -250,8 +250,8 @@ the world's heart is built out of living minds, that the nine shards are nine
 people still conscious inside it, and that the institutions in the story process
 those people as paperwork. Nothing in the approved copy is decorative shock; it
 is load-bearing to the premise. The first-launch content warning discloses
-institutional violence and the killing of children. Walk-back of the rating
-should be a deliberate decision, not an accident.
+institutional violence and death. Child killing and child harvesting are excluded
+from the story; all harvested people are adults.
 
 ## Documentation
 

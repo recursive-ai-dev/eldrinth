@@ -294,11 +294,19 @@ export class TileChunkRenderer {
     this.prepare(cam, viewW, viewH, CHUNK_GUARD);
   }
 
-  drawOverlay(ctx: CanvasRenderingContext2D, cam: { x: number; y: number }, viewW: number, viewH: number) {
+  /** Cached terrain rows join actors in the same ground-contact depth order. */
+  collectOverlays(ctx: CanvasRenderingContext2D, cam: { x: number; y: number }, viewW: number, viewH: number, objects: WorldObject[]) {
     for (const [cx, cy] of this.chunkRange(cam, viewW, viewH, 0)) {
       const chunk = this.get(cx, cy);
       chunk.lastUsed = this.frame;
-      ctx.drawImage(chunk.overlay, cx * CHUNK_PIXELS, cy * CHUNK_PIXELS);
+      for (let row = 0; row < CHUNK_TILES; row++) {
+        const y = cy * CHUNK_PIXELS + row * TILE;
+        if (y + TILE < cam.y || y > cam.y + viewH) continue;
+        objects.push({ y: y + TILE, draw: () => {
+          ctx.drawImage(chunk.overlay, 0, row * TILE, CHUNK_PIXELS, TILE,
+            cx * CHUNK_PIXELS, y, CHUNK_PIXELS, TILE);
+        } });
+      }
     }
   }
 
@@ -349,9 +357,12 @@ export class TileChunkRenderer {
         if (tx >= this.map.width || ty >= this.map.height) continue;
         const tile = this.map.tiles[ty * this.map.width + tx];
         const mask = this.wangMask(tx, ty, tile);
-        drawTile(groundCtx, tile, x * TILE, y * TILE, tx * TILE, ty * TILE, mask);
         if (tileDefinition(tile).tall) {
-          drawTallOverlay(overlayCtx, tile, x * TILE, y * TILE, tx * TILE, ty * TILE, mask);
+          const floor = tile === T.RWALL || tile === T.INTERIOR_WALL ? T.RFLOOR : T.GRASS;
+          drawTile(groundCtx, floor, x * TILE, y * TILE, tx * TILE, ty * TILE);
+          drawTile(overlayCtx, tile, x * TILE, y * TILE, tx * TILE, ty * TILE, mask);
+        } else {
+          drawTile(groundCtx, tile, x * TILE, y * TILE, tx * TILE, ty * TILE, mask);
         }
       }
     }
@@ -686,61 +697,6 @@ export function drawTile(
   }
 }
 
-/** The portion of a tall tile that must occlude actors below it. */
-function drawTallOverlay(
-  ctx: CanvasRenderingContext2D,
-  tile: number,
-  x: number,
-  y: number,
-  seedX = x,
-  seedY = y,
-  wangMask = 0,
-) {
-  const s = TILE;
-  const atlas = tileAtlasFor(tile);
-  if (atlas?.ready && atlas.image) {
-    const autotile = atlas.manifest?.autotile ?? false;
-    const variant = Math.floor(hash2(seedX, seedY) * 4);
-    const frameIndex = autotile ? wangMask * 4 + variant : variant;
-    const frame = atlas.getStaticFrame(frameIndex);
-    if (frame) {
-      const cutH = Math.floor(frame.sh * 0.60);
-      const destH = Math.floor(s * 0.60);
-      const smoothing = ctx.imageSmoothingEnabled;
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(
-        atlas.image,
-        frame.sx, frame.sy, frame.sw, cutH,
-        x, y, s, destH,
-      );
-      ctx.imageSmoothingEnabled = smoothing;
-      return;
-    }
-  }
-  ctx.save();
-  if (tile === T.TREE) {
-    ctx.fillStyle = "rgba(10, 25, 8, 0.58)";
-    dot(ctx, x + s * 0.5, y + s * 0.34, 12);
-    ctx.fill();
-    ctx.fillStyle = "rgba(31, 58, 22, 0.72)";
-    dot(ctx, x + s * 0.4, y + s * 0.25, 8);
-    ctx.fill();
-  } else if (tile === T.ROCK || tile === T.RWALL || tile === T.GRAVE) {
-    ctx.fillStyle = "rgba(24, 23, 31, 0.48)";
-    ctx.fillRect(x + 2, y + s * 0.45, s - 4, s * 0.3);
-  } else if (tile === T.CRYSTAL) {
-    ctx.globalCompositeOperation = "lighter";
-    ctx.fillStyle = "rgba(110, 255, 245, 0.35)";
-    ctx.beginPath();
-    ctx.moveTo(x + s / 2, y + 4);
-    ctx.lineTo(x + s * 0.72, y + s * 0.62);
-    ctx.lineTo(x + s * 0.28, y + s * 0.62);
-    ctx.closePath();
-    ctx.fill();
-  }
-  ctx.restore();
-}
-
 /* ----------------------------- render pipeline ----------------------------- */
 
 /**
@@ -780,8 +736,6 @@ export function renderGame(g: RenderState) {
   stage("ground");
   g.tileRenderer.drawGround(ctx, g.cam, g.viewW, g.viewH);
   stage("towns");
-  drawTownBuildings(g, ctx);
-  drawSettlementState(g, ctx);
   stage("ward");
   drawWardBarrier(g, ctx);
   stage("objects");
@@ -793,7 +747,6 @@ export function renderGame(g: RenderState) {
   stage("texts");
   drawTexts(g, ctx);
   stage("overlay");
-  g.tileRenderer.drawOverlay(ctx, g.cam, g.viewW, g.viewH);
   ctx.restore();
 
   stage("lighting");
@@ -805,19 +758,21 @@ export function renderGame(g: RenderState) {
 }
 
 /** Complete cottage props replace the old repeated-wall settlement silhouettes. */
-function drawTownBuildings(g: RenderState, ctx: CanvasRenderingContext2D) {
+function drawTownBuildings(g: RenderState, ctx: CanvasRenderingContext2D, objects: WorldObject[]) {
   for (const town of g.map.towns) {
     for (const building of town.buildings) {
       // Exterior layouts reserve a 3×3 footprint and place the door at its
       // bottom centre. Anchor the 96px frontage from that known door tile.
       const x = (building.x - 1) * TILE;
       const y = (building.y - 2) * TILE;
-      drawStaticSpriteBox(ctx, `house.${building.theme}`, x, y, TILE * 3, TILE * 3);
+      objects.push({ y: y + TILE * 3, draw: () => {
+        drawStaticSpriteBox(ctx, `house.${building.theme}`, x, y, TILE * 3, TILE * 3);
+      } });
     }
   }
 }
 
-function drawSettlementState(g: RenderState, ctx: CanvasRenderingContext2D) {
+function drawSettlementState(g: RenderState, ctx: CanvasRenderingContext2D, objects: WorldObject[]) {
   for (const town of g.map.towns) {
     const state = g.settlementStates.find((entry) => entry.townId === town.id);
     if (!state) continue;
@@ -827,23 +782,25 @@ function drawSettlementState(g: RenderState, ctx: CanvasRenderingContext2D) {
       const [ox, oy] = lampOffsets[index];
       const x = town.x + ox;
       const y = town.y + oy;
-      const flicker = 0.9 + 0.1 * Math.sin(g.time * 5 + index * 1.7);
-      const glow = ctx.createRadialGradient(x, y - 6, 2, x, y - 6, 26 * flicker);
-      glow.addColorStop(0, "rgba(255,224,143,0.85)");
-      glow.addColorStop(0.4, "rgba(255,181,72,0.3)");
-      glow.addColorStop(1, "rgba(255,181,72,0)");
-      ctx.fillStyle = glow;
-      ctx.beginPath();
-      ctx.arc(x, y - 6, 26 * flicker, 0, Math.PI * 2);
-      ctx.fill();
+      objects.push({ y: y + 8, draw: () => {
+        const flicker = 0.9 + 0.1 * Math.sin(g.time * 5 + index * 1.7);
+        const glow = ctx.createRadialGradient(x, y - 6, 2, x, y - 6, 26 * flicker);
+        glow.addColorStop(0, "rgba(255,224,143,0.85)");
+        glow.addColorStop(0.4, "rgba(255,181,72,0.3)");
+        glow.addColorStop(1, "rgba(255,181,72,0)");
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(x, y - 6, 26 * flicker, 0, Math.PI * 2);
+        ctx.fill();
 
-      ctx.save();
-      ctx.translate(x, y);
-      if (!drawEntitySprite(ctx, "lantern", "front", "idle", g.time * 2 + index * 0.5, 24)) {
-        ctx.fillStyle = "#ffe49a";
-        ctx.fillRect(-2, -2, 4, 4);
-      }
-      ctx.restore();
+        ctx.save();
+        ctx.translate(x, y);
+        if (!drawEntitySprite(ctx, "lantern", "front", "idle", g.time * 2 + index * 0.5, 24)) {
+          ctx.fillStyle = "#ffe49a";
+          ctx.fillRect(-2, -2, 4, 4);
+        }
+        ctx.restore();
+      } });
     }
 
     const refugeeOffsets = [[-48, 44], [0, 48], [48, 44]];
@@ -851,57 +808,64 @@ function drawSettlementState(g: RenderState, ctx: CanvasRenderingContext2D) {
       const [ox, oy] = refugeeOffsets[index];
       const x = town.x + ox;
       const y = town.y + oy;
-      ctx.save();
-      ctx.translate(x, y);
-      if (!drawEntitySprite(ctx, "refugee", "front", "walk", g.time * 0.3 + index, 28)) {
-        ctx.fillStyle = "#c9d6cf";
-        ctx.beginPath();
-        ctx.arc(0, -7, 3, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = "#6c8b82";
-        ctx.fillRect(-4, -4, 8, 10);
-      }
-      ctx.restore();
+      objects.push({ y: y + 10, draw: () => {
+        ctx.save();
+        ctx.translate(x, y);
+        if (!drawEntitySprite(ctx, "refugee", "front", "walk", g.time * 0.3 + index, 28)) {
+          ctx.fillStyle = "#c9d6cf";
+          ctx.beginPath();
+          ctx.arc(0, -7, 3, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "#6c8b82";
+          ctx.fillRect(-4, -4, 8, 10);
+        }
+        ctx.restore();
+      } });
     }
 
     if (state.closedBusinesses > 0) {
       const building = town.buildings[town.buildings.length - 1];
       const x = (building.x - 1) * TILE;
       const y = (building.y - 1) * TILE;
-      ctx.fillStyle = "rgba(32,24,24,0.82)";
-      ctx.fillRect(x + 8, y + 35, TILE * 2 - 16, 18);
-      ctx.strokeStyle = "#9b6b55";
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(x + 10, y + 36);
-      ctx.lineTo(x + TILE * 2 - 10, y + 52);
-      ctx.moveTo(x + TILE * 2 - 10, y + 36);
-      ctx.lineTo(x + 10, y + 52);
-      ctx.stroke();
+      objects.push({ y: (building.y + 1) * TILE, draw: () => {
+        ctx.fillStyle = "rgba(32,24,24,0.82)";
+        ctx.fillRect(x + 8, y + 35, TILE * 2 - 16, 18);
+        ctx.strokeStyle = "#9b6b55";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(x + 10, y + 36);
+        ctx.lineTo(x + TILE * 2 - 10, y + 52);
+        ctx.moveTo(x + TILE * 2 - 10, y + 36);
+        ctx.lineTo(x + 10, y + 52);
+        ctx.stroke();
+      } });
     }
 
     if (state.guarded) {
       const x = town.x - 88;
       const y = town.y + 4;
-      ctx.save();
-      ctx.translate(x, y);
-      if (!drawEntitySprite(ctx, "guard", "front", "walk", g.time * 0.35, 32)) {
-        ctx.fillStyle = "#8b98a0";
-        ctx.beginPath();
-        ctx.arc(0, -12, 5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillRect(-6, -7, 12, 18);
-        ctx.strokeStyle = "#c7a56b";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(8, -12);
-        ctx.lineTo(8, 16);
-        ctx.stroke();
-      }
-      ctx.restore();
+      objects.push({ y: y + 10, draw: () => {
+        ctx.save();
+        ctx.translate(x, y);
+        if (!drawEntitySprite(ctx, "guard", "front", "walk", g.time * 0.35, 32)) {
+          ctx.fillStyle = "#8b98a0";
+          ctx.beginPath();
+          ctx.arc(0, -12, 5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillRect(-6, -7, 12, 18);
+          ctx.strokeStyle = "#c7a56b";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(8, -12);
+          ctx.lineTo(8, 16);
+          ctx.stroke();
+        }
+        ctx.restore();
+      } });
     }
   }
 }
+
 
 const PLAYER_LIGHT_RADIUS = 96;
 const BRAZIER_LIGHT_RADIUS = 176;
@@ -1054,7 +1018,6 @@ function drawItem(_g: RenderState, ctx: CanvasRenderingContext2D, it: ItemState)
   ctx.restore();
 }
 
-/** A shared sort pass keeps items, actors, and tall map overlays coherent. */
 /** A fortress light source. Falls back to procedural flame if the atlas is absent. */
 function drawBrazier(ctx: CanvasRenderingContext2D, x: number, y: number) {
   const ix = Math.round(x);
@@ -1072,8 +1035,14 @@ function drawBrazier(ctx: CanvasRenderingContext2D, x: number, y: number) {
   ctx.restore();
 }
 
+interface WorldObject { y: number; draw: () => void }
+
+/** Ground contact determines occlusion for every actor and raised prop. */
 function drawSortedWorldObjects(g: RenderState, ctx: CanvasRenderingContext2D) {
-  const objects: { y: number; draw: () => void }[] = [];
+  const objects: WorldObject[] = [];
+  g.tileRenderer.collectOverlays(ctx, g.cam, g.viewW, g.viewH, objects);
+  drawTownBuildings(g, ctx, objects);
+  drawSettlementState(g, ctx, objects);
   const record = g.lamplightRecord;
   if (record) objects.push({ y: record.y * TILE + TILE / 2, draw: () => {
     const x = record.x * TILE + TILE / 2, y = record.y * TILE + TILE / 2;
@@ -1126,19 +1095,19 @@ function drawSortedWorldObjects(g: RenderState, ctx: CanvasRenderingContext2D) {
   for (const fire of g.map.campfires) objects.push({ y: fire.y, draw: () => drawCampfire(g, ctx, fire.x, fire.y) });
   for (const npc of g.map.npcs) {
     objects.push({
-      y: npc.y,
+      y: npc.y + 10,
       draw: () => drawNpc(ctx, npc.x, npc.y, npc.color, npc.role, npc.portrait?.id, g.time, npc.name, g.player),
     });
   }
   if (g.map.npc.x > 0 && g.map.npc.y > 0) {
     objects.push({
-      y: g.map.npc.y,
+      y: g.map.npc.y + 10,
       draw: () => drawNpc(ctx, g.map.npc.x, g.map.npc.y, "#9ff7e6", "lore", "orithel-the-last-watcher", g.time, "Orithel", g.player),
     });
   }
   for (const item of g.items) if (!item.taken) objects.push({ y: item.y, draw: () => drawItem(g, ctx, item) });
-  for (const enemy of g.enemies) objects.push({ y: enemy.y, draw: () => drawEnemy(ctx, enemy) });
-  objects.push({ y: g.player.y, draw: () => drawPlayer(g, ctx) });
+  for (const enemy of g.enemies) objects.push({ y: enemy.y + enemy.r, draw: () => drawEnemy(ctx, enemy) });
+  objects.push({ y: g.player.y + g.player.r, draw: () => drawPlayer(g, ctx) });
   objects.sort((a, b) => a.y - b.y);
   for (const object of objects) object.draw();
 }

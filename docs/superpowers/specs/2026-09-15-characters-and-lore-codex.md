@@ -1,5 +1,7 @@
 # Characters and Lore Codex — ELDRINTH
 
+> Narrative revision (2026-10-27): child killing and child harvesting are excluded. All harvested people are adults; Roryn is an adult wagoner. Historical child-victim material below is superseded and must not be reintroduced. See current source and ROADMAP.md.
+
 **Status:** approved for implementation  
 **Date:** 2026-09-15  
 **Scope:** Narrative and Worldbuilding Expansion (Milestone 2)  

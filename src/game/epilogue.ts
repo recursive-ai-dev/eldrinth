@@ -28,9 +28,9 @@ export interface EpilogueInput {
 /** The choice each investigation resolves to, in one flat lookup. */
 const CHOICE_FATE: Record<string, string> = {
   // The Courier Who Never Came
-  release: "a child of the wagon, handed to the wayfires, warm and confused and alive",
-  bind: "a child of the wagon, folded into the edge of your blade, silent",
-  end: "a child of the wagon, put out by your own hand outside the hall, and the yield lost",
+  release: "Roryn the wagoner, handed to the wayfires, warm and confused and alive",
+  bind: "Roryn the wagoner, folded into the edge of your blade, silent",
+  end: "Roryn the wagoner, put out by your own hand outside the hall, and the yield lost",
   // Names the Tide Kept
   remember: "forty-one names put back where they were taken from, and a coast that now knows precisely who to hate",
   mercy: "forty-one names left quiet in a sealed account, and a trick for leaving no trace that anyone could count",
@@ -43,8 +43,8 @@ const CHOICE_FATE: Record<string, string> = {
 };
 
 const CHOICE_PHRASE: Record<string, string> = {
-  release: "You gave the child to the wayfires.",
-  bind: "You gave the child to your blade.",
+  release: "You gave Roryn to the wayfires.",
+  bind: "You gave Roryn to your blade.",
   end: "You ended it yourself, and took nothing.",
   remember: "You put the names back.",
   mercy: "You let the names stay quiet.",
