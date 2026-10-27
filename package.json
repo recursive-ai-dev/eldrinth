@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.2.0",
   "productName": "ELDRINTH",
-  "description": "ELDRINTH: The Unbound Spire \u2014 a 2D open-world dark-fantasy action RPG for browsers and Linux desktops.",
+  "description": "ELDRINTH: The Unbound Spire — a 2D open-world dark-fantasy action RPG for browsers and Linux desktops.",
   "main": "desktop/main.cjs",
   "author": {
     "name": "recursive-ai-dev",
@@ -58,10 +58,13 @@
     "@types/react": "19.2.7",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "5.1.1",
-    "electron": "44.5.1",
+    "electron": "^44.9.3",
     "tailwindcss": "4.1.17",
     "typescript": "5.9.3",
     "vite": "^7.3.6",
     "vitest": "^5.0.0"
+  },
+  "allowScripts": {
+    "esbuild@0.27.2": true
   }
 }
