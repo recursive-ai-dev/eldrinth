@@ -14,6 +14,8 @@ import type { GameCallbacks } from "@/game/types";
 import type { Game } from "@/game/engine";
 import type { WorldSnapshot } from "@/game/core/WorldState";
 import { slotStore, type SaveSlot, type PersistenceStatus } from "@/game/slots";
+import { MAX_BACKUP_BYTES, downloadBackup } from "@/game/saveBackup";
+import { mapKeyboardKey } from "@/game/controlBindings";
 import { type Difficulty, normalizeDifficulty } from "@/game/types";
 import { readDisplayPreferences, saveDisplayPreferences, type DisplayPreferences } from "@/components/displayPreferences";
 import WorldAtmosphere from "@/components/WorldAtmosphere";
@@ -75,7 +77,6 @@ export default function App() {
   // A browser that refuses to persist would otherwise look identical to a
   // working one until the player lost a run. Warn as soon as we know.
   useEffect(() => slotStore.onStatusChange(setPersistence), []);
-  useEffect(() => { setSlotError(null); }, [screen]);
 
   const runSlotAction = useCallback((action: () => Promise<void>) => {
     if (!slotsReady || slotBusyRef.current) return;
@@ -157,6 +158,20 @@ export default function App() {
     });
   }, [refreshSlots, runSlotAction]);
 
+  const exportSlot = useCallback((slot: number) => {
+    runSlotAction(async () => {
+      downloadBackup(await slotStore.exportBackup(slot), slot);
+    });
+  }, [runSlotAction]);
+
+  const importSlot = useCallback((slot: number, file: File) => {
+    runSlotAction(async () => {
+      if (file.size > MAX_BACKUP_BYTES) throw new Error("This backup is too large. Choose an ELDRINTH backup smaller than 5 MiB.");
+      await slotStore.importBackup(slot, await file.text());
+      await refreshSlots();
+    });
+  }, [refreshSlots, runSlotAction]);
+
   const acknowledgeWarning = useCallback(() => {
     markContentWarningSeen();
     setWarned(true);
@@ -180,18 +195,24 @@ export default function App() {
   const saveCurrentCheckpoint = useCallback(async () => {
     const game = gameRef.current;
     if (!game || !game.initialized || game.ended) throw new Error("The world is still opening. Please try again in a moment.");
-    if (game.regionTransition) await game.regionTransition;
-    await saveCheckpoint(game.saveWorld());
+    game.input.setSuspended(true);
+    try {
+      if (game.regionTransition) await game.regionTransition;
+      await saveCheckpoint(game.saveWorld());
+    } finally { game.input.setSuspended(false); }
   }, [saveCheckpoint]);
   const saveAndReturnToTitle = useCallback(async () => {
     const game = gameRef.current;
     if (!game || !game.initialized) throw new Error("The world is still opening. Please try again in a moment.");
-    if (game.regionTransition) await game.regionTransition;
-    await saveCheckpoint(game.saveWorld());
-    if (gameRef.current !== game) return;
-    setJournalOpen(false);
-    setAtlasOpen(false);
-    useGameStore.getState().reset();
+    game.input.setSuspended(true);
+    try {
+      if (game.regionTransition) await game.regionTransition;
+      await saveCheckpoint(game.saveWorld());
+      if (gameRef.current !== game) return;
+      setJournalOpen(false);
+      setAtlasOpen(false);
+      useGameStore.getState().reset();
+    } finally { game.input.setSuspended(false); }
   }, [saveCheckpoint]);
   const setJournalVisibility = useCallback((open: boolean) => {
     gameRef.current?.setJournalOpen(open);
@@ -212,7 +233,7 @@ export default function App() {
   }, []);
   useEffect(() => {
     const toggleJournal = (event: KeyboardEvent) => {
-      if (event.repeat) return;
+      if (event.repeat || event.defaultPrevented || event.ctrlKey || event.altKey || event.metaKey) return;
       // Escape must close the journal even from inside the note field. The
       // target guard exists so typing "l" does not toggle the panel, but applied
       // first it also swallowed Escape and stranded the player in the textarea
@@ -229,12 +250,13 @@ export default function App() {
       }
       const target = event.target;
       if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || (target instanceof HTMLElement && target.isContentEditable)) return;
-      if (event.key.toLowerCase() === "m" && (screen === "overworld" || screen === "interior") && !dialogue) {
+      const key = mapKeyboardKey(event.key);
+      if (key === "m" && (screen === "overworld" || screen === "interior") && !dialogue) {
         event.preventDefault();
         setAtlasVisibility(!atlasOpen);
         return;
       }
-      if (event.key.toLowerCase() === "l" && (screen === "overworld" || screen === "interior") && !dialogue) {
+      if (key === "l" && (screen === "overworld" || screen === "interior") && !dialogue) {
         event.preventDefault();
         setJournalVisibility(!journalOpen);
       }
@@ -265,7 +287,7 @@ export default function App() {
           difficulty={difficulty}
           // A fresh engine starts with its journal closed; match it, or a journal
           // left open when the previous engine crashed covers a live world.
-          onReady={(g) => { gameRef.current = g; g.setCameraZoom(preferences.cameraZoom); g.autoPause = travelPreferences.autoPause; g.screenShake = travelPreferences.screenShake; setJournalOpen(false); setAtlasOpen(false); setPinnedId(null); setLastSavedAt(null); }}
+          onReady={(g) => { gameRef.current = g; g.setCameraZoom(preferences.cameraZoom); g.autoPause = travelPreferences.autoPause; g.screenShake = travelPreferences.screenShake; g.quietInterface = preferences.quietInterface; setJournalOpen(false); setAtlasOpen(false); setPinnedId(null); setLastSavedAt(null); }}
           onDispose={(g) => { if (gameRef.current === g) gameRef.current = null; }}
         />
       )}
@@ -351,6 +373,8 @@ export default function App() {
           onStart={start}
           onContinue={resume}
           onErase={eraseSlot}
+          onExport={exportSlot}
+          onImport={importSlot}
           slots={slots}
           slotsReady={slotsReady}
           busy={slotBusy}

@@ -83,7 +83,7 @@ export default function IntroSequence({ onComplete }: { onComplete: () => void }
         {shot === 0 && (
           <div className="intro-opening">
             <div className="intro-archive-tag">
-              MNEMONIC ARCHIVE <span>09</span> // RECOVERED
+              MNEMONIC ARCHIVE <span>09</span>{" // RECOVERED"}
             </div>
             <p className="intro-whisper">There was a voice</p>
             <p className="intro-whisper intro-whisper-delay">before there was a world.</p>
@@ -127,7 +127,7 @@ export default function IntroSequence({ onComplete }: { onComplete: () => void }
           <div className="intro-transcript">
             <div className="intro-index">UNAUTHORIZED MEMORY // SOURCE UNKNOWN</div>
             <p><span>UNKNOWN</span>You have come for the nine pieces.</p>
-            <p className="intro-line-delay-1"><span>WAYFARER</span>I don't remember coming before.</p>
+            <p className="intro-line-delay-1"><span>WAYFARER</span>I don&apos;t remember coming before.</p>
             <p className="intro-line-delay-2"><span>UNKNOWN</span>You never do.</p>
             <div className="intro-warning">THE NINTH MEMORY IS NOT MINE.</div>
           </div>

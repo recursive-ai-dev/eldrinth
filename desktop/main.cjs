@@ -1,8 +1,9 @@
-const { app, BrowserWindow, Menu, protocol, session, dialog } = require("electron");
+const { app, BrowserWindow, Menu, protocol, session, dialog, screen } = require("electron");
 const { readFile } = require("node:fs/promises");
 const { mkdirSync } = require("node:fs");
 const { join } = require("node:path");
 const { SCHEME, GAME_URL, CONTENT_SECURITY_POLICY, resolveAssetPath, isGameURL, mimeType } = require("./protocol.cjs");
+const { readWindowState, writeWindowState, checkpointWithTimeout } = require("./window-state.cjs");
 
 app.setName("ELDRINTH");
 app.setDesktopName("eldrinth.desktop");
@@ -17,6 +18,8 @@ protocol.registerSchemesAsPrivileged([{
 let window;
 let closing = false;
 let allowClose = false;
+let rendererCrashed = false;
+let recovering = false;
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -55,10 +58,14 @@ if (!app.requestSingleInstanceLock()) {
     session.defaultSession.setPermissionCheckHandler(() => false);
     session.defaultSession.webRequest.onBeforeRequest({ urls: ["http://*/*", "https://*/*"] }, (_details, callback) => callback({ cancel: true }));
 
+    const windowStatePath = join(app.getPath("userData"), "window-state.json");
+    const primary = screen.getPrimaryDisplay();
+    const displays = [primary, ...screen.getAllDisplays().filter(display => display.id !== primary.id)].map(display => display.workArea);
+    const windowState = readWindowState(windowStatePath, displays);
+    const { maximized, fullscreen, ...bounds } = windowState;
     window = new BrowserWindow({
       title: "ELDRINTH — The Unbound Spire",
-      width: 1280,
-      height: 800,
+      ...bounds,
       minWidth: 640,
       minHeight: 360,
       backgroundColor: "#04050a",
@@ -76,20 +83,41 @@ if (!app.requestSingleInstanceLock()) {
     window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     window.webContents.on("will-navigate", (event, url) => { if (!isGameURL(url)) event.preventDefault(); });
     window.webContents.on("will-attach-webview", event => event.preventDefault());
-    window.once("ready-to-show", () => window.show());
+    window.once("ready-to-show", () => {
+      if (maximized) window.maximize();
+      if (fullscreen) window.setFullScreen(true);
+      window.show();
+    });
+    window.webContents.on("did-finish-load", () => { rendererCrashed = false; });
+    window.webContents.on("render-process-gone", async (_event, details) => {
+      if (allowClose || recovering || details.reason === "clean-exit") return;
+      rendererCrashed = true;
+      recovering = true;
+      try {
+        const choice = await dialog.showMessageBox(window, {
+          type: "error", title: "ELDRINTH stopped responding",
+          message: "The game stopped unexpectedly.",
+          detail: "Reload to continue from your last saved checkpoint. Progress since that checkpoint may be lost.",
+          buttons: ["Reload game", "Quit"], defaultId: 0, cancelId: 1,
+        });
+        if (window.isDestroyed()) return;
+        if (choice.response === 0) await window.loadURL(GAME_URL);
+        else { allowClose = true; window.close(); }
+      } finally { recovering = false; }
+    });
     Menu.setApplicationMenu(Menu.buildFromTemplate([{
       label: "Game",
       submenu: [{ role: "togglefullscreen", accelerator: "F11" }, { type: "separator" }, { role: "quit" }],
     }]));
 
     window.on("close", async event => {
-      if (allowClose) return;
+      if (allowClose) { writeWindowState(windowStatePath, window); return; }
       event.preventDefault();
       if (closing) return;
       closing = true;
       try {
-        if (!window.webContents.isDestroyed() && isGameURL(window.webContents.getURL())) {
-          await window.webContents.executeJavaScript("window.eldrinthCheckpoint?.()");
+        if (!rendererCrashed && !window.webContents.isDestroyed() && isGameURL(window.webContents.getURL())) {
+          await checkpointWithTimeout(() => window.webContents.executeJavaScript("window.eldrinthCheckpoint?.()"));
         }
         allowClose = true;
       } catch (error) {
@@ -97,7 +125,7 @@ if (!app.requestSingleInstanceLock()) {
           type: "warning",
           title: "Progress could not be saved",
           message: "Your latest progress could not be saved.",
-          detail: `${error.message}\nYour previous save is untouched.`,
+          detail: `${error.message}\nYour previously saved progress remains available.`,
           buttons: ["Keep playing", "Quit without saving"],
           defaultId: 0,
           cancelId: 0,

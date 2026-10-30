@@ -1,6 +1,7 @@
 import type { EnemyType } from "../types";
 import { contactDamageFor } from "./contactDamage";
 import { steerXY } from "./steering";
+import { wardenAttackDirections, wardenStyleForRegion, type WardenStyle } from "../wardens";
 
 export interface EnemyLike {
   id: number;
@@ -29,6 +30,7 @@ export interface EnemyLike {
   bob: number;
   alive: boolean;
   dying: number;
+  elite?: boolean;
 }
 
 export interface AIContext {
@@ -43,6 +45,7 @@ export interface AIContext {
   random?: () => number;
   /** Scales how close a non-boss enemy must be before it commits to combat. */
   engagementMultiplier?: number;
+  regionId?: string;
 }
 
 export class AISystem {
@@ -57,6 +60,12 @@ export class AISystem {
 
     if (enemy.type === "boss") {
       this.updateBoss(enemy, dt, dist, ux, uy, ctx);
+      return;
+    }
+
+    const warden = enemy.elite && enemy.type === "sentinel" ? wardenStyleForRegion(ctx.regionId) : null;
+    if (warden) {
+      this.updateWarden(enemy, dt, dist, ux, uy, awareness, warden, ctx);
       return;
     }
 
@@ -108,6 +117,66 @@ export class AISystem {
     if (contactDamage !== null) {
       ctx.onDamagePlayer(contactDamage, enemy.x, enemy.y);
     }
+  }
+
+  private updateWarden(enemy: EnemyLike, dt: number, dist: number, ux: number, uy: number, awareness: number, style: WardenStyle, ctx: AIContext) {
+    enemy.shootCd = Math.max(0, enemy.shootCd - dt);
+    enemy.lungeCd = Math.max(0, enemy.lungeCd - dt);
+    if (dist >= 340 * awareness || ctx.player.dying > 0) {
+      // Shelters and leaving the fight cancel pending attacks, including charges.
+      enemy.telegraph = null;
+      enemy.telegraphTimer = 0;
+      enemy.lungeTimer = 0;
+      enemy.shootCd = Math.max(enemy.shootCd, 1);
+      steerXY(enemy, { x: 0, y: 0 }, dt);
+      return;
+    }
+
+    if (enemy.lungeTimer > 0) {
+      enemy.lungeTimer = Math.max(0, enemy.lungeTimer - dt);
+      if (enemy.lungeTimer > 0) {
+        enemy.vx = enemy.lungeVx * style.speed;
+        enemy.vy = enemy.lungeVy * style.speed;
+      } else {
+        enemy.vx = enemy.vy = 0;
+        enemy.lungeCd = 0.7;
+      }
+    } else if (enemy.telegraph) {
+      // All attacks lock aim at the start, and stop walking while winding up.
+      enemy.vx = enemy.vy = 0;
+      enemy.telegraphTimer = Math.max(0, enemy.telegraphTimer - dt);
+      if (enemy.telegraphTimer === 0) {
+        enemy.telegraph = null;
+        enemy.shootCd = style.cooldown;
+        if (style.pattern === "charge") {
+          enemy.lungeTimer = 0.4;
+        } else {
+          for (const direction of wardenAttackDirections(style, enemy.lungeVx, enemy.lungeVy)) {
+            ctx.onShoot(enemy.x, enemy.y, direction.x, direction.y, style.speed, 1, style.color);
+          }
+          enemy.lungeCd = 0.65;
+        }
+        ctx.onText?.(enemy.x, enemy.y - 34, style.label, style.color, 13);
+      }
+    } else if (enemy.lungeCd > 0) {
+      steerXY(enemy, { x: 0, y: 0 }, dt);
+    } else if (enemy.shootCd === 0) {
+      enemy.telegraph = style.telegraph;
+      enemy.telegraphTimer = style.windup;
+      enemy.lungeVx = ux;
+      enemy.lungeVy = uy;
+      enemy.vx = enemy.vy = 0;
+    } else {
+      const orbit = style.pattern === "cross" && dist < 190;
+      const advance = dist > 74 ? 1 : 0;
+      steerXY(enemy, {
+        x: (orbit ? -uy * 0.7 : ux * advance) * enemy.speed,
+        y: (orbit ? ux * 0.7 : uy * advance) * enemy.speed,
+      }, dt);
+    }
+
+    const contactDamage = contactDamageFor(ctx.player, enemy);
+    if (contactDamage !== null) ctx.onDamagePlayer(contactDamage, enemy.x, enemy.y);
   }
 
   private updateBoss(enemy: EnemyLike, dt: number, dist: number, ux: number, uy: number, ctx: AIContext) {

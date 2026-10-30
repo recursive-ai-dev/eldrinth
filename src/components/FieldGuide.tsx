@@ -12,7 +12,7 @@ export default function FieldGuide({ entries }: { entries: JournalEntry[] }) {
   const milestones = cards.filter(card => card.section === "first-steps");
   const recorded = milestones.filter(card => card.status === "Recorded").length;
   return <div className="field-guide">
-    <p className="guide-intro">A traveller's reference. First steps follow your saved records; route hints open only when you choose them.</p>
+    <p className="guide-intro">A traveller&apos;s reference. First steps follow your saved records; route hints open only when you choose them.</p>
     <div className="guide-sections" role="group" aria-label="Field guide sections">
       {GUIDE_SECTIONS.map(item => <button key={item.id} aria-pressed={section === item.id && !query.trim()} onClick={() => { setSection(item.id); setQuery(""); }}><SpriteIcon id={item.icon} size={24} />{item.label}</button>)}
     </div>

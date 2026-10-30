@@ -15,6 +15,9 @@ export default mergeConfig(
     test: {
       include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
       environment: "node",
+      // Map/snapshot suites allocate whole worlds. Bound concurrency on desktop
+      // workstations and CI rather than scaling memory with logical CPU count.
+      maxWorkers: 2,
     },
   }),
 );

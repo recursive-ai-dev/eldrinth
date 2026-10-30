@@ -5,7 +5,7 @@ export default function SoundSettings({ preferences, setPreferences, preferences
   const volumeId = useId();
   return (
     <fieldset className="rounded border border-amber-200/15 bg-black/20 p-3 text-left" disabled={!supported}>
-      <legend className="px-2 text-xs uppercase tracking-[0.18em] text-amber-200/70">The world's lament</legend>
+      <legend className="px-2 text-xs uppercase tracking-[0.18em] text-amber-200/70">The world&apos;s lament</legend>
       <div className="flex items-center justify-between gap-4">
         <p className="text-sm text-amber-100/70">Music &amp; sound</p>
         <button

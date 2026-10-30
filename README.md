@@ -21,7 +21,7 @@ in flat clerical language. A content warning gates first launch. See
 Install the standalone Debian desktop release on amd64 Linux:
 
 ```bash
-sudo apt install ./eldrinth_1.2.0_amd64.deb
+sudo apt install ./eldrinth_1.3.0_amd64.deb
 eldrinth
 ```
 
@@ -54,7 +54,27 @@ subdirectory, or an itch.io zip without reconfiguration.
 Touch controls appear automatically on coarse-pointer devices. Landscape is
 recommended on phones.
 
-### The Wayfarer’s Kit (unreleased)
+### The Wayfarer’s Kit · 1.3
+
+Version 1.3 adds four regional warden tactics with visible attack lanes and
+field-guide counters. The Old Lands warden commits to a charge; Cinderwild
+releases an ember ring; the Coast fires a three-bolt fan; Starfall combines
+orbiting movement with crossfire.
+
+**Pause → Controls** lets you remap primary keys, exchange conflicting bindings,
+and restore defaults. Arrow keys, Space, Enter, Esc / P, and dialogue numbers
+stay available. Standard gamepads support exploration and combat: left stick /
+D-pad moves, bottom face attacks, right dashes, left interacts, top raises the
+lantern, left shoulder parries, right shoulder switches weapons, and Start
+pauses or resumes. Menus and dialogue choices use keyboard or mouse.
+
+On the title screen, **Export** downloads a pilgrimage as JSON; **Import backup**
+restores it into an empty slot. Carry progress between browser and desktop or
+keep an external backup. Existing records cannot be replaced by an import;
+erasing requires confirmation. Only import backups exported by ELDRINTH.
+
+The desktop release remembers window geometry and fullscreen, recovers from a
+renderer crash with a reload prompt, and bounds the save wait when quitting.
 
 Press **M** or **Atlas** to chart places you have actually seen. Search or filter
 known wayfires, sanctuaries, roads, doorways, and records; pin a place for a live
@@ -89,7 +109,7 @@ npm run verify:field-kit
 See [the 41 implemented improvements](docs/wayfarers-kit.md) and the
 [art contact sheet](docs/field-kit-contact-sheet.png).
 
-### The Lamplighter's Margin (unreleased)
+### The Lamplighter's Margin
 
 Raise the lantern with `R` or the **Lantern** button. Scraped brass plates on
 the arrival road and around the three frontier wayfires reveal concealed writing

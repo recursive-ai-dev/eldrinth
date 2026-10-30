@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useControlKeys } from "./useControlKeys";
 import Modal from "./Modal";
 import type { JournalEntry } from "@/game/types";
 import { FIELD_GUIDE_TOTALS, filterJournal, journalAsText, journalSummary, type JournalOrder, type JournalStatus } from "@/game/fieldGuide";
@@ -67,6 +68,7 @@ export default function Journal({
   onAddNote: (note: string) => void;
 }) {
   const [note, setNote] = useState("");
+  const key = useControlKeys();
   const [activeTab, setActiveTab] = useState<TabId>("all");
   const [search, setSearch] = useState("");
   const [view, setView] = useState<"records" | "guide">("records");
@@ -155,7 +157,7 @@ export default function Journal({
             onClick={onClose}
             className="rounded border border-amber-200/20 px-2.5 py-1 font-title text-xs tracking-widest text-amber-200/70 transition hover:border-amber-200/50 hover:text-amber-100"
           >
-            ESC / L / CLOSE
+            ESC / {key.journal} / CLOSE
           </button>
         </div>
 
@@ -206,7 +208,7 @@ export default function Journal({
           <label>Show<select aria-label="Record status" value={status} onChange={event => setStatus(event.target.value as JournalStatus)}><option value="all">All statuses</option><option value="open">Open threads</option><option value="resolved">Decisions & completions</option><option value="personal">My observations</option></select></label>
           <label>Order<select aria-label="Record order" value={order} onChange={event => setOrder(event.target.value as JournalOrder)}><option value="recorded">Record order</option><option value="reverse">Reverse record order</option><option value="title">Title A–Z</option><option value="source">Source A–Z</option></select></label>
           {hasFilters && <button onClick={resetFilters}>Clear filters</button>}
-          <button className="journal-export" onClick={copyRecords} disabled={!displayedEntries.length} title="Copy the records currently shown">Copy results</button>
+          <button className="journal-export" onClick={() => { void copyRecords(); }} disabled={!displayedEntries.length} title="Copy the records currently shown">Copy results</button>
           <button onClick={exportRecords} disabled={!displayedEntries.length} title="Download the records currently shown as plain text">Export</button>
         </div>
 

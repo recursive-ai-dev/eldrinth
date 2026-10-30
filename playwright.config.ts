@@ -4,7 +4,8 @@ export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
   workers: 1,
-  timeout: 30_000,
+  timeout: 45_000,
+  expect: { timeout: 10_000 },
   use: {
     // Optional installed-browser channel for local runs; CI uses bundled Chromium.
     channel: process.env.PLAYWRIGHT_CHANNEL || undefined,

@@ -69,7 +69,7 @@ export class RegionRepository {
       signal.addEventListener("abort", abort, { once: true });
       void pending.promise.then(
         (region) => { if (finish()) resolve(region); },
-        (error) => { if (finish()) reject(error); },
+        (error) => { if (finish()) reject(error instanceof Error ? error : new Error(String(error ?? "Region load failed."))); },
       );
     });
   }
@@ -144,7 +144,15 @@ export class WorkerRegionSource implements RegionSource {
       const fail = (error: unknown) => {
         signal.removeEventListener("abort", abort);
         worker.terminate();
-        reject(error);
+        reject(
+          new Error(
+            error instanceof Error
+              ? error.message
+              : typeof error === "string"
+                ? error
+                : "Region load failed.",
+          ),
+        );
       };
       const abort = () => {
         worker.terminate();

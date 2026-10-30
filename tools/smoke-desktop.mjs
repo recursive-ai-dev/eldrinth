@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, symlink, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { _electron } from "playwright";
@@ -21,7 +21,7 @@ async function launch(executablePath) {
   delete env.ELECTRON_RUN_AS_NODE;
   // An extracted helper is owned by the test user. Use the kernel's namespace
   // sandbox there; an installed package can use its root-owned setuid helper.
-  const args = process.env.ELDRINTH_DESKTOP_EXECUTABLE ? [] : ["--disable-setuid-sandbox"];
+  const args = process.env.ELDRINTH_DESKTOP_EXECUTABLE || process.env.ELDRINTH_DESKTOP_SANDBOX_HELPER ? [] : ["--disable-setuid-sandbox"];
   // Match the packaged launcher when testing the runtime binary directly.
   if (env.WAYLAND_DISPLAY && !env.DISPLAY) args.unshift("--ozone-platform=wayland");
   application = await _electron.launch({ executablePath, args, env, chromiumSandbox: true, timeout: 30_000 });
@@ -73,8 +73,21 @@ try {
   const executablePath = process.env.ELDRINTH_DESKTOP_EXECUTABLE || join(extracted, "usr/lib/eldrinth/eldrinth");
   if (!process.env.ELDRINTH_DESKTOP_EXECUTABLE) {
     execFileSync("dpkg-deb", ["--extract", join(root, "release", `eldrinth_${pkg.version}_${architecture}.deb`), extracted]);
+    if (process.env.ELDRINTH_DESKTOP_SANDBOX_HELPER) {
+      // Ubuntu may disallow unprivileged namespaces. Reuse an already installed
+      // root-owned helper only when it exactly matches the packaged runtime.
+      const helper = resolve(process.env.ELDRINTH_DESKTOP_SANDBOX_HELPER);
+      const packagedHelper = join(extracted, "usr/lib/eldrinth/chrome-sandbox");
+      const metadata = await stat(helper);
+      assert.equal(metadata.uid, 0, "Sandbox helper must be root-owned");
+      assert.equal(metadata.mode & 0o7777, 0o4755, "Sandbox helper must have mode 4755");
+      assert.deepEqual(await readFile(helper), await readFile(packagedHelper), "Sandbox helper must match the packaged Electron version");
+      await unlink(packagedHelper);
+      await symlink(helper, packagedHelper);
+    }
   }
   let page = await launch(executablePath);
+  await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1100, 740));
   await page.getByRole("button", { name: "BEGIN NEW PILGRIMAGE" }).click();
   await page.getByRole("button", { name: /skip/i }).click();
   await expect(page.getByTestId("loading-screen")).toBeHidden();
@@ -97,6 +110,10 @@ try {
   await closeNormally();
 
   page = await launch(executablePath);
+  assert.deepEqual(await application.evaluate(({ BrowserWindow }) => {
+    const { width, height } = BrowserWindow.getAllWindows()[0].getNormalBounds();
+    return { width, height };
+  }), { width: 1100, height: 740 });
   await page.getByRole("button", { name: /SLOT 1/ }).click();
   await expect(page.getByTestId("hud-vitals")).toBeVisible();
   await expect(page.getByTestId("loading-screen")).toBeHidden();
@@ -153,8 +170,23 @@ try {
   await page.keyboard.press("Escape");
   assert.deepEqual(errors, []);
   assert.deepEqual(remoteRequests, []);
+  await application.evaluate(({ dialog, BrowserWindow }) => {
+    globalThis.eldrinthCrashDialogCount = 0;
+    dialog.showMessageBox = async () => {
+      globalThis.eldrinthCrashDialogCount++;
+      return { response: 0, checkboxChecked: false };
+    };
+    BrowserWindow.getAllWindows()[0].webContents.forcefullyCrashRenderer();
+  });
+  await expect.poll(() => application.evaluate(() => globalThis.eldrinthCrashDialogCount)).toBe(1);
+  await expect(page.getByRole("heading", { name: "ELDRINTH", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: /SLOT 1/ }).click();
+  await expect(page.getByTestId("loading-screen")).toBeHidden();
+  await page.keyboard.press("l");
+  await expect(page.getByText("Saved by returning to the title", { exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
   await closeNormally();
-  console.log("Desktop package passed: offline launch, secure saves, loadout and camera persistence, journal, close/reopen, quota recovery and save/return.");
+  console.log("Desktop package passed: offline launch, secure saves, loadout/camera/window persistence, journal, close/reopen, quota recovery, save/return and renderer crash recovery.");
 } finally {
   if (application) {
     // Only the test process and its temporary profile are discarded on failure.

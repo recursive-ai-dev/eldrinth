@@ -5,7 +5,36 @@ All notable changes to ELDRINTH: The Unbound Spire.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 semantic versioning.
 
-## [Unreleased]
+## [1.3.0] — 2026-10-27 — The Wayfarer’s Kit
+
+### Added — Mastery and portability
+
+- Distinct tactics for regional elite sentinels and fortress wardens: locked
+  charges in the Old Lands, ember rings in Cinderwild, three-bolt fans on the
+  Moonlit Coast, and orbiting crossfire in Starfall Moors. Directional warning
+  lanes and labels show the upcoming attack; the field guide explains counters.
+- Pause → Controls remaps movement, combat, equipment, journal, and atlas keys.
+  Conflicting keys exchange bindings; fixed navigation and dialogue shortcuts
+  remain available. Preferences persist with clear feedback if saving fails.
+- Standard-mapping gamepads support movement, combat, interaction, lantern,
+  weapon switching, and pause/resume, with a stick deadzone and edge-triggered
+  actions. Menus and dialogue choices use keyboard or mouse.
+- Export individual pilgrimages as JSON on the title screen and import into
+  an empty slot to transfer between browser and desktop. Imports validate file
+  size, structure, supported regions, and compatibility before writing, retain
+  cross-tab locking, and never replace an occupied record.
+- Erasing a slot now requires confirmation and offers an export reminder.
+
+### Desktop release
+
+- Standalone 1.3.0 Debian package, software-center metadata, and a manual page.
+- Restore window size, position, maximized and fullscreen preferences. Bounds
+  are kept visible after monitor changes; invalid preferences fall back safely.
+- A native recovery dialog can reload after a renderer crash. Closing has a
+  bounded checkpoint wait and keeps the game open if saving fails.
+- Package verification checks release metadata, runtime helper permissions,
+  application assets, licenses, AppStream version, manual, and archive checksums.
+
 
 ### Added — The Wayfarer’s Kit
 

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.recursive_ai_dev.eldrinth</id>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+  <name>ELDRINTH</name>
+  <summary>Explore a dark fantasy world and uncover the Unbound Spire</summary>
+  <description>
+    <p>A lone wayfarer seeks nine Anima Shards across four connected frontier regions. Explore authored fortresses, investigate lost records, and decide the fate of the people carried inside the Spire.</p>
+    <p>Play offline with keyboard, touch, or a standard gamepad. Three save slots, portable backups, adjustable difficulty, and display and sound preferences support your pilgrimage.</p>
+    <p>Contains mature themes of institutional violence and death. A content notice appears before first play.</p>
+  </description>
+  <launchable type="desktop-id">eldrinth.desktop</launchable>
+  <url type="homepage">https://github.com/recursive-ai-dev/eldrinth</url>
+  <url type="bugtracker">https://github.com/recursive-ai-dev/eldrinth/issues</url>
+  <provides><binary>eldrinth</binary></provides>
+  <categories><category>Game</category><category>RolePlaying</category></categories>
+  <releases>
+    <release version="1.3.0" date="2026-10-27">
+      <description><p>Regional warden tactics, remappable controls, gamepad support, portable save backups, and improved Linux desktop reliability.</p></description>
+    </release>
+  </releases>
+</component>

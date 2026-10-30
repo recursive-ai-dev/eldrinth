@@ -5,6 +5,7 @@ import type { EnemyState, ItemState, PlayerState, ProjectileState } from "../cor
 import type { MapData, NpcData, SettlementState } from "../types";
 import { getAtlasRevision, loadAtlas, preloadAtlases, type SpriteAtlas } from "./spriteAtlas";
 import { drawExpeditionLandmark, expeditionOnMap } from "./expeditionLandmarks";
+import { wardenAttackDirections, wardenStyleForRegion } from "../wardens";
 
 export const TILE_SPRITE_KEY: Record<number, string> = {
   [T.GRASS]: "tile.grass",
@@ -215,6 +216,7 @@ export interface FloatTextRenderState {
 export interface RenderState {
   ctx: CanvasRenderingContext2D;
   map: MapData;
+  world?: { regionId: string };
   tileRenderer: TileChunkRenderer;
   dpr: number;
   cssW: number;
@@ -1106,7 +1108,7 @@ function drawSortedWorldObjects(g: RenderState, ctx: CanvasRenderingContext2D) {
     });
   }
   for (const item of g.items) if (!item.taken) objects.push({ y: item.y, draw: () => drawItem(g, ctx, item) });
-  for (const enemy of g.enemies) objects.push({ y: enemy.y + enemy.r, draw: () => drawEnemy(ctx, enemy) });
+  for (const enemy of g.enemies) objects.push({ y: enemy.y + enemy.r, draw: () => drawEnemy(ctx, enemy, g.world?.regionId) });
   objects.push({ y: g.player.y + g.player.r, draw: () => drawPlayer(g, ctx) });
   objects.sort((a, b) => a.y - b.y);
   for (const object of objects) object.draw();
@@ -1821,8 +1823,12 @@ export function drawNpc(
     ctx.fillStyle = "rgba(12, 10, 18, 0.85)";
     ctx.strokeStyle = isOrithel ? "#76f2df" : color;
     ctx.beginPath();
-    if (typeof (ctx as any).roundRect === "function") {
-      (ctx as any).roundRect(-22, badgeY - 7, 44, 14, 3);
+    type RoundRectCtx = CanvasRenderingContext2D & {
+      roundRect?: (x: number, y: number, w: number, h: number, r: number) => void;
+    };
+    const rctx = ctx as unknown as RoundRectCtx;
+    if (typeof rctx.roundRect === "function") {
+      rctx.roundRect(-22, badgeY - 7, 44, 14, 3);
     } else {
       ctx.rect(-22, badgeY - 7, 44, 14);
     }
@@ -1841,8 +1847,8 @@ export function drawNpc(
   ctx.restore();
 }
 
-function drawEnemy(ctx: CanvasRenderingContext2D, e: EnemyState) {
-  if (e.telegraph) drawTelegraph(ctx, e);
+function drawEnemy(ctx: CanvasRenderingContext2D, e: EnemyState, regionId?: string) {
+  if (e.telegraph) drawTelegraph(ctx, e, regionId);
   if (e.type === "boss") return drawBoss(ctx, e);
   const a = e.dying > 0 ? Math.max(0, e.dying / 0.45) : 1;
   const ex = Math.round(e.x);
@@ -1871,7 +1877,38 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: EnemyState) {
   ctx.restore();
 }
 
-function drawTelegraph(ctx: CanvasRenderingContext2D, e: EnemyState) {
+function drawTelegraph(ctx: CanvasRenderingContext2D, e: EnemyState, regionId?: string) {
+  const warden = e.elite && e.type === "sentinel" ? wardenStyleForRegion(regionId) : null;
+  if (warden) {
+    ctx.save();
+    ctx.strokeStyle = warden.color;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 5]);
+    // Stable lanes and a word label remain readable without relying on colour
+    // or pulsing animation. Match the exact aim held by the simulation.
+    for (const direction of wardenAttackDirections(warden, e.lungeVx, e.lungeVy)) {
+      const length = warden.pattern === "charge" ? warden.speed * 0.4 : 120;
+      ctx.beginPath();
+      ctx.moveTo(e.x + direction.x * (e.r + 5), e.y + direction.y * (e.r + 5));
+      ctx.lineTo(e.x + direction.x * length, e.y + direction.y * length);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, e.r + 9, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.font = "bold 10px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const labelY = e.y - e.r - 21;
+    const labelWidth = ctx.measureText(warden.label).width + 10;
+    ctx.fillStyle = "rgba(4,5,10,0.92)";
+    ctx.fillRect(e.x - labelWidth / 2, labelY - 8, labelWidth, 16);
+    ctx.fillStyle = "#fff8eb";
+    ctx.fillText(warden.label, e.x, labelY);
+    ctx.restore();
+    return;
+  }
   const pulse = 0.55 + Math.sin(e.t * 18) * 0.25;
   const color = e.telegraph === "spell" ? "190,110,255" : e.telegraph === "lunge" ? "255,90,90" : "70,210,255";
   const radius = e.telegraph === "spell" ? 24 : e.telegraph === "lunge" ? 42 : 58;

@@ -310,3 +310,39 @@ describe("shard intake recording in fortresses", () => {
   });
 });
 
+describe("screen shake gating", () => {
+  function makeShakeHarness() {
+    return {
+      screenShake: true,
+      quietInterface: false,
+      shakeMag: 0,
+    } as unknown as { screenShake: boolean; quietInterface: boolean; shakeMag: number };
+  }
+
+  it("applies shake when screen shake is on and reduced motion is off", () => {
+    const ctx = makeShakeHarness();
+    Game.prototype.shake.call(ctx, 5);
+    expect(ctx.shakeMag).toBe(5);
+  });
+
+  it("ignores shake when screen shake is disabled", () => {
+    const ctx = makeShakeHarness();
+    ctx.screenShake = false;
+    Game.prototype.shake.call(ctx, 5);
+    expect(ctx.shakeMag).toBe(0);
+  });
+
+  it("ignores shake when reduced motion / quiet interface is on", () => {
+    const ctx = makeShakeHarness();
+    ctx.quietInterface = true;
+    Game.prototype.shake.call(ctx, 5);
+    expect(ctx.shakeMag).toBe(0);
+  });
+
+  it("clamps shake magnitude to ten", () => {
+    const ctx = makeShakeHarness();
+    Game.prototype.shake.call(ctx, 20);
+    expect(ctx.shakeMag).toBe(10);
+  });
+});
+

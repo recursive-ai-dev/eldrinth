@@ -472,45 +472,64 @@ export class Game {
 
   private async performRegionChange(exit: RegionExit) {
     this.changingRegion = true;
-    const previousId = this.world.regionId;
     try {
-      const region = await this.regions.acquire(exit.targetRegion, this.regionAbort.signal);
-      if (this.destroyed) { this.regions.release(region.id); return; }
-      this.rememberRegion();
-      this.regions.release(previousId);
-      this.world.regionId = region.id;
-      this.cb.onInterior(isInteriorRegion(region.id));
-      this.map = region.map;
-      this.usedTownServices.clear();
-      this.mapPxW = this.map.width * TILE;
-      this.mapPxH = this.map.height * TILE;
-      this.wardSet = new Set(this.map.wardTiles);
-      this.syncMovementSystem();
-      this.restoreOrPopulateRegion();
-      this.projectiles = [];
-      this.particles = [];
-      this.texts = [];
-      this.player.x = exit.destination.x;
-      this.player.y = exit.destination.y;
-      this.recoverBlockedActor(this.player);
-      this.tileRenderer = new TileChunkRenderer(this.map);
-      this.centerCam();
-      this.tileRenderer.warm(this.cam, this.viewW, this.viewH);
-      this.regionGateCooldown = 1.25;
-      // The arrival point may itself be inside a gate's trigger radius, so no
-      // gate may fire until the player has stepped clear of one.
-      this.gateArmed = false;
-      this.msg(`You arrive in ${this.map.regionName}.`);
-      this.pushHud();
-    } catch (error) {
+      const previousId = this.world.regionId;
+      const maxAttempts = 3;
+      let lastError: unknown = null;
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        try {
+          await this.attemptRegionChange(exit, previousId);
+          return;
+        } catch (error) {
+          lastError = error;
+          // Aborted transitions and a destroyed engine are terminal: no point
+          // retrying. Everything else (a flaky worker or transient load failure)
+          // gets a bounded exponential backoff before the next attempt.
+          if (this.destroyed || (error instanceof DOMException && error.name === "AbortError")) break;
+          if (attempt < maxAttempts - 1) {
+            await new Promise((resolve) => setTimeout(resolve, 200 * (attempt + 1)));
+          }
+        }
+      }
       if (!this.destroyed) {
-        console.error("Region transition failed:", error);
+        console.error("Region transition failed after retries:", lastError);
         this.gameLoop.stop();
-        this.cb.onFatal?.(error);
+        this.cb.onFatal?.(lastError);
       }
     } finally {
       this.changingRegion = false;
     }
+  }
+
+  private async attemptRegionChange(exit: RegionExit, previousId: string): Promise<void> {
+    const region = await this.regions.acquire(exit.targetRegion, this.regionAbort.signal);
+    if (this.destroyed) { this.regions.release(region.id); return; }
+    this.rememberRegion();
+    this.regions.release(previousId);
+    this.world.regionId = region.id;
+    this.cb.onInterior(isInteriorRegion(region.id));
+    this.map = region.map;
+    this.usedTownServices.clear();
+    this.mapPxW = this.map.width * TILE;
+    this.mapPxH = this.map.height * TILE;
+    this.wardSet = new Set(this.map.wardTiles);
+    this.syncMovementSystem();
+    this.restoreOrPopulateRegion();
+    this.projectiles = [];
+    this.particles = [];
+    this.texts = [];
+    this.player.x = exit.destination.x;
+    this.player.y = exit.destination.y;
+    this.recoverBlockedActor(this.player);
+    this.tileRenderer = new TileChunkRenderer(this.map);
+    this.centerCam();
+    this.tileRenderer.warm(this.cam, this.viewW, this.viewH);
+    this.regionGateCooldown = 1.25;
+    // The arrival point may itself be inside a gate's trigger radius, so no
+    // gate may fire until the player has stepped clear of one.
+    this.gateArmed = false;
+    this.msg(`You arrive in ${this.map.regionName}.`);
+    this.pushHud();
   }
 
   destroy() {
@@ -711,6 +730,7 @@ export class Game {
   onKeyUp = (_e: KeyboardEvent) => undefined;
   autoPause = true;
   screenShake = true;
+  quietInterface = false;
   onBlur = () => {
     if (this.autoPause && this.initialized && !this.ended && !this.paused && !this.journalOpen && !this.dialogue) this.setPaused(true);
   };
@@ -774,6 +794,7 @@ export class Game {
    * Rendering is deliberately outside this method.
    */
   simulateStep(dt: number) {
+    this.input.pollGamepad();
     this.processInputCommands();
     if (!this.paused && !this.journalOpen && !this.changingRegion && !this.dialogue && !this.ended) {
       this.world.simulationTime += dt;
@@ -1258,12 +1279,13 @@ export class Game {
     const p = this.player;
     this.ai.updateEnemy(e, dt, {
       player: p,
+      regionId: this.world.regionId,
       onShoot: (x, y, ux, uy, speed, damage, color) => this.shoot(x, y, ux, uy, speed, damage, color),
-      onBossBurst: (enemy) => this.bossBurst(enemy as Enemy),
+      onBossBurst: (enemy) => this.bossBurst(enemy),
       onSummonAdd: (enemy) => {
         const adds = this.enemies.filter((x) => x.alive && x.type === "wraith").length;
-        if (adds < 3) this.summonAdd(enemy as Enemy);
-        else (enemy as Enemy).summonCd = 2;
+        if (adds < 3) this.summonAdd(enemy);
+        else enemy.summonCd = 2;
       },
       onDamagePlayer: (damage, fx, fy) => this.damagePlayer(damage, fx, fy),
       onText: (x, y, text, color, size) => this.addText(x, y, text, color, size),
@@ -1436,7 +1458,7 @@ export class Game {
     }
   }
   shake(n: number) {
-    if (!this.screenShake) return;
+    if (!this.screenShake || this.quietInterface) return;
     this.shakeMag = Math.min(10, Math.max(this.shakeMag, n));
   }
 
@@ -1618,12 +1640,12 @@ export class Game {
         ? `${evidence.map((entry) => entry.text).join(" ")} What do you ask of me?`
         : `${quest.lead}${questKnown(this.world.quests, quest) && evidence.length ? ` You have learned this: ${evidence.map((entry) => entry.text).join(" ")}` : ""}`);
       this.openDialogue([text], "Orithel · " + quest.title, "#9ff7e6", ORITHEL_PORTRAIT, "THE LAST WATCHER · INVESTIGATION");
-      this.dialogue!.choices = [
+      this.dialogue.choices = [
         ...(canResolve(this.world.quests, quest) ? quest.choices.map((choice) => ({ id: `resolve:${quest.id}:${choice.id}`, label: choice.label })) : []),
         { id: "topics", label: "Ask about something else" },
         { id: "leave", label: "Leave the decision for now" },
       ];
-      this.cb.onDialogue({ ...this.dialogue! });
+      this.cb.onDialogue({ ...this.dialogue });
       return;
     }
     const [, questId, choiceId] = id.split(":");
@@ -1719,7 +1741,7 @@ export class Game {
   }
 
   private openNpcDialogue(npc: NpcData, lines: string[], choices?: { id: string; label: string }[]) {
-    const reaction = typeof (this as any).townReaction === "function" ? this.townReaction(npc.id) : null;
+    const reaction = typeof this.townReaction === "function" ? this.townReaction(npc.id) : null;
     if (choices && choices.length > 0) {
       this.pendingChoices = choices;
     }

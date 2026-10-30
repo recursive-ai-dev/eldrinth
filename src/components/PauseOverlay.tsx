@@ -1,5 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { useControlKeys } from "./useControlKeys";
 import Modal from "./Modal";
+import ControlSettings from "./ControlSettings";
+import { mapKeyboardKey } from "@/game/controlBindings";
 import EquipmentPanel from "./EquipmentPanel";
 import type { EquipmentData, CombatToolId, RelicId } from "@/game/equipment";
 import type { DisplayPreferences } from "./displayPreferences";
@@ -28,6 +31,7 @@ export default function PauseOverlay({ onResume, onRestart, onSaveAndReturn, equ
   hud?: HudData;
   soundSettings?: ReactNode;
 }) {
+  const key = useControlKeys();
   const [confirming, setConfirming] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -46,7 +50,7 @@ export default function PauseOverlay({ onResume, onRestart, onSaveAndReturn, equ
     // Keep resume keys from reaching the engine outside the modal while its
     // captured checkpoint is still waiting for persistence.
     const holdPause = (event: KeyboardEvent) => {
-      if (!["escape", "i", "p"].includes(event.key.toLowerCase())) return;
+      if (!["escape", "i", "p"].includes(mapKeyboardKey(event.key) ?? "")) return;
       event.preventDefault();
       event.stopImmediatePropagation();
     };
@@ -88,7 +92,7 @@ export default function PauseOverlay({ onResume, onRestart, onSaveAndReturn, equ
                 <button disabled={saving} data-testid="abandon-confirm" onClick={onRestart} className="w-full rounded border border-rose-400/50 bg-rose-500/15 px-3 py-2 font-title text-xs text-rose-100">ABANDON</button>
               </> : <button disabled={saving} onClick={() => setConfirming(true)} className="w-full rounded-lg border border-amber-200/15 px-3 py-3 font-title text-[10px] tracking-wider text-amber-100/70 transition hover:bg-white/5 disabled:opacity-50">ABANDON &amp; RESTART</button>}
             </div>
-            <p className="mt-6 text-xs leading-relaxed text-amber-100/60">Esc / I to return to the road.<br />Your record autosaves as you travel.</p>
+            <p className="mt-6 text-xs leading-relaxed text-amber-100/60">Esc / {key.pause} to return to the road.<br />Your record autosaves as you travel.</p>
           </aside>
           <fieldset disabled={saving} aria-label="Equipment and display settings" className="min-w-0 p-5 sm:p-7">
             <nav aria-label="Pause sections" className="mb-6 flex flex-wrap gap-1 border-b border-amber-100/15 pb-3">
@@ -111,16 +115,17 @@ export default function PauseOverlay({ onResume, onRestart, onSaveAndReturn, equ
               </label>
               <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-amber-100/20 p-4">
                 <input type="checkbox" checked={preferences.quietInterface} onChange={event => onPreferences({ ...preferences, quietInterface: event.target.checked })} className="mt-1 accent-teal-300" />
-                <span><span className="block text-amber-100">Quiet interface</span><span className="mt-1 block text-sm text-amber-100/65">Remove menu pulses, fades, and opening cinematic flashes. Your system's reduced-motion setting is also respected.</span></span>
+                <span><span className="block text-amber-100">Quiet interface</span><span className="mt-1 block text-sm text-amber-100/65">Remove menu pulses, fades, and opening cinematic flashes. Your system&apos;s reduced-motion setting is also respected.</span></span>
               </label>
               {travelPreferences && onTravelPreferences && <TravelSettings preferences={travelPreferences} onChange={onTravelPreferences} saved={travelPreferencesSaved} />}
               <p role="status" className="text-xs text-amber-100/65">{preferencesSaved ? "Display preferences are saved on this device." : "Preferences apply now, but this device could not save them for next time."}</p>
             </div>}
             {tab === "controls" && <div>
               <h3 className="mb-4 font-title text-sm tracking-wider text-amber-100">ON THE ROAD</h3>
-              <p className="mb-5 rounded-lg border border-amber-200/20 bg-amber-200/5 p-4 text-sm leading-relaxed text-amber-100/80"><strong className="font-title text-xs text-amber-100">LAST BREATH · F</strong><br />Face an incoming blow and tap F just before it lands. The brief guard costs 18 stamina. A parry returns 12 and empowers your next strike by +2 for two seconds. Attacks from behind and ember hazards still hurt.</p>
-              <p className="mb-5 rounded-lg border border-amber-200/20 bg-amber-200/5 p-4 text-sm leading-relaxed text-amber-100/80"><strong className="font-title text-xs text-amber-100">THE LAMPLIGHTER’S MARGIN · R</strong><br />Raise your lantern with R or the Lantern button. Bring it close to scraped brass plates to reveal concealed writing, then press E to keep the account in your journal. Road notices give directions. The lamp uses no stamina or fuel; shuttering it leaves your copied records intact.</p>
-              <dl className="space-y-3">{[["Move", "WASD / Arrows"], ["Attack", "J / Space"], ["Dash", "Shift"], ["Last Breath / parry", "F"], ["Raise / shutter lantern", "R"], ["Speak / read / enter", "E"], ["Switch weapon", "Q"], ["Equipment / pause", "I / Esc / P"], ["Field journal", "L"], ["Local atlas", "M"], ["Dialogue choices", "1–9 / 0"], ["Desktop fullscreen", "F11"]].map(([action, keys]) => <div key={action} className="flex justify-between gap-4 border-b border-amber-100/10 pb-2 text-sm"><dt className="text-amber-100/75">{action}</dt><dd className="text-right text-teal-100">{keys}</dd></div>)}</dl>
+              <p className="mb-5 rounded-lg border border-amber-200/20 bg-amber-200/5 p-4 text-sm leading-relaxed text-amber-100/80"><strong className="font-title text-xs text-amber-100">LAST BREATH · {key.guard}</strong><br />Face an incoming blow and tap {key.guard} just before it lands. The brief guard costs 18 stamina. A parry returns 12 and empowers your next strike by +2 for two seconds. Attacks from behind and ember hazards still hurt.</p>
+              <p className="mb-5 rounded-lg border border-amber-200/20 bg-amber-200/5 p-4 text-sm leading-relaxed text-amber-100/80"><strong className="font-title text-xs text-amber-100">THE LAMPLIGHTER’S MARGIN · {key.lantern}</strong><br />Raise your lantern with {key.lantern} or the Lantern button. Bring it close to scraped brass plates to reveal concealed writing, then press {key.interact} to keep the account in your journal. Road notices give directions. The lamp uses no stamina or fuel; shuttering it leaves your copied records intact.</p>
+              <ControlSettings />
+              <details className="mt-6"><summary className="cursor-pointer text-sm text-amber-100/75">Default keyboard reference</summary><dl className="mt-4 space-y-3">{[["Move", "WASD / Arrows"], ["Attack", "J / Space"], ["Dash", "Shift"], ["Last Breath / parry", "F"], ["Raise / shutter lantern", "R"], ["Speak / read / enter", "E"], ["Switch weapon", "Q"], ["Equipment / pause", "I / Esc / P"], ["Field journal", "L"], ["Local atlas", "M"], ["Dialogue choices", "1–9 / 0"], ["Desktop fullscreen", "F11"]].map(([action, keys]) => <div key={action} className="flex justify-between gap-4 border-b border-amber-100/10 pb-2 text-sm"><dt className="text-amber-100/75">{action}</dt><dd className="text-right text-teal-100">{keys}</dd></div>)}</dl></details>
               <p className="mt-5 text-sm leading-relaxed text-amber-100/70">Read road signs for directions, rest at wayfires to gain relics, and keep your own observations in the journal. Some paths reward patience more than a blade.</p>
             </div>}
           </fieldset>

@@ -3,6 +3,7 @@ import { COMBAT_TOOLS, RELICS, RELIC_SLOTS, type CombatToolId, type RelicId } fr
 import { GUARD_COST, GUARD_WINDOW, RIPOSTE_DAMAGE, RIPOSTE_WINDOW } from "./guard";
 import { LANTERN_RECORDS } from "./lantern";
 import type { JournalEntry } from "./types";
+import { WARDEN_STYLES } from "./wardens";
 
 export type JournalStatus = "all" | "open" | "resolved" | "personal";
 export type JournalOrder = "recorded" | "reverse" | "title" | "source";
@@ -99,9 +100,10 @@ export function createFieldGuide(entries: readonly JournalEntry[]): GuideCard[] 
     milestone("first-voice", "Listen beside a wayfire", "campfire", "If you choose to carry someone, return to a wayfire and listen to their memory. Taking a vessel can permanently reduce maximum health; the choice tells you the exact cost.", has(entry => entry.id.startsWith("voice:"))),
     milestone("first-note", "Keep an observation", "journal", "Use the observation box in Records to preserve a landmark or a thought. Ctrl+Enter or Command+Enter writes the note.", has(entry => entry.id.startsWith("personal:"))),
     { id: "wraith", section: "combat", title: "Wraith", icon: "wraith", summary: "A wandering pursuer that closes directly once you approach.", detail: "Keep an escape lane behind you. Strike, create space, and avoid being surrounded; contact with a wraith hurts." },
-    { id: "sentinel", section: "combat", title: "Sentinel", icon: "sentinel", summary: "A direct pursuer that holds its position when you are beyond its reach.", detail: "Draw it away from other enemies before committing to a heavy strike. Armoured wardens are elite sentinels; give their contact attacks room." },
+    { id: "sentinel", section: "combat", title: "Sentinel", icon: "sentinel", summary: "A direct pursuer that holds its position when you are beyond its reach.", detail: "Draw it away from other enemies before committing to a heavy strike. Armoured wardens are elite sentinels with regional moves; read their labelled warning lanes and strike during recovery." },
     { id: "adept", section: "combat", title: "Adept", icon: "adept", summary: "A ranged caster that retreats when crowded and circles at a distance.", detail: "Watch the spell wind-up, move across the line of fire, and close after the bolt leaves. An attuned Ashstep can reflect enemy bolts during a dash." },
     { id: "last-breath", section: "combat", title: "Last Breath & riposte", icon: "guard", summary: `Face the incoming attack and press F. The guard costs ${GUARD_COST} stamina and lasts ${Math.round(GUARD_WINDOW * 1000)} milliseconds.`, detail: `A successful parry catches attacks in your forward arc and restores 12 stamina. Strike within ${RIPOSTE_WINDOW} seconds for +${RIPOSTE_DAMAGE} damage. Hazards cannot be parried; holding F does not repeat the guard.` },
+    ...Object.entries(WARDEN_STYLES).map(([id, style]): GuideCard => ({ id: `warden:${id}`, section: "combat", title: style.name, icon: "sentinel", region: style.region, summary: style.summary, detail: `${style.label}: ${style.tactic} Every warning lasts at least ${Math.round(style.windup * 1000)} milliseconds. Projectile patterns have 1 base damage (2 on Brutal); physical contact remains dangerous.` })),
     ...COMBAT_TOOLS.map((tool): GuideCard => ({ id: `tool:${tool.id}`, section: "equipment", title: tool.name, icon: "treasure", equipmentId: tool.id, summary: tool.description, detail: `Base damage ${tool.damage} · Stamina ${tool.staminaCost}. Press Q to switch tools, or I to open the loadout. Earned bonuses can increase the damage shown there.` })),
     ...RELICS.map((relic): GuideCard => ({ id: `relic:${relic.id}`, section: "equipment", title: relic.name, icon: "treasure", equipmentId: relic.id, summary: relic.description, detail: `${relic.tradeoff} ${relic.source} Use I to attune up to ${RELIC_SLOTS} relics; owning one does not automatically activate its tradeoff.` })),
   ];

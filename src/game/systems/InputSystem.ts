@@ -1,9 +1,20 @@
+import { CONTROL_CHANGE_EVENT, CONTROL_STORAGE_KEY, currentControlBindings, mapKeyboardKey, reloadControlBindings, type ControlBindings } from "../controlBindings";
+import { gamepadKeys } from "../gamepad";
+
 export type InputHandler = (event: KeyboardEvent) => void;
 export type InputBlurHandler = () => void;
 
 export class InputSystem {
   public readonly keys = new Set<string>();
   private readonly pressed = new Set<string>();
+  private readonly keyboard = new Map<string, string>();
+  private readonly virtual = new Set<string>();
+  private readonly controller = new Set<string>();
+  private previousGamepad = new Set<string>();
+  private bindings: ControlBindings = currentControlBindings();
+  private blurred = false;
+  private suspended = false;
+  private baselineGamepad = false;
 
   private keydownHandler: InputHandler | null = null;
   private keyupHandler: InputHandler | null = null;
@@ -17,18 +28,24 @@ export class InputSystem {
     this.keydownHandler = handlers.onKeyDown ?? null;
     this.keyupHandler = handlers.onKeyUp ?? null;
     this.blurHandler = handlers.onBlur ?? null;
-
+    this.bindings = currentControlBindings();
     window.addEventListener("keydown", this.handleKeyDown);
     window.addEventListener("keyup", this.handleKeyUp);
     window.addEventListener("blur", this.handleBlur);
+    window.addEventListener("focus", this.handleFocus);
+    window.addEventListener(CONTROL_CHANGE_EVENT, this.handleBindingsChange);
+    window.addEventListener("storage", this.handleStorage);
   }
 
   destroy() {
     window.removeEventListener("keydown", this.handleKeyDown);
     window.removeEventListener("keyup", this.handleKeyUp);
     window.removeEventListener("blur", this.handleBlur);
-    this.keys.clear();
-    this.pressed.clear();
+    window.removeEventListener("focus", this.handleFocus);
+    window.removeEventListener(CONTROL_CHANGE_EVENT, this.handleBindingsChange);
+    window.removeEventListener("storage", this.handleStorage);
+    this.clear();
+    this.previousGamepad.clear();
     this.keydownHandler = null;
     this.keyupHandler = null;
     this.blurHandler = null;
@@ -37,6 +54,18 @@ export class InputSystem {
   clear() {
     this.keys.clear();
     this.pressed.clear();
+    this.keyboard.clear();
+    this.virtual.clear();
+    this.controller.clear();
+    // Keep the physical controller baseline: opening a menu must not make a
+    // held button into a fresh action on the next simulation tick.
+  }
+
+  /** Hold all command sources while a UI operation must keep the world paused. */
+  setSuspended(suspended: boolean) {
+    this.suspended = suspended;
+    this.clear();
+    if (!suspended) this.baselineGamepad = true;
   }
 
   has(key: string): boolean {
@@ -48,39 +77,88 @@ export class InputSystem {
     return this.pressed.delete(key.toLowerCase());
   }
 
-  /** Programmatically set key down or up (useful for touch, virtual controls, or pointer simulation). */
+  private refreshKey(key: string, discrete = false) {
+    const down = this.virtual.has(key) || this.controller.has(key) || [...this.keyboard.values()].includes(key);
+    if (down) {
+      if (discrete && !this.keys.has(key)) this.pressed.add(key);
+      this.keys.add(key);
+    } else this.keys.delete(key);
+  }
+
+  /** Virtual controls already send canonical commands, independent of bindings. */
   setKey(key: string, isDown: boolean) {
+    if (this.suspended) return;
     const k = key.toLowerCase();
-    if (isDown) {
-      if (!this.keys.has(k)) this.pressed.add(k);
-      this.keys.add(k);
-    } else {
-      this.keys.delete(k);
+    if (isDown) this.virtual.add(k);
+    else this.virtual.delete(k);
+    this.refreshKey(k, isDown);
+  }
+
+  /** Poll on simulation ticks, keeping commands deterministic and edge-triggered. */
+  pollGamepad() {
+    if (this.suspended || this.blurred || (typeof document !== "undefined" && document.visibilityState === "hidden")) return;
+    let next = new Set<string>();
+    try {
+      const pads = globalThis.navigator?.getGamepads?.();
+      const pad = pads ? Array.from(pads).find(candidate => candidate?.connected && candidate.mapping === "standard") : null;
+      next = gamepadKeys(pad);
+    } catch { /* Disabled Gamepad API leaves keyboard and touch usable. */ }
+    if (this.baselineGamepad) {
+      this.previousGamepad = next;
+      this.baselineGamepad = false;
+      return;
     }
+    for (const key of this.previousGamepad) if (!next.has(key)) {
+      this.controller.delete(key);
+      this.refreshKey(key);
+    }
+    for (const key of next) if (!this.previousGamepad.has(key)) {
+      this.controller.add(key);
+      this.refreshKey(key, true);
+    }
+    this.previousGamepad = next;
   }
 
   private handleKeyDown = (event: KeyboardEvent) => {
-    const key = event.key.toLowerCase();
+    const physical = event.key.toLowerCase();
     const target = event.target as HTMLElement | null;
     // Native editing and button activation belong to the UI, not the game.
-    if (event.defaultPrevented || target?.isContentEditable ||
+    if (this.suspended || event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey || target?.isContentEditable ||
         target?.closest?.('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return;
-    if ([" ", "enter", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(key) &&
+    if ([" ", "enter", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(physical) &&
         target?.closest?.('button, a[href], [role="button"], [role="tab"]')) return;
-    // Opening/advancing dialogue clears held state. An OS repeat after that
-    // clear must not become a fresh attack, guard, or irreversible choice.
-    if (!event.repeat && !this.keys.has(key)) this.pressed.add(key);
-    this.keys.add(key);
+    const key = mapKeyboardKey(physical, this.bindings);
+    if (key) {
+      this.keyboard.set(physical, key);
+      // OS repeats after a dialogue clear must not become fresh choices.
+      this.refreshKey(key, !event.repeat);
+    }
     this.keydownHandler?.(event);
   };
 
   private handleKeyUp = (event: KeyboardEvent) => {
-    const key = event.key.toLowerCase();
-    this.keys.delete(key);
+    const physical = event.key.toLowerCase();
+    const canonical = this.keyboard.get(physical);
+    this.keyboard.delete(physical);
+    if (canonical) this.refreshKey(canonical);
     this.keyupHandler?.(event);
   };
 
+  private handleBindingsChange = () => {
+    this.bindings = currentControlBindings();
+    this.clear();
+  };
+  private handleStorage = (event: StorageEvent) => {
+    if (event.key !== CONTROL_STORAGE_KEY && event.key !== null) return;
+    reloadControlBindings();
+    this.handleBindingsChange();
+  };
+  private handleFocus = () => {
+    this.blurred = false;
+    this.baselineGamepad = true;
+  };
   private handleBlur = () => {
+    this.blurred = true;
     this.clear();
     this.blurHandler?.();
   };

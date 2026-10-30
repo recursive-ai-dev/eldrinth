@@ -358,8 +358,18 @@ describe("GameCanvas Component Lifecycle Integration Tests", () => {
     expect(onCheckpoint).toHaveBeenCalledTimes(1);
     expect(onCheckpoint).toHaveBeenCalledWith(expect.objectContaining({ tick: 42 }));
 
-    // 2. Visibility change to hidden
+    // 2. Visibility change to hidden right after an autosave is coalesced
+    //    (nothing saved within the coalescing window), then fires once the
+    //    window has passed.
     onCheckpoint.mockClear();
+    mockDoc.visibilityState = "hidden";
+    for (const handler of visibilityHandlers) {
+      handler(new Event("visibilitychange"));
+    }
+    expect(onCheckpoint).not.toHaveBeenCalled();
+    await act(async () => {
+      vi.advanceTimersByTime(6_000);
+    });
     mockDoc.visibilityState = "hidden";
     for (const handler of visibilityHandlers) {
       handler(new Event("visibilitychange"));

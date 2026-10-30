@@ -1,7 +1,9 @@
 import initSqlJs, { type Database } from "sql.js";
 import wasmUrl from "sql.js/dist/sql-wasm.wasm?url";
+import { validateWorldSnapshot } from "./snapshotValidation";
 import type { WorldSnapshot } from "./core/WorldState";
 import { type Difficulty, normalizeDifficulty } from "./types";
+import { createBackup, parseBackup } from "./saveBackup";
 
 const DATABASE_KEY = "eldrinth.sqlite.v1";
 export const SLOT_COUNT = 3;
@@ -9,7 +11,6 @@ export const SLOT_COUNT = 3;
 /** Schema version stored in SQLite's `user_version`. Bump with a migration below. */
 const SCHEMA_VERSION = 2;
 
-const SUPPORTED_WORLD_VERSIONS = [1, 2, 3, 4];
 const UNSAFE_SAVING = "Safe saving is unavailable here. Open the game over HTTPS in an up-to-date browser. Existing records have been left untouched.";
 
 export interface SaveSlot {
@@ -262,11 +263,12 @@ export class SlotStore {
       const [difficulty, shards, updatedAt, json, revision] = result.values[0];
       try {
         const world = JSON.parse(String(json)) as WorldSnapshot;
-        if (!world || !SUPPORTED_WORLD_VERSIONS.includes(world.version) ||
-            typeof world.regionId !== "string" || !world.regionId ||
-            !world.player || !Array.isArray(world.player.swingHit) ||
-            !Array.isArray(world.enemies) || !Array.isArray(world.projectiles) ||
-            !Array.isArray(world.items)) return null;
+        if (!world || typeof world !== "object" || Array.isArray(world)) return null;
+        const valid = validateWorldSnapshot(world);
+        if (!valid.valid) {
+          console.error(`Save slot ${id} rejected: ${valid.reason}`);
+          return null;
+        }
         const validDifficulty = normalizeDifficulty(difficulty, normalizeDifficulty(world.difficulty, "standard"));
         world.difficulty = normalizeDifficulty(world.difficulty, validDifficulty);
         this.owned.set(id, String(revision));
@@ -282,6 +284,27 @@ export class SlotStore {
       world.difficulty = difficulty;
       db.run("INSERT OR REPLACE INTO save_slots (id, difficulty, shards, updated_at, world_json, revision) VALUES (?, ?, ?, ?, ?, lower(hex(randomblob(16))))", [id, difficulty, world.shards, Date.now(), JSON.stringify(world)]);
       this.owned.set(id, this.revision(db, id));
+    });
+  }
+
+  /** Exporting is read-only and must not adopt an active game's revision. */
+  async exportBackup(id: number): Promise<string> {
+    return this.run(false, (db) => {
+      const row = db.exec("SELECT world_json FROM save_slots WHERE id = ?", [id])[0]?.values[0];
+      if (!row) throw new Error("That record no longer exists. Refresh the records and try again.");
+      return createBackup(JSON.parse(String(row[0])) as WorldSnapshot);
+    });
+  }
+
+  /** Restore into an empty slot only, rechecking under the cross-tab lock. */
+  async importBackup(id: number, contents: string): Promise<void> {
+    if (!Number.isInteger(id) || id < 1 || id > SLOT_COUNT) throw new Error("Choose an empty save slot from 1 to 3.");
+    const world = parseBackup(contents);
+    return this.run(true, (db) => {
+      this.assertRevision(db, id, null);
+      db.run("INSERT INTO save_slots (id, difficulty, shards, updated_at, world_json, revision) VALUES (?, ?, ?, ?, ?, lower(hex(randomblob(16))))", [id, normalizeDifficulty(world.difficulty), world.shards, Date.now(), JSON.stringify(world)]);
+      // Do not change owned: importing must not let an older running session
+      // overwrite this record. Continue explicitly adopts the new revision.
     });
   }
 

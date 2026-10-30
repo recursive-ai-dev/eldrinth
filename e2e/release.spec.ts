@@ -148,11 +148,13 @@ test("a failed erase keeps the record visible and can be retried", async ({ page
     Storage.prototype.setItem = () => { throw new DOMException("Full", "QuotaExceededError"); };
   });
   await page.getByRole("button", { name: "Erase slot 1" }).click();
+  await page.getByRole("button", { name: "Confirm erase", exact: true }).click();
   await expect(page.getByTestId("slot-error")).toContainText("storage is full");
   await expect(page.getByRole("button", { name: /^SLOT 1/ })).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem("eldrinth.sqlite.v1"))).toBe(original);
   await page.evaluate(() => (window as unknown as { restoreStorage: () => void }).restoreStorage());
   await page.getByRole("button", { name: "Erase slot 1" }).click();
+  await page.getByRole("button", { name: "Confirm erase", exact: true }).click();
   await expect(page.getByRole("button", { name: /^SLOT 1/ })).toHaveCount(0);
   await expect(page.getByTestId("slot-error")).toHaveCount(0);
   await expect(page.getByTestId("persistence-warning")).toHaveCount(0);

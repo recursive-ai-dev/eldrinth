@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SlotStore } from "./slots";
 import { isDifficulty, normalizeDifficulty } from "./types";
 import { WorldState } from "./core/WorldState";
+import { createBackup, parseBackup, MAX_BACKUP_BYTES } from "./saveBackup";
 
 describe("Difficulty validation & SlotStore", () => {
   let slotStore: SlotStore;
@@ -117,6 +118,81 @@ describe("Difficulty validation & SlotStore", () => {
     expect(await slotStore.load(1)).toBeNull();
   });
 
+  describe("portable pilgrimage backups", () => {
+    it("round trips journal, exploration, equipment and decisions into a different empty slot", async () => {
+      const snapshot = makeSnapshot("brutal");
+      snapshot.player.relics = ["emberheart"];
+      snapshot.player.equippedRelics = ["emberheart"];
+      snapshot.player.combatTool = "gravehammer";
+      snapshot.journal = [{ id: "personal:1", title: "My observation", text: "Return by the north road." }];
+      snapshot.quests = { facts: ["courier-orders"], resolutions: { courier: "end" } };
+      snapshot.atlasDiscoveries = { overworld: ["overworld:wayfire:1"] };
+      await slotStore.save(1, snapshot);
+      const contents = await slotStore.exportBackup(1);
+      await slotStore.importBackup(3, contents);
+      const restored = new WorldState();
+      restored.restore(snapshot);
+      expect((await slotStore.load(3))?.world).toEqual(restored.snapshot());
+      expect((await slotStore.load(1))?.world).toEqual(snapshot);
+      expect((await slotStore.list()).map(slot => slot.id)).toEqual([1, 3]);
+    });
+
+    it("never replaces an occupied slot, even when importing the same backup", async () => {
+      const contents = createBackup(makeSnapshot("story"));
+      await slotStore.save(1, makeSnapshot("brutal"));
+      await expect(slotStore.importBackup(1, contents)).rejects.toThrow("changed in another tab");
+      expect((await slotStore.load(1))?.difficulty).toBe("brutal");
+      await expect(slotStore.importBackup(0, contents)).rejects.toThrow("empty save slot");
+    });
+
+    it("migrates older compatible world snapshots before writing an imported record", async () => {
+      const old = makeSnapshot();
+      old.version = 3;
+      await slotStore.importBackup(2, createBackup(old));
+      const restored = await slotStore.load(2);
+      expect(restored?.world.version).toBe(4);
+      expect(restored?.world.player.maxHp).toBe(18);
+      expect(restored?.world.harvestedShards).toEqual([]);
+    });
+
+    it("rejects malformed, oversized, unsupported and ambiguous records without occupying a slot", async () => {
+      const valid = createBackup(makeSnapshot());
+      const mutations: ((world: any) => void)[] = [
+        world => { world.version = 999; },
+        world => { world.player.hp = "full"; },
+        world => { world.player.swingHit = {}; },
+        world => { world.regionId = "fortress.missing"; },
+        world => { world.enemies = [null]; },
+        world => { world.projectiles = [{}]; },
+        world => { world.items = [{ x: 1, y: 2, t: 0, taken: false, type: "unknown" }]; },
+        world => { world.regions = { overworld: null }; },
+        world => { world.quests = { facts: null, resolutions: {} }; },
+        world => { world.journal = [{ id: "note", title: [], text: "test" }]; },
+        world => { world.checkpoint = { regionId: "unknown", x: 1, y: 2, name: "fire" }; },
+        world => { world.atlasDiscoveries = { overworld: [{}] }; },
+        world => { world.shards = 1; delete world.harvestedShards; },
+        world => { world.shards = 1; world.harvestedShards = ["fortress.missing"]; },
+      ];
+      for (const mutate of mutations) {
+        const backup = JSON.parse(valid);
+        mutate(backup.world);
+        await expect(slotStore.importBackup(1, JSON.stringify(backup))).rejects.toThrow();
+      }
+      await expect(slotStore.importBackup(1, "{bad json")).rejects.toThrow("not a valid");
+      await expect(slotStore.importBackup(1, valid.replace('"version": 1,', '"version": 2,'))).rejects.toThrow("not a valid");
+      await expect(slotStore.importBackup(1, " ".repeat(MAX_BACKUP_BYTES + 1))).rejects.toThrow("too large");
+      await expect(slotStore.importBackup(1, valid.replace('"randomState": 1831565813', '"randomState": 1e999'))).rejects.toThrow();
+      await expect(slotStore.importBackup(1, valid.replace('"world": {', '\"world\": {\"__proto__\": {},'))).rejects.toThrow("not a valid");
+      expect(await slotStore.list()).toEqual([]);
+    });
+
+    it("bounds nested input before compatibility restore", () => {
+      const valid = JSON.parse(createBackup(makeSnapshot()));
+      valid.unknown = JSON.parse("[".repeat(30) + "0" + "]".repeat(30));
+      expect(() => parseBackup(JSON.stringify(valid))).toThrow("not a valid");
+    });
+  });
+
   describe("independent save clients", () => {
     let storage: Map<string, string>;
     beforeEach(() => {
@@ -135,6 +211,37 @@ describe("Difficulty validation & SlotStore", () => {
       } });
     });
     afterEach(() => vi.unstubAllGlobals());
+
+    it("accepts only one simultaneous import into the same empty slot", async () => {
+      const contents = createBackup(makeSnapshot("story"));
+      const a = new SlotStore(), b = new SlotStore();
+      const results = await Promise.allSettled([a.importBackup(2, contents), b.importBackup(2, contents)]);
+      expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
+      expect((await new SlotStore().list()).map(slot => slot.id)).toEqual([2]);
+    });
+
+    it("exporting a newer record does not grant an older session permission to overwrite it", async () => {
+      const a = new SlotStore(), b = new SlotStore();
+      await a.save(1, makeSnapshot("story"));
+      await b.load(1);
+      await a.save(1, makeSnapshot("brutal"));
+      expect(parseBackup(await b.exportBackup(1)).difficulty).toBe("brutal");
+      await expect(b.save(1, makeSnapshot("story"))).rejects.toThrow("changed in another tab");
+    });
+
+    it("rolls back a failed import and allows retry without erasing other records", async () => {
+      const a = new SlotStore();
+      await a.save(1, makeSnapshot("brutal"));
+      const before = [...storage.entries()];
+      const contents = createBackup(makeSnapshot("story"));
+      const write = vi.spyOn(localStorage, "setItem").mockImplementation(() => { throw new DOMException("Full", "QuotaExceededError"); });
+      await expect(a.importBackup(2, contents)).rejects.toThrow("storage is full");
+      expect([...storage.entries()]).toEqual(before);
+      expect((await a.list()).map(slot => slot.id)).toEqual([1]);
+      write.mockRestore();
+      await a.importBackup(2, contents);
+      expect((await new SlotStore().list()).map(slot => [slot.id, slot.difficulty])).toEqual([[1, "brutal"], [2, "story"]]);
+    });
 
     it("retains concurrent writes to different slots from initially stale clients", async () => {
       const a = new SlotStore(), b = new SlotStore();

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useControlKeys } from "./useControlKeys";
 import Modal from "./Modal";
 import SpriteIcon, { type SpriteIconId } from "./SpriteIcon";
 import { atlasBounds, filterLandmarks, HEADING, HEADING_ROTATION, landmarkBearing, type LandmarkKind, type NavigationData } from "@/game/navigation";
@@ -16,6 +17,7 @@ export default function Atlas({ data, pinnedId, onPin, onClose }: {
   onPin: (id: string | null) => void;
   onClose: () => void;
 }) {
+  const key = useControlKeys();
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<LandmarkKind | "all">("all");
   const [sort, setSort] = useState<"distance" | "name">("distance");
@@ -32,8 +34,8 @@ export default function Atlas({ data, pinnedId, onPin, onClose }: {
     <section className="atlas-panel selectable">
       <header className="atlas-header">
         <SpriteIcon id="chart" size={44} />
-        <div><p className="atlas-eyebrow">THE WAYFARER'S ATLAS</p><h2 id="atlas-heading">{data.regionName}</h2></div>
-        <button type="button" className="atlas-close" onClick={onClose}>ESC / M / CLOSE</button>
+        <div><p className="atlas-eyebrow">THE WAYFARER&apos;S ATLAS</p><h2 id="atlas-heading">{data.regionName}</h2></div>
+        <button type="button" className="atlas-close" onClick={onClose}>ESC / {key.atlas} / CLOSE</button>
       </header>
       <p className="atlas-intro">A chart of places you have seen and records you have read. Choose a landmark to carry its bearing on the road.</p>
       <div className="atlas-summary">

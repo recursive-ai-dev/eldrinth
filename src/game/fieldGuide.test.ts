@@ -93,7 +93,7 @@ describe("traveller's field guide", () => {
       expect(cards.find(card => card.id === `lamp:${record.id}`)?.title).not.toBe(record.title);
     }
     for (const site of EXPEDITION_SITES) expect(allCopy).not.toContain(site.record);
-    expect(cards.filter(card => card.section === "combat").map(card => card.id)).toEqual(["wraith", "sentinel", "adept", "last-breath"]);
+    expect(cards.filter(card => card.section === "combat").map(card => card.id)).toEqual(["wraith", "sentinel", "adept", "last-breath", "warden:old-lands", "warden:cinderwild", "warden:moonlit-coast", "warden:starfall-moors"]);
   });
 
   it("takes tool and relic descriptions from the rules used by gameplay", () => {
@@ -112,7 +112,7 @@ describe("traveller's field guide", () => {
 
   it("searches across sections while leaving unrequested route hints hidden", () => {
     const cards = createFieldGuide([]);
-    expect(filterGuide(cards, "", "combat")).toHaveLength(4);
+    expect(filterGuide(cards, "", "combat")).toHaveLength(8);
     expect(filterGuide(cards, "GRAVEHAMMER", "combat").map(card => card.id)).toEqual(["tool:gravehammer"]);
     expect(filterGuide(cards, "   ", "equipment")).toHaveLength(COMBAT_TOOLS.length + RELICS.length);
     expect(filterGuide(cards, "twin slag stacks", "expeditions")).toEqual([]);

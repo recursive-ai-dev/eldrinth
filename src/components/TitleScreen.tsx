@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import titleBg from "@/assets/title.jpg";
 import type { Difficulty } from "@/game/types";
 import type { SaveSlot } from "@/game/slots";
@@ -16,6 +16,8 @@ export default function TitleScreen({
   onStart,
   onContinue,
   onErase,
+  onExport,
+  onImport,
   slots,
   slotsReady = true,
   busy = false,
@@ -24,6 +26,8 @@ export default function TitleScreen({
   onStart: (slot: number, difficulty: Difficulty) => void;
   onContinue: (slot: number) => void;
   onErase: (slot: number) => void;
+  onExport?: (slot: number) => void;
+  onImport?: (slot: number, file: File) => void;
   slots: SaveSlot[];
   slotsReady?: boolean;
   busy?: boolean;
@@ -32,6 +36,9 @@ export default function TitleScreen({
   const enabled = slotsReady && !busy;
   const firstEmpty = slotsReady ? [1, 2, 3].find((id) => !slots.some((slot) => slot.id === id)) : undefined;
   const [difficulty, setDifficulty] = useState<Difficulty>("standard");
+  const [eraseConfirm, setEraseConfirm] = useState<number | null>(null);
+  const importInput = useRef<HTMLInputElement>(null);
+  const importSlot = useRef<number | null>(null);
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       // Auto-repeat from the key that dismissed the previous screen must not
@@ -70,7 +77,7 @@ export default function TitleScreen({
       <div data-testid="title-scroll" className="title-scroll absolute inset-0 z-10 overflow-y-auto">
         <div className="flex min-h-full flex-col items-center px-4 py-8 text-center sm:px-6">
           <div className="my-auto flex w-full max-w-3xl shrink-0 flex-col items-center">
-            <div className="mb-5 flex items-center gap-3 font-title text-[10px] tracking-[.25em] text-amber-100/75"><span className="h-px w-8 bg-amber-100/30" />NAMES IN THE FIRE · 1.2<span className="h-px w-8 bg-amber-100/30" /></div>
+            <div className="mb-5 flex items-center gap-3 font-title text-[10px] tracking-[.25em] text-amber-100/75"><span className="h-px w-8 bg-amber-100/30" />THE WAYFARER’S KIT · 1.3<span className="h-px w-8 bg-amber-100/30" /></div>
             <div className="font-title text-xs uppercase tracking-[0.6em] text-teal-300/70 glow-pulse">
               Nine people. One body. Your decision.
             </div>
@@ -97,17 +104,37 @@ export default function TitleScreen({
                 {[1, 2, 3].map((id) => {
                   const slot = slots.find((entry) => entry.id === id);
                   return slot ? (
-                    <div key={id} className="flex rounded border border-teal-300/35 bg-teal-400/10 transition hover:bg-teal-400/20">
+                    <div key={id} className="flex flex-col rounded border border-teal-300/35 bg-teal-400/10 transition hover:bg-teal-400/20">
                       <button disabled={!enabled} onClick={() => onContinue(id)} className="min-w-0 flex-1 px-2 py-2 text-left">
                         <span className="block font-title text-xs tracking-wider text-teal-100">SLOT {id}</span>
                         <span className="block font-serif text-[10px] text-amber-100/75">{slot.difficulty} · {slot.shards}/9 shards</span>
                         <time dateTime={new Date(slot.updatedAt).toISOString()} className="mt-1 block text-[10px] text-amber-100/60">{new Date(slot.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })} · {new Date(slot.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
                       </button>
-                      <button disabled={!enabled} aria-label={`Erase slot ${id}`} onClick={() => onErase(id)} className="border-l border-teal-300/20 px-2 text-rose-200/80 hover:bg-rose-400/15 hover:text-rose-100">×</button>
+                      <div className="flex flex-wrap border-t border-teal-300/20 text-[10px]">
+                        {onExport && <button disabled={!enabled} aria-label={`Export slot ${id}`} onClick={() => onExport(id)} className="flex-1 px-2 py-2 text-teal-100 hover:bg-teal-400/15 disabled:opacity-40">Export</button>}
+                        <button disabled={!enabled} aria-label={`Erase slot ${id}`} onClick={() => setEraseConfirm(id)} className="flex-1 px-2 py-2 text-rose-200/80 hover:bg-rose-400/15 hover:text-rose-100 disabled:opacity-40">Erase</button>
+                      </div>
+                      {eraseConfirm === id && <div className="border-t border-rose-300/25 p-2 text-[11px] text-rose-100">
+                        <p>Erase this pilgrimage permanently? Export it first to keep a backup.</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button disabled={!enabled} onClick={() => { setEraseConfirm(null); onErase(id); }} className="rounded border border-rose-300/40 px-2 py-1">Confirm erase</button>
+                          <button onClick={() => setEraseConfirm(null)} className="rounded border border-amber-100/30 px-2 py-1">Cancel</button>
+                        </div>
+                      </div>}
                     </div>
-                  ) : <div key={id} className="rounded border border-amber-100/20 px-2 py-2 font-title text-xs tracking-wider text-amber-100/70">SLOT {id}<br />{slotsReady ? "EMPTY" : "LOADING…"}</div>;
+                  ) : <div key={id} className="flex flex-col rounded border border-amber-100/20 px-2 py-2 font-title text-xs tracking-wider text-amber-100/70">SLOT {id}<br />{slotsReady ? "EMPTY" : "LOADING…"}
+                    {onImport && <button disabled={!enabled || savingUnavailable} aria-label={`Import backup into slot ${id}`} onClick={() => { importSlot.current = id; importInput.current?.click(); }} className="mt-2 rounded border border-amber-100/25 px-1 py-2 font-serif text-[11px] tracking-normal hover:bg-amber-100/10 disabled:opacity-40">Import backup</button>}
+                  </div>;
                 })}
               </div>
+              {onImport && <input ref={importInput} type="file" accept=".json,application/json" className="hidden" aria-label="Pilgrimage backup file" onChange={event => {
+                const file = event.target.files?.[0];
+                const id = importSlot.current;
+                event.target.value = "";
+                importSlot.current = null;
+                if (file && id !== null && enabled && !savingUnavailable) onImport(id, file);
+              }} />}
+              {(onExport || onImport) && <p className="mt-3 font-serif text-[11px] leading-relaxed text-amber-100/70">Export a record to carry it between the browser and desktop or keep a backup. Import fills an empty slot; existing pilgrimages are preserved.</p>}
               <div className="mt-4 flex items-center justify-between gap-3">
                 <span className="font-title text-[10px] tracking-[0.2em] text-amber-100/75">NEW RUN DIFFICULTY</span>
                 <input aria-label="Difficulty" type="range" min="0" max="2" step="1" value={DIFFICULTIES.findIndex((entry) => entry.id === difficulty)} onChange={(event) => setDifficulty(DIFFICULTIES[Number(event.target.value)].id)} className="accent-teal-300" />

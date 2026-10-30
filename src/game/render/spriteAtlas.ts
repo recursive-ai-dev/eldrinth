@@ -34,12 +34,14 @@ interface LoadedAtlas extends SpriteAtlas {
   loaded: Promise<void>;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- Vite infers `unknown` here; the cast is required.
 const sheetUrls = import.meta.glob("@/assets/sprites/*/sheet.png", {
   eager: true,
   query: "?url",
   import: "default",
 }) as Record<string, string>;
 
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- Vite infers `unknown` here; the cast is required.
 const manifests = import.meta.glob("@/assets/sprites/*/manifest.json", {
   eager: true,
   import: "default",

@@ -6,15 +6,27 @@ and does not need Node, a browser, a server or an account on the player's machin
 Install the package with APT so its system libraries are installed too:
 
 ```bash
-sudo apt install ./eldrinth_1.2.0_amd64.deb
+sudo apt install ./eldrinth_1.3.0_amd64.deb
 eldrinth
 ```
 
 It also appears in the desktop Games menu. F11 toggles fullscreen; Alt reveals
 the application menu. Gameplay controls are listed in the pause screen.
-Version 1.2, **Names in the Fire**, adds named vessel decisions, memories beside
-wayfires, the Last Breath parry (`F`), and an offline procedural soundscape.
-Volume and mute preferences are available in the pause menu.
+Version 1.3, **The Wayfarer’s Kit**, includes a discovery atlas, illustrated
+field guide, lantern investigations, regional warden attacks, remappable keys,
+and gamepad exploration/combat controls. Controls, volume, display, and comfort
+preferences are available in the pause menu. Menus and dialogue choices use
+keyboard or mouse.
+
+The title screen exports individual pilgrimages as JSON and imports them into
+empty slots. This transfers progress between browser and desktop and provides
+an external backup without copying the entire desktop profile. Imports never
+replace occupied slots. Keep exported files private if your journal contains
+personal notes.
+
+Window position, size, maximized and fullscreen settings are restored on launch.
+A renderer crash offers a native reload prompt to return to the last checkpoint.
+Run `man 6 eldrinth` for an offline command and controls reference.
 
 The desktop app stores saves under `$XDG_CONFIG_HOME/eldrinth`, or
 `~/.config/eldrinth` when XDG_CONFIG_HOME is unset. Package upgrades and removal
@@ -66,3 +78,15 @@ actual `.deb`. Set ELDRINTH_DESKTOP_EXECUTABLE to an installed binary to test
 its installed sandbox helper as well. Extracted-package tests use the kernel's
 namespace sandbox because an extracted helper cannot be owned by root. CI
 installs the package and tests its normal sandbox configuration.
+
+On Ubuntu hosts that restrict unprivileged user namespaces, an extracted package
+may not launch even though the installed package does. If the same Electron
+sandbox helper is already installed with root ownership and mode 4755, test it
+without changing system files or disabling the sandbox:
+
+```bash
+ELDRINTH_DESKTOP_SANDBOX_HELPER=/usr/lib/eldrinth/chrome-sandbox npm run test:desktop
+```
+
+The harness verifies the helper's owner, permissions, and exact bytes before
+using it for the extracted package. It never alters the installed helper.

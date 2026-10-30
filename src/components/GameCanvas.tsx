@@ -26,7 +26,9 @@ export default function GameCanvas({
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const cbRef = useRef(callbacks);
-  cbRef.current = callbacks;
+  useEffect(() => {
+    cbRef.current = callbacks;
+  });
 
   const [initError, setInitError] = useState<string | null>(null);
   const [fatalError, setFatalError] = useState<string | null>(null);
@@ -58,12 +60,23 @@ export default function GameCanvas({
     // a checkpoint in any of the connected maps loadable after a refresh.
     if (initialSnapshot) game.world.regionId = initialSnapshot.regionId;
     let disposed = false;
+    // Coalesce checkpoints so the 10 s interval and tab-hide events cannot
+    // fire duplicate saves back-to-back, and at most one save is in flight.
+    const COALESCE_MS = 5000;
+    let lastCheckpointTime = 0;
+    let checkpointPromise: Promise<void> | null = null;
     const checkpoint = async () => {
-      // A death respawn changes the player before loading the destination.
-      // Saving in that gap restores a living player into the half-cleared
-      // fortress and loses its pending reset. Wait for the complete world.
-      if (game.regionTransition) await game.regionTransition;
-      if (!disposed && !fatal && game.initialized && !game.ended) await onCheckpoint?.(game.saveWorld());
+      if (disposed || fatal || !game.initialized || game.ended) return;
+      if (checkpointPromise) return checkpointPromise;
+      const now = Date.now();
+      if (now - lastCheckpointTime < COALESCE_MS) return;
+      checkpointPromise = (async () => {
+        if (game.regionTransition) await game.regionTransition;
+        if (disposed || fatal || !game.initialized || game.ended) return;
+        await onCheckpoint?.(game.saveWorld());
+        lastCheckpointTime = Date.now();
+      })();
+      try { await checkpointPromise; } finally { checkpointPromise = null; }
     };
     // The desktop host awaits this promise before closing its window.
     window.eldrinthCheckpoint = checkpoint;
@@ -93,11 +106,18 @@ export default function GameCanvas({
         setInitError(msg);
       });
     return () => {
-      backgroundCheckpoint();
+      // Final flush on unmount, bypassing the coalescing window, but only when
+      // no region transition is in flight (a half-changed world must not be
+      // persisted). Decide before the component is marked disposed.
+      const transitionPending = Boolean(game.regionTransition);
+      const willCheckpoint = !disposed && !fatal && game.initialized && !game.ended && !transitionPending;
       disposed = true;
       if (window.eldrinthCheckpoint === checkpoint) delete window.eldrinthCheckpoint;
       window.clearInterval(interval);
       window.removeEventListener("visibilitychange", onVisibilityChange);
+      if (willCheckpoint) {
+        void (onCheckpoint?.(game.saveWorld()));
+      }
       game.destroy();
       onDispose?.(game);
     };

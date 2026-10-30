@@ -8,9 +8,13 @@ export function useSoundscape(state: Omit<SoundscapeState, "hidden">) {
   const [supported, setSupported] = useState(soundSupported);
   const controller = useRef<Soundscape | null>(null);
   const latest = useRef(state);
-  latest.current = state;
   const settings = useRef(preferences);
-  settings.current = preferences;
+  // Keep the latest props in refs so the audio effect can read them without
+  // re-subscribing on every state change.
+  useEffect(() => {
+    latest.current = state;
+    settings.current = preferences;
+  });
 
   useEffect(() => {
     const sound = new Soundscape(undefined, () => setSupported(false));

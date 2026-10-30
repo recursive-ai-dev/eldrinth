@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
+import { gunzipSync } from "node:zlib";
 
 const root = resolve(import.meta.dirname, "..");
 const pkg = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
@@ -11,6 +12,11 @@ const architecture = execFileSync("dpkg", ["--print-architecture"], { encoding: 
 const file = process.argv[2] ? resolve(process.argv[2]) : join(root, "release", `eldrinth_${pkg.version}_${architecture}.deb`);
 const sha256 = createHash("sha256").update(await readFile(file)).digest("hex");
 assert.equal((await readFile(`${file}.sha256`, "utf8")).trim(), `${sha256}  ${basename(file)}`);
+const release = JSON.parse(await readFile(`${file}.json`, "utf8"));
+assert.equal(release.sha256, sha256);
+assert.equal(release.version, pkg.version);
+assert.equal(release.architecture, architecture);
+assert.equal(release.bytes, (await stat(file)).size);
 for (const [key, value] of [["Package", "eldrinth"], ["Version", pkg.version], ["Architecture", architecture]]) {
   assert.equal(execFileSync("dpkg-deb", ["--field", file, key], { encoding: "utf8" }).trim(), value);
 }
@@ -32,9 +38,13 @@ try {
   const manifest = JSON.parse(await readFile(join(appRoot, "package.json"), "utf8"));
   assert.equal(manifest.version, pkg.version);
   assert.equal(manifest.main, "desktop/main.cjs");
-  for (const path of ["dist/index.html", "desktop/main.cjs", "desktop/protocol.cjs", "desktop/icon.png"]) {
+  for (const path of ["dist/index.html", "desktop/main.cjs", "desktop/protocol.cjs", "desktop/window-state.cjs", "desktop/icon.png"]) {
     assert.ok((await stat(join(appRoot, path))).size > 0, path);
   }
+  const metainfo = await readFile(join(extracted, "usr/share/metainfo/io.github.recursive_ai_dev.eldrinth.metainfo.xml"), "utf8");
+  assert.ok(metainfo.includes(`<release version="${pkg.version}"`), "AppStream release version must match the package");
+  assert.match(metainfo, /<launchable type="desktop-id">eldrinth\.desktop<\/launchable>/);
+  assert.match(gunzipSync(await readFile(join(extracted, "usr/share/man/man6/eldrinth.6.gz"))).toString(), /\.TH ELDRINTH 6/);
   const checksums = (await readFile(join(extracted, "DEBIAN/md5sums"), "utf8")).trim().split("\n");
   for (const line of checksums) {
     const [expected, path] = line.split("  ");

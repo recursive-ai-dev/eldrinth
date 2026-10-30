@@ -66,6 +66,7 @@ async function normalize(directory) {
 const staging = await mkdtemp(join(tmpdir(), "eldrinth-deb-"));
 const output = join(root, "release");
 const filename = `eldrinth_${pkg.version}_${architecture}.deb`;
+let pendingDirectory;
 try {
   const application = join(staging, "usr/lib/eldrinth");
   const appRoot = join(application, "resources/app");
@@ -75,7 +76,7 @@ try {
   await rename(join(application, "electron"), join(application, "eldrinth"));
   await cp(join(root, "dist"), join(appRoot, "dist"), { recursive: true });
   await mkdir(join(appRoot, "desktop"), { recursive: true });
-  for (const name of ["main.cjs", "protocol.cjs", "icon.png"]) {
+  for (const name of ["main.cjs", "protocol.cjs", "window-state.cjs", "icon.png"]) {
     await cp(join(root, "desktop", name), join(appRoot, "desktop", name));
   }
   await write(join(appRoot, "package.json"), JSON.stringify({
@@ -84,6 +85,8 @@ try {
   }, null, 2) + "\n");
   await write(join(staging, "usr/bin/eldrinth"), await readFile(join(root, "packaging/eldrinth")), 0o755);
   await write(join(staging, "usr/share/applications/eldrinth.desktop"), await readFile(join(root, "packaging/eldrinth.desktop")));
+  await write(join(staging, "usr/share/metainfo/io.github.recursive_ai_dev.eldrinth.metainfo.xml"), await readFile(join(root, "packaging/io.github.recursive_ai_dev.eldrinth.metainfo.xml")));
+  await write(join(staging, "usr/share/man/man6/eldrinth.6.gz"), gzipSync(await readFile(join(root, "packaging/eldrinth.6"))));
   await write(join(staging, "usr/share/icons/hicolor/scalable/apps/eldrinth.svg"), await readFile(join(root, "public/favicon.svg")));
   await write(join(staging, "usr/share/icons/hicolor/256x256/apps/eldrinth.png"), await readFile(join(root, "desktop/icon.png")));
   await write(join(doc, "copyright"), `${await readFile(join(root, "LICENSE"), "utf8")}\nElectron ${electronVersion}: see ELECTRON-LICENSE.\nChromium and bundled runtime licenses: /usr/lib/eldrinth/LICENSES.chromium.html\nBundled game library licenses: THIRD-PARTY-LICENSES.txt\n`);
@@ -122,17 +125,23 @@ try {
   await normalize(staging);
   await mkdir(output, { recursive: true });
   const target = join(output, filename);
-  execFileSync("dpkg-deb", ["--root-owner-group", "--uniform-compression", "-Zxz", "-z6", "--build", staging, target], {
+  // Keep the pending archive on the destination filesystem so final rename is
+  // atomic even when /tmp is a separate mount.
+  pendingDirectory = await mkdtemp(join(output, ".build-"));
+  const pending = join(pendingDirectory, filename);
+  execFileSync("dpkg-deb", ["--root-owner-group", "--uniform-compression", "--threads-max=2", "-Zxz", "-z6", "--build", staging, pending], {
     stdio: "inherit", env: { ...process.env, SOURCE_DATE_EPOCH: String(epoch) },
   });
-  const bytes = await readFile(target);
+  const bytes = await readFile(pending);
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   await writeFile(join(output, `${filename}.sha256`), `${sha256}  ${filename}\n`);
   await writeFile(join(output, `${filename}.json`), JSON.stringify({
     package: "eldrinth", version: pkg.version, architecture, electron: electronVersion,
     sourceDateEpoch: epoch, filename, bytes: bytes.length, sha256,
   }, null, 2) + "\n");
+  await rename(pending, target);
   console.log(`Built ${target} (${(bytes.length / 1024 / 1024).toFixed(1)} MiB).`);
 } finally {
   await rm(staging, { recursive: true, force: true });
+  if (pendingDirectory) await rm(pendingDirectory, { recursive: true, force: true });
 }

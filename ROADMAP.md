@@ -35,7 +35,7 @@ no required shard, reward farming, fuel economy, or save-version change. Equipme
 and relic illustrations come from the local `shed-dev-sprites` source, with
 reproducible recipes and provenance alongside the committed assets.
 
-**Still planned:** a distinct elite behavior for each region. Existing enemies retain their telegraphed `spell`, `lunge` and `burst` wind-ups. The four new sites are optional additions to the completed main pilgrimage; they do not add another shard requirement.
+**Implemented in 1.3:** regional elite sentinels and fortress wardens use distinct charge, ember-ring, fan, and crossfire tactics with shared telegraph geometry and field-guide counters. Ordinary enemies retain their established attacks. The four new sites are optional additions to the completed main pilgrimage; they do not add another shard requirement.
 
 ## Milestone 3 — Turn knowledge into mastery
 

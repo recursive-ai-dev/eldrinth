@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback } from "react";
+import { useControlKeys } from "./useControlKeys";
+import { useCallback } from "react";
 
 interface VirtualControlsProps {
   onInput: (key: string, isDown: boolean) => void;
@@ -11,15 +12,11 @@ export default function VirtualControls({
   onToggleJournal,
   onTogglePause,
 }: VirtualControlsProps) {
-  const [isTouchDevice, setIsTouchDevice] = useState(false);
-
-  useEffect(() => {
-    const hasTouch =
-      "ontouchstart" in window ||
-      (typeof navigator !== "undefined" && navigator.maxTouchPoints > 0) ||
-      window.matchMedia("(pointer: coarse)").matches;
-    setIsTouchDevice(hasTouch);
-  }, []);
+  const key = useControlKeys();
+  const isTouchDevice =
+    "ontouchstart" in window ||
+    (typeof navigator !== "undefined" && navigator.maxTouchPoints > 0) ||
+    window.matchMedia("(pointer: coarse)").matches;
 
   const handlePointerDown = useCallback(
     (key: string) => (e: React.PointerEvent) => {
@@ -153,7 +150,7 @@ export default function VirtualControls({
           onPointerCancel={handlePointerCancel("f")}
           className="flex h-14 w-14 flex-col items-center justify-center rounded-full border border-amber-200/45 bg-amber-950/65 font-serif text-[11px] font-bold tracking-wider text-amber-100 backdrop-blur-md active:scale-95 active:bg-amber-800/80"
         >
-          <span>PARRY</span><span className="text-[9px] text-amber-200/65">[F]</span>
+          <span>PARRY</span><span className="text-[9px] text-amber-200/65">[{key.guard}]</span>
         </button>
         {/* Interact / Talk */}
         <button
@@ -165,7 +162,7 @@ export default function VirtualControls({
           className="flex h-14 w-14 flex-col items-center justify-center rounded-full border border-teal-400/40 bg-teal-950/60 font-serif text-[11px] font-bold tracking-wider text-teal-200 shadow-[0_0_15px_rgba(45,212,191,0.2)] backdrop-blur-md active:scale-95 active:bg-teal-800/80"
         >
           <span>TALK</span>
-          <span className="text-[9px] text-teal-300/60">[E]</span>
+          <span className="text-[9px] text-teal-300/60">[{key.interact}]</span>
         </button>
 
         {/* Dash */}
@@ -178,7 +175,7 @@ export default function VirtualControls({
           className="flex h-14 w-14 flex-col items-center justify-center rounded-full border border-cyan-400/40 bg-cyan-950/60 font-serif text-[11px] font-bold tracking-wider text-cyan-200 shadow-[0_0_15px_rgba(6,182,212,0.2)] backdrop-blur-md active:scale-95 active:bg-cyan-800/80"
         >
           <span>DASH</span>
-          <span className="text-[9px] text-cyan-300/60">[SHIFT]</span>
+          <span className="text-[9px] text-cyan-300/60">[{key.dash.toUpperCase()}]</span>
         </button>
 
         {/* Attack */}

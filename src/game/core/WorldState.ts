@@ -250,7 +250,8 @@ export class WorldState {
   }
 
   restore(snapshot: WorldSnapshot) {
-    if (snapshot.version !== 1 && snapshot.version !== 2 && snapshot.version !== 3 && snapshot.version !== 4) throw new Error(`Unsupported world snapshot version: ${snapshot.version}`);
+    if (snapshot.version !== 1 && snapshot.version !== 2 && snapshot.version !== 3 && snapshot.version !== 4)
+      throw new Error(`Unsupported world snapshot version: ${String(snapshot.version)}`);
     // Resolve compatibility before mutating any live state.
     const harvested = restoreHarvestedShards(snapshot);
     const legacySave = snapshot.version === 1;

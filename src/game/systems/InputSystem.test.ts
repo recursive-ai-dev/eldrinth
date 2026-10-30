@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { InputSystem } from "./InputSystem";
+import { defaultControlBindings, rebindControl, saveControlBindings } from "../controlBindings";
 
 describe("InputSystem", () => {
   let mockWindow: EventTarget;
@@ -10,6 +11,7 @@ describe("InputSystem", () => {
   });
 
   afterEach(() => {
+    saveControlBindings(defaultControlBindings());
     vi.unstubAllGlobals();
   });
 
@@ -133,5 +135,110 @@ describe("InputSystem", () => {
 
     input.destroy();
   });
+  it("updates bindings live and clears held state when a key is rebound", () => {
+    const input = new InputSystem();
+    input.bind({});
+    mockWindow.dispatchEvent(createKeyboardEvent("keydown", "w"));
+    saveControlBindings(rebindControl(defaultControlBindings(), "up", "z"));
+    expect(input.has("w")).toBe(false);
+    mockWindow.dispatchEvent(createKeyboardEvent("keydown", "z"));
+    expect(input.has("w")).toBe(true);
+    expect(input.consumePressed("w")).toBe(true);
+    mockWindow.dispatchEvent(createKeyboardEvent("keyup", "z"));
+    expect(input.has("w")).toBe(false);
+    mockWindow.dispatchEvent(createKeyboardEvent("keydown", "w"));
+    expect(input.has("w")).toBe(false);
+    input.destroy();
+  });
+
+  it("keeps a virtual control held when the matching keyboard key is released", () => {
+    const input = new InputSystem();
+    input.bind({});
+    input.setKey("w", true);
+    mockWindow.dispatchEvent(createKeyboardEvent("keydown", "w"));
+    mockWindow.dispatchEvent(createKeyboardEvent("keyup", "w"));
+    expect(input.has("w")).toBe(true);
+    input.setKey("w", false);
+    expect(input.has("w")).toBe(false);
+    input.destroy();
+  });
+
+  it("queues controller actions once and does not retrigger held buttons after a menu clears input", () => {
+    let pressed = true;
+    vi.stubGlobal("navigator", { getGamepads: () => [{ connected: true, mapping: "standard", axes: [0, 0], buttons: [{ pressed }] }] });
+    const input = new InputSystem();
+    input.pollGamepad();
+    expect(input.has("j")).toBe(true);
+    expect(input.consumePressed("j")).toBe(true);
+    input.pollGamepad();
+    expect(input.consumePressed("j")).toBe(false);
+    input.clear();
+    input.pollGamepad();
+    expect(input.has("j")).toBe(false);
+    expect(input.consumePressed("j")).toBe(false);
+    pressed = false;
+    input.pollGamepad();
+    pressed = true;
+    input.pollGamepad();
+    expect(input.consumePressed("j")).toBe(true);
+    input.destroy();
+  });
+
+  it("releases controller movement on disconnect without releasing keyboard movement", () => {
+    let connected = true;
+    vi.stubGlobal("navigator", { getGamepads: () => connected ? [{ connected, mapping: "standard", axes: [1, 0], buttons: [] }] : [] });
+    const input = new InputSystem();
+    input.bind({});
+    input.pollGamepad();
+    mockWindow.dispatchEvent(createKeyboardEvent("keydown", "d"));
+    connected = false;
+    input.pollGamepad();
+    expect(input.has("d")).toBe(true);
+    mockWindow.dispatchEvent(createKeyboardEvent("keyup", "d"));
+    expect(input.has("d")).toBe(false);
+    input.destroy();
+  });
+
+  it("ignores controller input while blurred and requires release after focus returns", () => {
+    let pressed = false;
+    vi.stubGlobal("navigator", { getGamepads: () => [{ connected: true, mapping: "standard", axes: [], buttons: [{ pressed }] }] });
+    const input = new InputSystem();
+    input.bind({});
+    mockWindow.dispatchEvent(new Event("blur"));
+    pressed = true;
+    input.pollGamepad();
+    expect(input.consumePressed("j")).toBe(false);
+    mockWindow.dispatchEvent(new Event("focus"));
+    input.pollGamepad();
+    expect(input.consumePressed("j")).toBe(false);
+    pressed = false;
+    input.pollGamepad();
+    pressed = true;
+    input.pollGamepad();
+    expect(input.consumePressed("j")).toBe(true);
+    input.destroy();
+  });
+
+  it("suspends keyboard, touch and controller commands during manual saving", () => {
+    let pressed = true;
+    vi.stubGlobal("navigator", { getGamepads: () => [{ connected: true, mapping: "standard", axes: [], buttons: Array.from({ length: 10 }, (_, index) => ({ pressed: index === 9 && pressed })) }] });
+    const input = new InputSystem();
+    input.bind({});
+    input.setSuspended(true);
+    mockWindow.dispatchEvent(createKeyboardEvent("keydown", "Escape"));
+    input.setKey("escape", true);
+    input.pollGamepad();
+    expect(input.consumePressed("escape")).toBe(false);
+    input.setSuspended(false);
+    input.pollGamepad();
+    expect(input.consumePressed("escape")).toBe(false);
+    pressed = false;
+    input.pollGamepad();
+    pressed = true;
+    input.pollGamepad();
+    expect(input.consumePressed("escape")).toBe(true);
+    input.destroy();
+  });
+
 });
 

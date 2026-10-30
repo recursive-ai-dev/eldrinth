@@ -1,3 +1,4 @@
+import { useControlKeys } from "./useControlKeys";
 import type { DialogueData } from "@/game/types";
 import NpcPortraitView from "./NpcPortraitView";
 
@@ -10,6 +11,7 @@ export default function DialogueBox({
   onAdvance: () => void;
   onChoice: (id: string) => void;
 }) {
+  const key = useControlKeys();
   return (
     <div
       role="dialog"
@@ -70,7 +72,7 @@ export default function DialogueBox({
             />
           </div>
           <span className="font-title flick text-xs tracking-widest text-amber-200/80">
-            {data.choices ? (data.choices.length > 9 ? "1–9, 0 / CLICK" : "1–9 / CLICK") : "▼ E / CLICK"}
+            {data.choices ? (data.choices.length > 9 ? "1–9, 0 / CLICK" : "1–9 / CLICK") : `▼ ${key.interact} / CLICK`}
           </span>
         </div>
       </div>

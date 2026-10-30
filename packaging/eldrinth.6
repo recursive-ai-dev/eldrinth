@@ -1,0 +1,37 @@
+.TH ELDRINTH 6 "October 2026" "ELDRINTH 1.3" "Games"
+.SH NAME
+eldrinth \- The Unbound Spire, an offline dark fantasy action RPG
+.SH SYNOPSIS
+.B eldrinth
+.SH DESCRIPTION
+Explore four frontier regions, enter nine shard fortresses, investigate records,
+and choose the fate of the conscious people held by the Unbound Spire.
+The game includes its desktop runtime and plays without network access.
+.SH CONTROLS
+Move with WASD or arrow keys. Attack with J or Space, dash with Shift,
+parry with F, interact with E, raise the lantern with R, and switch tools with Q.
+Open equipment with I, the journal with L, and the atlas with M.
+Escape or P pauses the game. F11 toggles fullscreen.
+Primary keyboard bindings can be changed under Pause, Controls.
+Standard gamepads support movement and combat; see the Controls panel for mappings.
+.SH SAVES
+Three save slots are available. Progress autosaves during play and on normal exit.
+The title screen can export a slot as a JSON backup and restore a backup into an
+empty slot. Browser and desktop saves can be transferred with these backups.
+Package upgrades and removal preserve user saves.
+.SH FILES
+.TP
+.I $XDG_CONFIG_HOME/eldrinth
+Desktop saves and preferences. Defaults to ~/.config/eldrinth.
+.TP
+.I /usr/share/doc/eldrinth
+Release notes, license notices and packaging documentation.
+.SH ENVIRONMENT
+.TP
+.B ELDRINTH_USER_DATA_DIR
+Override the desktop profile directory. Use an absolute path.
+.SH CONTENT
+Mature themes include institutional violence and death. A first-launch notice
+appears before play.
+.SH AUTHORS
+ELDRINTH contributors. Released under the MIT license.
