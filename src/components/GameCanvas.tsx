@@ -80,12 +80,48 @@ export default function GameCanvas({
     };
     // The desktop host awaits this promise before closing its window.
     window.eldrinthCheckpoint = checkpoint;
-    const backgroundCheckpoint = () => { void checkpoint().catch(() => undefined); };
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "hidden") backgroundCheckpoint();
+    // Track when the last successful checkpoint occurred
+    let lastSuccessfulCheckpoint = 0;
+    
+    const backgroundCheckpoint = async () => {
+      if (disposed || fatal || !game.initialized || game.ended) return;
+      if (checkpointPromise) return;
+      const now = Date.now();
+      if (now - lastCheckpointTime < COALESCE_MS) return;
+      checkpointPromise = (async () => {
+        if (game.regionTransition) await game.regionTransition;
+        if (disposed || fatal || !game.initialized || game.ended) return;
+        await onCheckpoint?.(game.saveWorld());
+        lastCheckpointTime = Date.now();
+        lastSuccessfulCheckpoint = Date.now();
+      })();
+      try { await checkpointPromise; } finally { checkpointPromise = null; }
     };
+    
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        lastSuccessfulCheckpoint = Date.now(); // Mark as clean when hiding
+        void backgroundCheckpoint();
+      }
+    };
+    
     const interval = window.setInterval(backgroundCheckpoint, 10_000);
     window.addEventListener("visibilitychange", onVisibilityChange);
+    
+    // Set up beforeunload warning for unsaved progress
+    const beforeUnloadHandler = (e: BeforeUnloadEvent) => {
+      const now = Date.now();
+      // If we have a last checkpoint time and less than 10s have passed, warn
+      const hasUnsavedProgress = lastSuccessfulCheckpoint > 0 && 
+                                 now - lastSuccessfulCheckpoint < COALESCE_MS &&
+                                 now - lastSuccessfulCheckpoint > 0;
+      if (hasUnsavedProgress && game.initialized && !game.ended) {
+        e.preventDefault();
+        e.returnValue = "You have unsaved progress. Are you sure you want to leave?";
+        return e.returnValue;
+      }
+    };
+    window.addEventListener("beforeunload", beforeUnloadHandler);
     void game.init()
       .then(() => {
         if (disposed) return;

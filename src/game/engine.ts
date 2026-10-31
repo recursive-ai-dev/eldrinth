@@ -725,6 +725,10 @@ export class Game {
   onKeyDown = (e: KeyboardEvent) => {
     if (this.paused || this.journalOpen || this.ended) return;
     const k = e.key.toLowerCase();
+    const target = e.target as HTMLElement | null;
+    // Native editing and button activation belong to the UI, not the game.
+    if (target?.isContentEditable || target?.closest?.('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return;
+    if (target?.closest?.('button, a[href], [role="button"], [role="tab"]')) return;
     if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(k)) e.preventDefault();
   };
   onKeyUp = (_e: KeyboardEvent) => undefined;
@@ -1459,6 +1463,7 @@ export class Game {
   }
   shake(n: number) {
     if (!this.screenShake || this.quietInterface) return;
+    if (typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
     this.shakeMag = Math.min(10, Math.max(this.shakeMag, n));
   }
 
