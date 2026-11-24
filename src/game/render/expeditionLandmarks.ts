@@ -1,6 +1,76 @@
 import { TILE } from "../constants";
 import { EXPEDITION_SITES, type ExpeditionSite } from "../encounters";
-import type { MapData } from "../types";
+import type { MapData, RegionExit } from "../types";
+import type { SpriteAtlas } from "./spriteAtlas";
+
+/** Bespoke war-structure atlas keys for each of the nine shard fortress exteriors. */
+export const FORTRESS_EXTERIOR_SPRITE: Readonly<Record<string, string>> = {
+  "fortress.old-lands-archive": "prop.fortress.old-lands-archive",
+  "fortress.old-lands-reliquary": "prop.fortress.old-lands-reliquary",
+  "fortress.old-lands-vault": "prop.fortress.old-lands-vault",
+  "fortress.cinderwild-shrine": "prop.fortress.cinderwild-shrine",
+  "fortress.cinderwild-watchpost": "prop.fortress.cinderwild-watchpost",
+  "fortress.moonlit-salt-graves": "prop.fortress.moonlit-salt-graves",
+  "fortress.moonlit-beacon": "prop.fortress.moonlit-beacon",
+  "fortress.starfall-observatory": "prop.fortress.starfall-observatory",
+  "fortress.starfall-watch": "prop.fortress.starfall-watch",
+};
+
+/** Locate shard fortress gates present on an exterior regional map. */
+export function fortressExitsOnMap(map: MapData): RegionExit[] {
+  return (map.exits ?? []).filter((exit) => exit.targetRegion in FORTRESS_EXTERIOR_SPRITE);
+}
+
+/** Render a bespoke 4×4-tile fortress facade anchored over its walkable gate threshold. */
+export function drawFortressExterior(
+  ctx: CanvasRenderingContext2D,
+  exit: RegionExit,
+  atlas: SpriteAtlas | null,
+  time: number,
+  harvested = false,
+): void {
+  const size = TILE * 4;
+  const centerX = exit.x * TILE + TILE / 2;
+  const gateBottomY = (exit.y + 1) * TILE;
+  const left = Math.round(centerX - size / 2);
+  const top = Math.round(gateBottomY - size);
+
+  ctx.save();
+  // Grounding courtyard shadow
+  ctx.fillStyle = "rgba(0,0,0,0.34)";
+  ctx.beginPath();
+  ctx.ellipse(centerX, gateBottomY - 6, size * 0.44, 14, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (atlas?.ready && atlas.image) {
+    const frame = atlas.getStaticFrame(0);
+    if (frame) {
+      const smoothing = ctx.imageSmoothingEnabled;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(atlas.image, frame.sx, frame.sy, frame.sw, frame.sh, left, top, size, size);
+      ctx.imageSmoothingEnabled = smoothing;
+    }
+  } else {
+    ctx.fillStyle = "#2b2834";
+    ctx.fillRect(left + 16, top + 28, size - 32, size - 32);
+    ctx.fillStyle = "#16131c";
+    ctx.fillRect(centerX - 10, gateBottomY - 28, 20, 24);
+  }
+
+  // Subtle Anima threshold glow while a conscious shard remains inside
+  if (!harvested) {
+    const pulse = 0.24 + 0.1 * Math.sin(time * 2.8 + exit.x);
+    ctx.globalCompositeOperation = "lighter";
+    const glow = ctx.createRadialGradient(centerX, gateBottomY - 14, 2, centerX, gateBottomY - 14, 28);
+    glow.addColorStop(0, `rgba(110,242,226,${pulse})`);
+    glow.addColorStop(1, "rgba(110,242,226,0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(centerX, gateBottomY - 14, 28, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
 
 /** Authored site notes identify the prop even when rendering a cached map. */
 export function expeditionOnMap(map: MapData): ExpeditionSite | undefined {
@@ -8,12 +78,33 @@ export function expeditionOnMap(map: MapData): ExpeditionSite | undefined {
 }
 
 /** Small world-space silhouettes use the existing palette and tile materials. */
-export function drawExpeditionLandmark(ctx: CanvasRenderingContext2D, site: ExpeditionSite, time: number): void {
+export function drawExpeditionLandmark(
+  ctx: CanvasRenderingContext2D,
+  site: ExpeditionSite,
+  time: number,
+  civicAtlas?: SpriteAtlas | null,
+): void {
   const x = site.x * TILE + TILE / 2, y = site.y * TILE + TILE / 2;
   ctx.save();
   ctx.translate(x, y);
   ctx.fillStyle = "rgba(0,0,0,.28)";
   ctx.beginPath(); ctx.ellipse(0, 8, 32, 11, 0, 0, Math.PI * 2); ctx.fill();
+  if (civicAtlas?.ready && civicAtlas.image) {
+    const frame = civicAtlas.getStaticFrame(0);
+    if (frame) {
+      const smoothing = ctx.imageSmoothingEnabled;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(civicAtlas.image, frame.sx, frame.sy, frame.sw, frame.sh, -40, -68, 80, 80);
+      ctx.imageSmoothingEnabled = smoothing;
+      if (site.kind === "vigil") {
+        const pulse = 0.45 + Math.sin(time * 5.2) * 0.12;
+        ctx.strokeStyle = `rgba(197,169,238,${pulse})`; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.ellipse(0, 0, TILE * 3, TILE * 3, 0, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.restore();
+      return;
+    }
+  }
   if (site.kind === "refuge") {
     ctx.strokeStyle = "#657852";
     ctx.lineWidth = 8;

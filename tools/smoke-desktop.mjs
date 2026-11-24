@@ -181,6 +181,7 @@ try {
   await expect.poll(() => application.evaluate(() => globalThis.eldrinthCrashDialogCount)).toBe(1);
   await expect(page.getByRole("heading", { name: "ELDRINTH", exact: true })).toBeVisible();
   await page.getByRole("button", { name: /SLOT 1/ }).click();
+  await expect(page.getByTestId("hud-vitals")).toBeVisible();
   await expect(page.getByTestId("loading-screen")).toBeHidden();
   await page.keyboard.press("l");
   await expect(page.getByText("Saved by returning to the title", { exact: true })).toBeVisible();

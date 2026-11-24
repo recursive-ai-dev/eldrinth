@@ -1,7 +1,7 @@
 {
   "name": "eldrinth",
   "private": true,
-  "version": "1.3.1",
+  "version": "1.4.0",
   "productName": "ELDRINTH",
   "description": "ELDRINTH: The Unbound Spire — a 2D open-world dark-fantasy action RPG for browsers and Linux desktops.",
   "main": "desktop/main.cjs",
@@ -41,7 +41,9 @@
     "test:desktop": "node tools/smoke-desktop.mjs",
     "verify:deb": "node tools/verify-deb.mjs",
     "gen:field-kit": "python3 tools/spritegen/gen_field_kit.py",
-    "verify:field-kit": "python3 tools/spritegen/gen_field_kit.py --check"
+    "verify:field-kit": "python3 tools/spritegen/gen_field_kit.py --check",
+    "gen:scenes": "python3 tools/spritegen/gen_scenes.py",
+    "verify:scenes": "python3 tools/spritegen/gen_scenes.py --check"
   },
   "dependencies": {
     "@types/sql.js": "^1.4.11",

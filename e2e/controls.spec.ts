@@ -45,6 +45,7 @@ test("controls rebind without opening the atlas during capture and persist after
   await expect(page.getByRole("button", { name: /SLOT 1/ })).toBeVisible();
   await page.reload();
   await page.getByRole("button", { name: /SLOT 1/ }).click();
+  await expect(page.getByTestId("hud-vitals")).toBeVisible();
   await expect(page.getByTestId("loading-screen")).toBeHidden({ timeout: 15_000 });
   await page.keyboard.press("Escape");
   await pause.getByRole("button", { name: "Controls", exact: true }).click();

@@ -21,7 +21,7 @@ import math
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-from .canvas import Canvas, TAG_HAIR, TAG_CLOTH, TAG_ACCENT, TAG_EMPTY
+from .canvas import Canvas, TAG_HAIR, TAG_CLOTH, TAG_ACCENT, TAG_EMPTY, TAG_FLOW
 
 RED, YELLOW, GREEN = 0, 1, 2
 
@@ -116,7 +116,7 @@ class FFDGrid:
 
 
 # tags that FFD is allowed to move (green/yellow layers in spirit)
-_MOVABLE = {TAG_HAIR, TAG_CLOTH, TAG_ACCENT}
+_MOVABLE = {TAG_HAIR, TAG_CLOTH, TAG_ACCENT, TAG_FLOW}
 
 
 def apply_ffd(

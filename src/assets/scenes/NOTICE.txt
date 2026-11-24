@@ -1,0 +1,14 @@
+Eldrinth regional landscape banners
+
+Generated from Shed Dev Sprites (Apache License 2.0).
+Source: ../shed-dev-sprites, https://github.com/recursive-ai-dev/shed-dev-sprites
+The full upstream license is included in LICENSE.apache-2.0.
+
+These four 192x108 landscape scenes are generated deterministically by the
+upstream `scene` generator (sky dithering, parallax ridges, terrain, cottages,
+props, and cast) and locked to Eldrinth's regional master palettes. Recipes,
+seeds, source revision, generator fingerprint, and SHA-256 checksums are
+recorded in src/assets/scenes/manifest.json.
+
+Rebuild: python3 tools/spritegen/gen_scenes.py
+Verify:  python3 tools/spritegen/gen_scenes.py --check

@@ -6,15 +6,17 @@ and does not need Node, a browser, a server or an account on the player's machin
 Install the package with APT so its system libraries are installed too:
 
 ```bash
-sudo apt install ./eldrinth_1.3.0_amd64.deb
+sudo apt install ./eldrinth_1.4.0_amd64.deb
 eldrinth
 ```
 
 It also appears in the desktop Games menu. F11 toggles fullscreen; Alt reveals
 the application menu. Gameplay controls are listed in the pause screen.
-Version 1.3, **The Wayfarer’s Kit**, includes a discovery atlas, illustrated
-field guide, lantern investigations, regional warden attacks, remappable keys,
-and gamepad exploration/combat controls. Controls, volume, display, and comfort
+Version 1.4, **The Living Frontier**, upgrades world pixel art with multi-clip
+animations, distinct regional wardens, 47-tile Blob Wang autotiling, regional
+master palettes, civic structures, bespoke shard fortresses, and regional
+landscape banners alongside **The Wayfarer’s Kit** (discovery atlas, illustrated
+field guide, lantern investigations, remappable keys, and gamepad controls). Controls, volume, display, and comfort
 preferences are available in the pause menu. Menus and dialogue choices use
 keyboard or mouse.
 

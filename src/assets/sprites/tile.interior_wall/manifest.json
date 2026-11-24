@@ -2,6 +2,7 @@
   "autotile": false,
   "cellH": 32,
   "cellW": 32,
+  "columns": 1,
   "frames": 1,
   "kind": "settlement",
   "masks": 1,

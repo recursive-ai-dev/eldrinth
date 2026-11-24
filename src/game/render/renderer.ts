@@ -2,10 +2,18 @@ import { LANTERN_LIGHT_RADIUS, type LanternRecord } from "../lantern";
 import { TILE, T, tileDefinition } from "../constants";
 import { rr, dot, hash2, DIRV, DIRA } from "../math";
 import type { EnemyState, ItemState, PlayerState, ProjectileState } from "../core/WorldState";
-import type { MapData, NpcData, SettlementState } from "../types";
-import { getAtlasRevision, loadAtlas, preloadAtlases, type SpriteAtlas } from "./spriteAtlas";
-import { drawExpeditionLandmark, expeditionOnMap } from "./expeditionLandmarks";
+import type { MapData, NpcData, SettlementState, TownBuildingData } from "../types";
+import { blobMaskIndex, getAtlasRevision, loadAtlas, preloadAtlases, type SpriteAtlas } from "./spriteAtlas";
+import {
+  drawExpeditionLandmark,
+  drawFortressExterior,
+  expeditionOnMap,
+  FORTRESS_EXTERIOR_SPRITE,
+  fortressExitsOnMap,
+} from "./expeditionLandmarks";
 import { wardenAttackDirections, wardenStyleForRegion } from "../wardens";
+
+export type RegionBiome = "cinderwild" | "moonlit" | "starfall";
 
 export const TILE_SPRITE_KEY: Record<number, string> = {
   [T.GRASS]: "tile.grass",
@@ -34,6 +42,41 @@ export const TILE_SPRITE_KEY: Record<number, string> = {
   [T.INTERIOR_WALL]: "tile.interior_wall",
 };
 
+export const REGIONAL_TILE_SPRITE_KEY: Record<RegionBiome, Partial<Record<number, string>>> = {
+  cinderwild: {
+    [T.GRASS]: "tile.grass.cinderwild",
+    [T.DGRASS]: "tile.dgrass.cinderwild",
+    [T.PATH]: "tile.path.cinderwild",
+    [T.TREE]: "tile.tree.cinderwild",
+    [T.ROCK]: "tile.rock.cinderwild",
+    [T.TALLGRASS]: "tile.tallgrass.cinderwild",
+  },
+  moonlit: {
+    [T.GRASS]: "tile.grass.moonlit",
+    [T.DGRASS]: "tile.dgrass.moonlit",
+    [T.PATH]: "tile.path.moonlit",
+    [T.TREE]: "tile.tree.moonlit",
+    [T.ROCK]: "tile.rock.moonlit",
+    [T.TALLGRASS]: "tile.tallgrass.moonlit",
+  },
+  starfall: {
+    [T.GRASS]: "tile.grass.starfall",
+    [T.DGRASS]: "tile.dgrass.starfall",
+    [T.PATH]: "tile.path.starfall",
+    [T.TREE]: "tile.tree.starfall",
+    [T.ROCK]: "tile.rock.starfall",
+    [T.TALLGRASS]: "tile.tallgrass.starfall",
+  },
+};
+
+export function regionBiomeForMap(map?: Pick<MapData, "regionName"> | null): RegionBiome | null {
+  const name = map?.regionName?.toLowerCase() ?? "";
+  if (name.includes("cinderwild")) return "cinderwild";
+  if (name.includes("moonlit coast")) return "moonlit";
+  if (name.includes("starfall moors")) return "starfall";
+  return null;
+}
+
 /**
  * World-space scale for the exploration camera. Keep this shared with the
  * engine's virtual viewport calculations: a zoomed renderer that still culls
@@ -47,6 +90,10 @@ export const ENTITY_SPRITE_KEY: Record<string, string> = {
   sentinel: "enemy.sentinel",
   adept: "enemy.adept",
   boss: "enemy.boss",
+  "warden.old-lands": "enemy.warden.old-lands",
+  "warden.cinderwild": "enemy.warden.cinderwild",
+  "warden.moonlit-coast": "enemy.warden.moonlit-coast",
+  "warden.starfall-moors": "enemy.warden.starfall-moors",
   shard: "item.shard",
   potion: "item.potion",
   campfire: "prop.campfire",
@@ -59,18 +106,49 @@ export const ENTITY_SPRITE_KEY: Record<string, string> = {
   "house.cinder": "prop.house.cinder",
   "house.coastal": "prop.house.coastal",
   "house.moor": "prop.house.moor",
+  "civic.hall": "prop.civic.hall",
+  "civic.smithy": "prop.civic.smithy",
+  "civic.shrine": "prop.civic.shrine",
+  "civic.watchtower": "prop.civic.watchtower",
+  ...FORTRESS_EXTERIOR_SPRITE,
 };
 
-const tileAtlases = new Map<number, SpriteAtlas>();
+const TOWN_BUILDING_SPRITE: Readonly<Record<string, string>> = {
+  "ilyarael-township-a": "civic.hall",
+  "ilyarael-township-b": "house.oldstone",
+  "ilyarael-township-c": "civic.smithy",
+  "cinder-haven-a": "civic.smithy",
+  "cinder-haven-b": "house.cinder",
+  "cinder-haven-c": "civic.watchtower",
+  "oarsmans-bight-a": "civic.hall",
+  "oarsmans-bight-b": "house.coastal",
+  "oarsmans-bight-c": "civic.watchtower",
+  "crater-watch-a": "civic.watchtower",
+  "crater-watch-b": "house.moor",
+  "crater-watch-c": "civic.shrine",
+};
+
+function buildingSpriteKey(building: TownBuildingData): string {
+  return TOWN_BUILDING_SPRITE[building.id] ?? `house.${building.theme}`;
+}
+
+function wardenSpriteKeyForRegion(regionId?: string): string {
+  if (regionId === "cinderwild" || regionId?.startsWith("fortress.cinderwild-")) return "warden.cinderwild";
+  if (regionId === "moonlit-coast" || regionId?.startsWith("fortress.moonlit-")) return "warden.moonlit-coast";
+  if (regionId === "starfall-moors" || regionId?.startsWith("fortress.starfall-")) return "warden.starfall-moors";
+  return "warden.old-lands";
+}
+
+const tileAtlases = new Map<string, SpriteAtlas>();
 const entityAtlases = new Map<string, SpriteAtlas>();
 
-function tileAtlasFor(tile: number): SpriteAtlas | null {
-  const key = TILE_SPRITE_KEY[tile];
+function tileAtlasFor(tile: number, biome?: RegionBiome | null): SpriteAtlas | null {
+  const key = (biome ? REGIONAL_TILE_SPRITE_KEY[biome][tile] : undefined) ?? TILE_SPRITE_KEY[tile];
   if (!key) return null;
-  let atlas = tileAtlases.get(tile);
+  let atlas = tileAtlases.get(key);
   if (!atlas) {
     atlas = loadAtlas(key);
-    tileAtlases.set(tile, atlas);
+    tileAtlases.set(key, atlas);
   }
   return atlas;
 }
@@ -101,10 +179,15 @@ export function preloadGameSprites(): Promise<void> {
     "npc.hermit-cassian",
     "npc.mina-drift-child",
   ];
+  const regionalTileKeys = Object.values(REGIONAL_TILE_SPRITE_KEY).flatMap((table) => Object.values(table)) as string[];
   return preloadAtlases([
-    ...Object.values(TILE_SPRITE_KEY),
-    ...new Set(Object.values(ENTITY_SPRITE_KEY)),
-    ...npcKeys,
+    ...new Set([
+      ...Object.values(TILE_SPRITE_KEY),
+      ...regionalTileKeys,
+      ...Object.values(ENTITY_SPRITE_KEY),
+      ...Object.values(FORTRESS_EXTERIOR_SPRITE),
+      ...npcKeys,
+    ]),
   ]);
 }
 
@@ -115,9 +198,53 @@ function toSpriteDirection(direction: string): string {
 }
 
 function enemySpriteDirection(enemy: EnemyState): string {
-  if (Math.abs(enemy.vx) > Math.abs(enemy.vy)) return enemy.vx < 0 ? "left" : "right";
+  if (Math.abs(enemy.vx) > Math.abs(enemy.vy) && Math.abs(enemy.vx) > 0.1) return enemy.vx < 0 ? "left" : "right";
   if (Math.abs(enemy.vy) > 0.1) return enemy.vy < 0 ? "up" : "down";
+  if (enemy.telegraph && (Math.abs(enemy.lungeVx) > 0.05 || Math.abs(enemy.lungeVy) > 0.05)) {
+    if (Math.abs(enemy.lungeVx) > Math.abs(enemy.lungeVy)) return enemy.lungeVx < 0 ? "left" : "right";
+    return enemy.lungeVy < 0 ? "up" : "down";
+  }
   return "down";
+}
+
+function enemyAnimSelection(enemy: EnemyState, deathDuration = 0.45): { action: string; animT: number; clampProgress?: number } {
+  if (enemy.dying > 0) {
+    const progress = Math.max(0, Math.min(1, 1 - enemy.dying / deathDuration));
+    return { action: "death", animT: 0, clampProgress: progress };
+  }
+  if (enemy.hurt > 0) {
+    return { action: "hurt", animT: enemy.t * 1.25 };
+  }
+  if (enemy.telegraph === "spell" || enemy.telegraph === "burst") {
+    return { action: "cast", animT: enemy.t * 1.2 };
+  }
+  if (enemy.telegraph === "lunge" || enemy.lungeTimer > 0) {
+    return { action: "attack", animT: enemy.t * 1.4 };
+  }
+  if (Math.hypot(enemy.vx, enemy.vy) < 4) {
+    return { action: "idle", animT: enemy.t * 0.45 };
+  }
+  return { action: "walk", animT: enemy.t };
+}
+
+const hurtScratches = new WeakMap<CanvasRenderingContext2D, { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } | false>();
+
+function getHurtScratch(mainCtx: CanvasRenderingContext2D): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } | null {
+  const existing = hurtScratches.get(mainCtx);
+  if (existing !== undefined) return existing || null;
+  if (typeof document === "undefined") return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = 64;
+  canvas.height = 64;
+  const scratchCtx = canvas.getContext("2d");
+  if (!scratchCtx || scratchCtx === mainCtx) {
+    hurtScratches.set(mainCtx, false);
+    return null;
+  }
+  scratchCtx.imageSmoothingEnabled = false;
+  const entry = { canvas, ctx: scratchCtx };
+  hurtScratches.set(mainCtx, entry);
+  return entry;
 }
 
 function drawEntitySprite(
@@ -127,21 +254,40 @@ function drawEntitySprite(
   action: string,
   animT: number,
   drawSize: number,
+  clampProgress?: number,
+  hurtFlash = false,
 ): boolean {
   const atlas = entityAtlasFor(key);
   if (!atlas.ready || !atlas.image) return false;
-  const frame = atlas.getFrame(toSpriteDirection(direction), action, Math.floor(animT * 8));
+  const frameCount = atlas.manifest?.actions?.[action]?.frames ?? 4;
+  const frameIndex = clampProgress !== undefined
+    ? Math.min(frameCount - 1, Math.max(0, Math.floor(clampProgress * frameCount)))
+    : Math.floor(animT * 8);
+  const frame = atlas.getFrame(toSpriteDirection(direction), action, frameIndex);
   if (!frame) return false;
   const size = Math.round(drawSize);
   const half = Math.round(size / 2);
-  const smoothing = ctx.imageSmoothingEnabled;
   ctx.imageSmoothingEnabled = false;
+  if (hurtFlash && frame.sw <= 64 && frame.sh <= 64) {
+    const scratch = getHurtScratch(ctx);
+    if (scratch) {
+      const sctx = scratch.ctx;
+      sctx.globalCompositeOperation = "source-over";
+      sctx.clearRect(0, 0, frame.sw, frame.sh);
+      sctx.drawImage(atlas.image, frame.sx, frame.sy, frame.sw, frame.sh, 0, 0, frame.sw, frame.sh);
+      sctx.globalCompositeOperation = "source-atop";
+      sctx.fillStyle = "rgba(255,244,232,0.62)";
+      sctx.fillRect(0, 0, frame.sw, frame.sh);
+      sctx.globalCompositeOperation = "source-over";
+      ctx.drawImage(scratch.canvas, 0, 0, frame.sw, frame.sh, -half, -half, size, size);
+      return true;
+    }
+  }
   ctx.drawImage(
     atlas.image,
     frame.sx, frame.sy, frame.sw, frame.sh,
     -half, -half, size, size,
   );
-  ctx.imageSmoothingEnabled = smoothing;
   return true;
 }
 
@@ -158,14 +304,12 @@ function drawStaticSprite(
   if (!frame) return false;
   const size = Math.round(drawSize);
   const half = Math.round(size / 2);
-  const smoothing = ctx.imageSmoothingEnabled;
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(
     atlas.image,
     frame.sx, frame.sy, frame.sw, frame.sh,
     Math.round(x) - half, Math.round(y) - half, size, size,
   );
-  ctx.imageSmoothingEnabled = smoothing;
   return true;
 }
 
@@ -182,10 +326,8 @@ function drawStaticSpriteBox(
   if (!atlas.ready || !atlas.image) return false;
   const frame = atlas.getStaticFrame();
   if (!frame) return false;
-  const smoothing = ctx.imageSmoothingEnabled;
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(atlas.image, frame.sx, frame.sy, frame.sw, frame.sh, x, y, width, height);
-  ctx.imageSmoothingEnabled = smoothing;
   return true;
 }
 
@@ -259,11 +401,12 @@ const CHUNK_GUARD = 1;
  * that budget; repeatedly evicting visible chunks would rasterize them on
  * every frame even with a stationary camera.
  */
-const MAX_CACHED_CHUNKS = 32;
+const MAX_CACHED_CHUNKS = 48;
 
 interface RenderChunk {
   ground: HTMLCanvasElement;
-  overlay: HTMLCanvasElement;
+  overlay: HTMLCanvasElement | null;
+  overlayRows: number[];
   lastUsed: number;
 }
 
@@ -301,11 +444,13 @@ export class TileChunkRenderer {
     for (const [cx, cy] of this.chunkRange(cam, viewW, viewH, 0)) {
       const chunk = this.get(cx, cy);
       chunk.lastUsed = this.frame;
-      for (let row = 0; row < CHUNK_TILES; row++) {
+      const overlay = chunk.overlay;
+      if (!overlay || chunk.overlayRows.length === 0) continue;
+      for (const row of chunk.overlayRows) {
         const y = cy * CHUNK_PIXELS + row * TILE;
         if (y + TILE < cam.y || y > cam.y + viewH) continue;
         objects.push({ y: y + TILE, draw: () => {
-          ctx.drawImage(chunk.overlay, 0, row * TILE, CHUNK_PIXELS, TILE,
+          ctx.drawImage(overlay, 0, row * TILE, CHUNK_PIXELS, TILE,
             cx * CHUNK_PIXELS, y, CHUNK_PIXELS, TILE);
         } });
       }
@@ -343,32 +488,56 @@ export class TileChunkRenderer {
     const key = `${cx},${cy}`;
     const cached = this.chunks.get(key);
     if (cached) return cached;
-    const ground = document.createElement("canvas");
-    const overlay = document.createElement("canvas");
-    ground.width = overlay.width = CHUNK_PIXELS;
-    ground.height = overlay.height = CHUNK_PIXELS;
-    const groundCtx = ground.getContext("2d");
-    const overlayCtx = overlay.getContext("2d");
-    if (!groundCtx || !overlayCtx) throw new Error("Failed to create tile chunk canvas");
     const startX = cx * CHUNK_TILES;
     const startY = cy * CHUNK_TILES;
+    const overlayRows: number[] = [];
+    for (let y = 0; y < CHUNK_TILES; y++) {
+      const ty = startY + y;
+      if (ty >= this.map.height) continue;
+      for (let x = 0; x < CHUNK_TILES; x++) {
+        const tx = startX + x;
+        if (tx >= this.map.width) continue;
+        if (tileDefinition(this.map.tiles[ty * this.map.width + tx]).tall) {
+          overlayRows.push(y);
+          break;
+        }
+      }
+    }
+    const ground = document.createElement("canvas");
+    ground.width = CHUNK_PIXELS;
+    ground.height = CHUNK_PIXELS;
+    const groundCtx = ground.getContext("2d");
+    if (!groundCtx) throw new Error("Failed to create tile chunk canvas");
+    groundCtx.imageSmoothingEnabled = false;
+    let overlay: HTMLCanvasElement | null = null;
+    let overlayCtx: CanvasRenderingContext2D | null = null;
+    if (overlayRows.length > 0) {
+      overlay = document.createElement("canvas");
+      overlay.width = CHUNK_PIXELS;
+      overlay.height = CHUNK_PIXELS;
+      overlayCtx = overlay.getContext("2d");
+      if (!overlayCtx) throw new Error("Failed to create tile overlay canvas");
+      overlayCtx.imageSmoothingEnabled = false;
+    }
+    const biome = regionBiomeForMap(this.map);
     for (let y = 0; y < CHUNK_TILES; y++) {
       for (let x = 0; x < CHUNK_TILES; x++) {
         const tx = startX + x;
         const ty = startY + y;
         if (tx >= this.map.width || ty >= this.map.height) continue;
         const tile = this.map.tiles[ty * this.map.width + tx];
-        const mask = this.wangMask(tx, ty, tile);
-        if (tileDefinition(tile).tall) {
+        const mask = this.wangMask(tx, ty, tile, biome);
+        if (tileDefinition(tile).tall && overlayCtx) {
           const floor = tile === T.RWALL || tile === T.INTERIOR_WALL ? T.RFLOOR : T.GRASS;
-          drawTile(groundCtx, floor, x * TILE, y * TILE, tx * TILE, ty * TILE);
-          drawTile(overlayCtx, tile, x * TILE, y * TILE, tx * TILE, ty * TILE, mask);
+          const floorMask = this.wangMask(tx, ty, floor, biome);
+          drawTile(groundCtx, floor, x * TILE, y * TILE, tx * TILE, ty * TILE, floorMask, biome);
+          drawTile(overlayCtx, tile, x * TILE, y * TILE, tx * TILE, ty * TILE, mask, biome);
         } else {
-          drawTile(groundCtx, tile, x * TILE, y * TILE, tx * TILE, ty * TILE, mask);
+          drawTile(groundCtx, tile, x * TILE, y * TILE, tx * TILE, ty * TILE, mask, biome);
         }
       }
     }
-    const made = { ground, overlay, lastUsed: this.frame };
+    const made = { ground, overlay, overlayRows, lastUsed: this.frame };
     this.chunks.set(key, made);
     return made;
   }
@@ -382,8 +551,10 @@ export class TileChunkRenderer {
   private static release(chunk: RenderChunk) {
     chunk.ground.width = 0;
     chunk.ground.height = 0;
-    chunk.overlay.width = 0;
-    chunk.overlay.height = 0;
+    if (chunk.overlay) {
+      chunk.overlay.width = 0;
+      chunk.overlay.height = 0;
+    }
   }
 
   private evict(limit: number) {
@@ -407,18 +578,36 @@ export class TileChunkRenderer {
     this.chunks.clear();
   }
 
-  private wangMask(x: number, y: number, tile: number): number {
-    const atlas = tileAtlasFor(tile);
-    const autotile = atlas?.manifest?.autotile ?? (tile === T.GRASS || tile === T.WATER);
+  private wangMask(x: number, y: number, tile: number, biome?: RegionBiome | null): number {
+    const atlas = tileAtlasFor(tile, biome);
+    const autotile = atlas?.manifest?.autotile ?? (tile === T.GRASS || tile === T.WATER || tile === T.PATH || tile === T.RWALL || tile === T.SAND);
     if (!autotile) return 0;
+    const isGrassCompat = (other: number) =>
+      other === T.GRASS || other === T.DGRASS || other === T.TALLGRASS
+      || other === T.FLOWER || other === T.TREE || other === T.ROCK
+      || other === T.GRAVE || other === T.BONES || other === T.CRYSTAL;
     const same = (xx: number, yy: number) => {
       if (xx < 0 || yy < 0 || xx >= this.map.width || yy >= this.map.height) return true;
-      return this.map.tiles[yy * this.map.width + xx] === tile;
+      const neighbor = this.map.tiles[yy * this.map.width + xx];
+      if (neighbor === tile) return true;
+      if (tile === T.GRASS) return isGrassCompat(neighbor);
+      if (tile === T.WATER) return neighbor === T.BRIDGE;
+      if (tile === T.PATH) return neighbor === T.BRIDGE;
+      return false;
     };
-    return (same(x, y - 1) ? 1 : 0)
+    const cardinal = (same(x, y - 1) ? 1 : 0)
       | (same(x + 1, y) ? 2 : 0)
       | (same(x, y + 1) ? 4 : 0)
       | (same(x - 1, y) ? 8 : 0);
+    if (atlas?.manifest?.masks === 47 || atlas?.manifest?.autotileMode === "blob47") {
+      const raw8 = cardinal
+        | (same(x + 1, y - 1) ? 16 : 0)
+        | (same(x + 1, y + 1) ? 32 : 0)
+        | (same(x - 1, y + 1) ? 64 : 0)
+        | (same(x - 1, y - 1) ? 128 : 0);
+      return blobMaskIndex(raw8);
+    }
+    return cardinal;
   }
 }
 
@@ -431,9 +620,10 @@ export function drawTile(
   seedX = x,
   seedY = y,
   wangMask = 0,
+  biome?: RegionBiome | null,
 ) {
   const s = TILE;
-  const atlas = tileAtlasFor(t);
+  const atlas = tileAtlasFor(t, biome);
   if (atlas?.ready && atlas.image) {
     const autotile = atlas.manifest?.autotile ?? (t === T.GRASS || t === T.WATER);
     const variant = Math.floor(hash2(seedX, seedY) * 4);
@@ -714,10 +904,16 @@ function stage(name: string) {
   if (__stageHook.fn) __stageHook.fn(name);
 }
 
+function inView(g: RenderState, x: number, y: number, margin: number): boolean {
+  return x >= g.cam.x - margin && x <= g.cam.x + g.viewW + margin
+    && y >= g.cam.y - margin && y <= g.cam.y + g.viewH + margin;
+}
+
 export function renderGame(g: RenderState) {
   const ctx = g.ctx;
   stage("pre");
   ctx.setTransform(g.dpr, 0, 0, g.dpr, 0, 0);
+  ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, g.cssW, g.cssH);
 
   let sx = 0;
@@ -759,7 +955,7 @@ export function renderGame(g: RenderState) {
   // the navigation system.
 }
 
-/** Complete cottage props replace the old repeated-wall settlement silhouettes. */
+/** Complete cottage and civic structure props replace repeated-wall silhouettes. */
 function drawTownBuildings(g: RenderState, ctx: CanvasRenderingContext2D, objects: WorldObject[]) {
   for (const town of g.map.towns) {
     for (const building of town.buildings) {
@@ -767,8 +963,12 @@ function drawTownBuildings(g: RenderState, ctx: CanvasRenderingContext2D, object
       // bottom centre. Anchor the 96px frontage from that known door tile.
       const x = (building.x - 1) * TILE;
       const y = (building.y - 2) * TILE;
+      if (!inView(g, x + TILE * 1.5, y + TILE * 1.5, 160)) continue;
+      const spriteKey = buildingSpriteKey(building);
       objects.push({ y: y + TILE * 3, draw: () => {
-        drawStaticSpriteBox(ctx, `house.${building.theme}`, x, y, TILE * 3, TILE * 3);
+        if (!drawStaticSpriteBox(ctx, spriteKey, x, y, TILE * 3, TILE * 3)) {
+          drawStaticSpriteBox(ctx, `house.${building.theme}`, x, y, TILE * 3, TILE * 3);
+        }
       } });
     }
   }
@@ -776,6 +976,7 @@ function drawTownBuildings(g: RenderState, ctx: CanvasRenderingContext2D, object
 
 function drawSettlementState(g: RenderState, ctx: CanvasRenderingContext2D, objects: WorldObject[]) {
   for (const town of g.map.towns) {
+    if (!inView(g, town.x, town.y, 192)) continue;
     const state = g.settlementStates.find((entry) => entry.townId === town.id);
     if (!state) continue;
 
@@ -813,7 +1014,7 @@ function drawSettlementState(g: RenderState, ctx: CanvasRenderingContext2D, obje
       objects.push({ y: y + 10, draw: () => {
         ctx.save();
         ctx.translate(x, y);
-        if (!drawEntitySprite(ctx, "refugee", "front", "walk", g.time * 0.3 + index, 28)) {
+        if (!drawEntitySprite(ctx, "refugee", "front", "idle", g.time * 0.35 + index * 0.3, 28)) {
           ctx.fillStyle = "#c9d6cf";
           ctx.beginPath();
           ctx.arc(0, -7, 3, 0, Math.PI * 2);
@@ -849,7 +1050,7 @@ function drawSettlementState(g: RenderState, ctx: CanvasRenderingContext2D, obje
       objects.push({ y: y + 10, draw: () => {
         ctx.save();
         ctx.translate(x, y);
-        if (!drawEntitySprite(ctx, "guard", "front", "walk", g.time * 0.35, 32)) {
+        if (!drawEntitySprite(ctx, "guard", "front", "idle", g.time * 0.35, 32)) {
           ctx.fillStyle = "#8b98a0";
           ctx.beginPath();
           ctx.arc(0, -12, 5, 0, Math.PI * 2);
@@ -928,7 +1129,7 @@ export function drawDarkness(g: RenderState, ctx: CanvasRenderingContext2D) {
 }
 
 function drawWardBarrier(g: RenderState, ctx: CanvasRenderingContext2D) {
-  if (g.wardUnlocked) return;
+  if (g.wardUnlocked || g.map.wardTiles.length === 0) return;
   const W = g.map.width;
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
@@ -937,6 +1138,7 @@ function drawWardBarrier(g: RenderState, ctx: CanvasRenderingContext2D) {
     const ty = Math.floor(wi / W);
     const x = tx * TILE;
     const y = ty * TILE;
+    if (!inView(g, x + TILE / 2, y + TILE / 2, 64)) continue;
     const pulse = 0.5 + 0.5 * Math.sin(g.time * 3 + tx);
     const grad = ctx.createLinearGradient(x, y, x, y + TILE);
     grad.addColorStop(0, "rgba(150,80,255,0)");
@@ -1046,7 +1248,7 @@ function drawSortedWorldObjects(g: RenderState, ctx: CanvasRenderingContext2D) {
   drawTownBuildings(g, ctx, objects);
   drawSettlementState(g, ctx, objects);
   const record = g.lamplightRecord;
-  if (record) objects.push({ y: record.y * TILE + TILE / 2, draw: () => {
+  if (record && inView(g, record.x * TILE + TILE / 2, record.y * TILE + TILE / 2, 96)) objects.push({ y: record.y * TILE + TILE / 2, draw: () => {
     const x = record.x * TILE + TILE / 2, y = record.y * TILE + TILE / 2;
     const revealed = g.revealedLamplightRecord === record;
     ctx.save();
@@ -1066,17 +1268,29 @@ function drawSortedWorldObjects(g: RenderState, ctx: CanvasRenderingContext2D) {
     ctx.restore();
   } });
   const expedition = expeditionOnMap(g.map);
-  if (expedition) objects.push({ y: expedition.y * TILE + TILE / 2, draw: () => drawExpeditionLandmark(ctx, expedition, g.time) });
+  if (expedition && inView(g, expedition.x * TILE + TILE / 2, expedition.y * TILE + TILE / 2, 144)) {
+    objects.push({ y: expedition.y * TILE + TILE / 2, draw: () => drawExpeditionLandmark(ctx, expedition, g.time) });
+  }
+  for (const exit of fortressExitsOnMap(g.map)) {
+    if (!inView(g, exit.x * TILE + TILE / 2, exit.y * TILE, 160)) continue;
+    const fortressKey = FORTRESS_EXTERIOR_SPRITE[exit.targetRegion];
+    objects.push({
+      y: exit.y * TILE + TILE * 0.45,
+      draw: () => drawFortressExterior(ctx, exit, fortressKey ? entityAtlasFor(fortressKey) : null, g.time),
+    });
+  }
   // Braziers are the light sources in the fortresses, and the darkness pass
   // already punches a hole for every entry in map.lights. They were preloaded
   // and keyed but never actually drawn, so every fortress was lit by an
   // invisible fire. Drawn here, in the depth-sorted pass, so a warden standing
   // behind one is occluded by it.
   for (const light of g.map.lights) {
+    if (!inView(g, light.x, light.y, 96)) continue;
     objects.push({ y: light.y, draw: () => drawBrazier(ctx, light.x, light.y) });
   }
   for (const sign of g.map.signs) {
     const x = sign.x * TILE + TILE / 2, y = sign.y * TILE + TILE / 2;
+    if (!inView(g, x, y, 64)) continue;
     objects.push({ y, draw: () => {
       const ix = Math.round(x);
       const iy = Math.round(y);
@@ -1094,21 +1308,30 @@ function drawSortedWorldObjects(g: RenderState, ctx: CanvasRenderingContext2D) {
       ctx.restore();
     } });
   }
-  for (const fire of g.map.campfires) objects.push({ y: fire.y, draw: () => drawCampfire(g, ctx, fire.x, fire.y) });
+  for (const fire of g.map.campfires) {
+    if (!inView(g, fire.x, fire.y, 96)) continue;
+    objects.push({ y: fire.y, draw: () => drawCampfire(g, ctx, fire.x, fire.y) });
+  }
   for (const npc of g.map.npcs) {
+    if (!inView(g, npc.x, npc.y, 96)) continue;
     objects.push({
       y: npc.y + 10,
       draw: () => drawNpc(ctx, npc.x, npc.y, npc.color, npc.role, npc.portrait?.id, g.time, npc.name, g.player),
     });
   }
-  if (g.map.npc.x > 0 && g.map.npc.y > 0) {
+  if (g.map.npc.x > 0 && g.map.npc.y > 0 && inView(g, g.map.npc.x, g.map.npc.y, 96)) {
     objects.push({
       y: g.map.npc.y + 10,
       draw: () => drawNpc(ctx, g.map.npc.x, g.map.npc.y, "#9ff7e6", "lore", "orithel-the-last-watcher", g.time, "Orithel", g.player),
     });
   }
-  for (const item of g.items) if (!item.taken) objects.push({ y: item.y, draw: () => drawItem(g, ctx, item) });
-  for (const enemy of g.enemies) objects.push({ y: enemy.y + enemy.r, draw: () => drawEnemy(ctx, enemy, g.world?.regionId) });
+  for (const item of g.items) {
+    if (!item.taken && inView(g, item.x, item.y, 64)) objects.push({ y: item.y, draw: () => drawItem(g, ctx, item) });
+  }
+  for (const enemy of g.enemies) {
+    if (!inView(g, enemy.x, enemy.y, 240)) continue;
+    objects.push({ y: enemy.y + enemy.r, draw: () => drawEnemy(ctx, enemy, g.world?.regionId) });
+  }
   objects.push({ y: g.player.y + g.player.r, draw: () => drawPlayer(g, ctx) });
   objects.sort((a, b) => a.y - b.y);
   for (const object of objects) object.draw();
@@ -1229,7 +1452,7 @@ export function drawNpc(
       ctx.restore();
     }
 
-    if (drawEntitySprite(ctx, npcKey, facingDir, "walk", time * 0.5, 32)) {
+    if (drawEntitySprite(ctx, npcKey, facingDir, "idle", time * 0.45, 32)) {
       ctx.restore();
       return;
     }
@@ -1861,7 +2084,7 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: EnemyState, regionId?: stri
   ctx.fill();
   ctx.translate(ex, ey);
   if (e.type === "wraith") drawWraith(ctx, e);
-  else if (e.type === "sentinel") drawSentinel(ctx, e);
+  else if (e.type === "sentinel") drawSentinel(ctx, e, regionId);
   else if (e.type === "adept") drawAdept(ctx, e);
   if (e.elite && e.alive) {
     ctx.strokeStyle = "#ffd36b";
@@ -1934,12 +2157,10 @@ function drawWraith(ctx: CanvasRenderingContext2D, e: EnemyState) {
   ctx.arc(0, 0, e.r * 1.6, 0, Math.PI * 2);
   ctx.fill();
   ctx.globalCompositeOperation = "source-over";
-  const oldFilter = ctx.filter;
-  if (e.hurt > 0) ctx.filter = "brightness(2.2) saturate(0.2)";
+  const anim = enemyAnimSelection(e);
   const spriteDrawn = drawEntitySprite(
-    ctx, "wraith", enemySpriteDirection(e), e.telegraph ? "attack" : "walk", e.t, 32,
+    ctx, "wraith", enemySpriteDirection(e), anim.action, anim.animT, 32, anim.clampProgress, e.hurt > 0,
   );
-  ctx.filter = oldFilter;
   if (spriteDrawn) return;
   ctx.fillStyle = e.hurt > 0 ? "#ffffff" : "rgba(150,225,180,0.6)";
   ctx.beginPath();
@@ -1958,13 +2179,15 @@ function drawWraith(ctx: CanvasRenderingContext2D, e: EnemyState) {
   ctx.fill();
 }
 
-function drawSentinel(ctx: CanvasRenderingContext2D, e: EnemyState) {
-  const oldFilter = ctx.filter;
-  if (e.hurt > 0) ctx.filter = "brightness(2.2) saturate(0.2)";
+function drawSentinel(ctx: CanvasRenderingContext2D, e: EnemyState, regionId?: string) {
+  const anim = enemyAnimSelection(e);
+  const spriteKey = e.elite ? wardenSpriteKeyForRegion(regionId) : "sentinel";
+  const drawSize = e.elite ? 40 : 32;
   const spriteDrawn = drawEntitySprite(
-    ctx, "sentinel", enemySpriteDirection(e), e.telegraph ? "attack" : "walk", e.t, 32,
-  );
-  ctx.filter = oldFilter;
+    ctx, spriteKey, enemySpriteDirection(e), anim.action, anim.animT, drawSize, anim.clampProgress, e.hurt > 0,
+  ) || (e.elite && drawEntitySprite(
+    ctx, "sentinel", enemySpriteDirection(e), anim.action, anim.animT, 32, anim.clampProgress, e.hurt > 0,
+  ));
   if (spriteDrawn) return;
   const bob = Math.sin(e.t * 6) * 1.5;
   ctx.fillStyle = "#20242c";
@@ -2010,12 +2233,10 @@ function drawSentinel(ctx: CanvasRenderingContext2D, e: EnemyState) {
 
 function drawAdept(ctx: CanvasRenderingContext2D, e: EnemyState) {
   ctx.translate(0, Math.round(Math.sin(e.t * 3) * 2));
-  const oldFilter = ctx.filter;
-  if (e.hurt > 0) ctx.filter = "brightness(2.2) saturate(0.2)";
+  const anim = enemyAnimSelection(e);
   const spriteDrawn = drawEntitySprite(
-    ctx, "adept", enemySpriteDirection(e), e.telegraph ? "attack" : "walk", e.t, 32,
+    ctx, "adept", enemySpriteDirection(e), anim.action, anim.animT, 32, anim.clampProgress, e.hurt > 0,
   );
-  ctx.filter = oldFilter;
   if (spriteDrawn) return;
   ctx.fillStyle = e.hurt > 0 ? "#fff" : "#3a2150";
   ctx.beginPath();
@@ -2069,12 +2290,10 @@ function drawBoss(ctx: CanvasRenderingContext2D, e: EnemyState) {
   ctx.arc(0, 0, e.r * 1.8, 0, Math.PI * 2);
   ctx.fill();
   ctx.globalCompositeOperation = "source-over";
-  const oldFilter = ctx.filter;
-  if (e.hurt > 0) ctx.filter = "brightness(2.2) saturate(0.2)";
+  const anim = enemyAnimSelection(e, 1.5);
   const spriteDrawn = drawEntitySprite(
-    ctx, "boss", enemySpriteDirection(e), e.telegraph ? "attack" : "walk", e.t, 64,
+    ctx, "boss", enemySpriteDirection(e), anim.action, anim.animT, 64, anim.clampProgress, e.hurt > 0,
   );
-  ctx.filter = oldFilter;
   if (spriteDrawn) {
     ctx.restore();
     return;
@@ -2174,12 +2393,12 @@ function drawPlayer(g: RenderState, ctx: CanvasRenderingContext2D) {
       ctx.globalAlpha = a * 0.18;
       const [dx, dy] = DIRV[p.dashDir];
       ctx.translate(-dx * i * 6, -dy * i * 6);
-      drawKnightBody(ctx, p);
+      drawKnightBody(ctx, p, g.time);
       ctx.restore();
     }
   }
   if (p.invuln > 0 && !p.dashing && Math.floor(g.time * 20) % 2 === 0) ctx.globalAlpha = a * 0.5;
-  drawKnightBody(ctx, p);
+  drawKnightBody(ctx, p, g.time);
   if (g.lanternOn && p.dying <= 0) {
     ctx.save();
     ctx.globalAlpha = a;
@@ -2216,17 +2435,26 @@ function drawPlayer(g: RenderState, ctx: CanvasRenderingContext2D) {
   ctx.restore();
 }
 
-function drawKnightBody(ctx: CanvasRenderingContext2D, p: PlayerState) {
-  const oldFilter = ctx.filter;
-  if (p.hurtFlash > 0) ctx.filter = "brightness(2.2) saturate(0.15)";
-  // Fit all four generated attack frames into the shorter gameplay swing.
-  // Staying just below 0.5 s avoids wrapping the final frame back to zero.
-  const attackProgress = 1 - p.attackTimer / p.attackDur;
-  const animT = p.attacking ? Math.min(0.499, Math.max(0, attackProgress) * 0.5) : p.walkT / 16;
+function drawKnightBody(ctx: CanvasRenderingContext2D, p: PlayerState, time = 0) {
+  let action = "walk";
+  let animT = p.walkT / 16;
+  let clampProgress: number | undefined;
+  if (p.dying > 0) {
+    action = "death";
+    clampProgress = Math.max(0, Math.min(1, 1 - p.dying / 0.9));
+  } else if (p.attacking) {
+    action = "attack";
+    clampProgress = Math.max(0, Math.min(1, 1 - p.attackTimer / Math.max(0.001, p.attackDur)));
+  } else if (p.hurtFlash > 0.1) {
+    action = "hurt";
+    clampProgress = Math.max(0, Math.min(1, 1 - p.hurtFlash / 0.35));
+  } else if (p.walkT === 0 && !p.dashing) {
+    action = "idle";
+    animT = time * 0.45;
+  }
   const spriteDrawn = drawEntitySprite(
-    ctx, "player", p.dir, p.attacking ? "attack" : "walk", animT, 32,
+    ctx, "player", p.dir, action, animT, 32, clampProgress, p.hurtFlash > 0,
   );
-  ctx.filter = oldFilter;
   if (spriteDrawn) return;
   const hurt = p.hurtFlash > 0;
   ctx.fillStyle = hurt ? "#ffd0d0" : "#16323e";
@@ -2328,9 +2556,11 @@ function drawSword(ctx: CanvasRenderingContext2D, p: PlayerState) {
 }
 
 function drawProjectiles(g: RenderState, ctx: CanvasRenderingContext2D) {
+  if (g.projectiles.length === 0) return;
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
   for (const p of g.projectiles) {
+    if (!inView(g, p.x, p.y, 48)) continue;
     const gr = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 2.4);
     gr.addColorStop(0, p.color);
     gr.addColorStop(1, "rgba(0,0,0,0)");
@@ -2341,6 +2571,7 @@ function drawProjectiles(g: RenderState, ctx: CanvasRenderingContext2D) {
   }
   ctx.fillStyle = "#fff";
   for (const p of g.projectiles) {
+    if (!inView(g, p.x, p.y, 48)) continue;
     ctx.beginPath();
     ctx.arc(p.x, p.y, p.r * 0.5, 0, Math.PI * 2);
     ctx.fill();
@@ -2349,8 +2580,10 @@ function drawProjectiles(g: RenderState, ctx: CanvasRenderingContext2D) {
 }
 
 function drawParticles(g: RenderState, ctx: CanvasRenderingContext2D) {
+  if (g.particles.length === 0) return;
   ctx.save();
   for (const pr of g.particles) {
+    if (!inView(g, pr.x, pr.y, 48)) continue;
     const lf = pr.life / pr.max;
     ctx.globalAlpha = Math.max(0, Math.min(1, lf));
     if (pr.kind === "spark") {
@@ -2389,10 +2622,12 @@ function drawParticles(g: RenderState, ctx: CanvasRenderingContext2D) {
 }
 
 function drawTexts(g: RenderState, ctx: CanvasRenderingContext2D) {
+  if (g.texts.length === 0) return;
   ctx.save();
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   for (const t of g.texts) {
+    if (!inView(g, t.x, t.y, 64)) continue;
     ctx.globalAlpha = Math.max(0, Math.min(1, t.life / 1.1));
     ctx.font = `700 ${t.size}px 'EB Garamond', serif`;
     ctx.lineWidth = 3;
@@ -2405,6 +2640,44 @@ function drawTexts(g: RenderState, ctx: CanvasRenderingContext2D) {
   ctx.restore();
 }
 
+const lightingLuts = new WeakMap<CanvasRenderingContext2D, { vignette: HTMLCanvasElement; torch: HTMLCanvasElement } | false>();
+
+function getLightingLut(mainCtx: CanvasRenderingContext2D): { vignette: HTMLCanvasElement; torch: HTMLCanvasElement } | null {
+  const existing = lightingLuts.get(mainCtx);
+  if (existing !== undefined) return existing || null;
+  if (typeof document === "undefined") return null;
+  const vignette = document.createElement("canvas");
+  vignette.width = 512;
+  vignette.height = 512;
+  const vCtx = vignette.getContext("2d");
+  const torch = document.createElement("canvas");
+  torch.width = 128;
+  torch.height = 128;
+  const tCtx = torch.getContext("2d");
+  if (!vCtx || !tCtx || vCtx === mainCtx || tCtx === mainCtx) {
+    lightingLuts.set(mainCtx, false);
+    return null;
+  }
+
+  const gr = vCtx.createRadialGradient(256, 256, 0, 256, 256, 256);
+  gr.addColorStop(0, "rgba(6,8,16,0)");
+  gr.addColorStop(0.42, "rgba(7,9,18,0.1)");
+  gr.addColorStop(0.72, "rgba(4,6,14,0.55)");
+  gr.addColorStop(1, "rgba(2,3,9,0.9)");
+  vCtx.fillStyle = gr;
+  vCtx.fillRect(0, 0, 512, 512);
+
+  const tg = tCtx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  tg.addColorStop(0, "rgba(255,180,90,0.1)");
+  tg.addColorStop(1, "rgba(255,180,90,0)");
+  tCtx.fillStyle = tg;
+  tCtx.fillRect(0, 0, 128, 128);
+
+  const entry = { vignette, torch };
+  lightingLuts.set(mainCtx, entry);
+  return entry;
+}
+
 function drawLighting(g: RenderState) {
   const ctx = g.ctx;
   const p = g.player;
@@ -2412,11 +2685,32 @@ function drawLighting(g: RenderState) {
   const px = (p.x - g.cam.x + g.lastShakeX) * zoom;
   const py = (p.y - g.cam.y + g.lastShakeY) * zoom;
   const R = Math.max(g.viewW, g.viewH) * zoom * 0.62;
-  // On dark maps drawDarkness supplies the ambient occlusion; the vignette
-  // here would just re-darken the holes it punches, so skip it. The warm
-  // torch-glow pass below is additive ("lighter") and only brightens, so it
-  // cannot fight drawDarkness and stays on to give the player's own light a
-  // warm tint in a fortress too.
+  const lut = getLightingLut(ctx);
+  if (lut) {
+    if (!g.map.dark) {
+      const vx0 = Math.round(px - R);
+      const vy0 = Math.round(py - R);
+      const vw = Math.round(R * 2);
+      const vx1 = vx0 + vw;
+      const vy1 = vy0 + vw;
+      ctx.drawImage(lut.vignette, vx0, vy0, vw, vw);
+      ctx.fillStyle = "rgba(2,3,9,0.9)";
+      if (vy0 > 0) ctx.fillRect(0, 0, g.cssW, vy0);
+      if (vy1 < g.cssH) ctx.fillRect(0, vy1, g.cssW, g.cssH - vy1);
+      const midY0 = Math.max(0, vy0);
+      const midH = Math.min(g.cssH, vy1) - midY0;
+      if (midH > 0) {
+        if (vx0 > 0) ctx.fillRect(0, midY0, vx0, midH);
+        if (vx1 < g.cssW) ctx.fillRect(vx1, midY0, g.cssW - vx1, midH);
+      }
+    }
+    const tr = R * 0.32;
+    ctx.globalCompositeOperation = "lighter";
+    ctx.drawImage(lut.torch, px - tr, py - tr, tr * 2, tr * 2);
+    ctx.globalCompositeOperation = "source-over";
+    return;
+  }
+  // Fallback for headless test mocks that intercept canvas creation.
   if (!g.map.dark) {
     const gr = ctx.createRadialGradient(px, py, 0, px, py, R);
     gr.addColorStop(0, "rgba(6,8,16,0)");
@@ -2426,11 +2720,12 @@ function drawLighting(g: RenderState) {
     ctx.fillStyle = gr;
     ctx.fillRect(0, 0, g.cssW, g.cssH);
   }
+  const tr = R * 0.32;
   ctx.globalCompositeOperation = "lighter";
-  const tg = ctx.createRadialGradient(px, py, 0, px, py, R * 0.32);
+  const tg = ctx.createRadialGradient(px, py, 0, px, py, tr);
   tg.addColorStop(0, "rgba(255,180,90,0.1)");
   tg.addColorStop(1, "rgba(255,180,90,0)");
   ctx.fillStyle = tg;
-  ctx.fillRect(0, 0, g.cssW, g.cssH);
+  ctx.fillRect(Math.max(0, px - tr), Math.max(0, py - tr), tr * 2, tr * 2);
   ctx.globalCompositeOperation = "source-over";
 }

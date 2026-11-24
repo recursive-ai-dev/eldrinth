@@ -5,6 +5,7 @@ import { renderGame, TileChunkRenderer, type RenderState } from "./renderer";
 
 vi.mock("./spriteAtlas", () => ({
   getAtlasRevision: () => 0,
+  blobMaskIndex: () => 0,
   preloadAtlases: async () => undefined,
   loadAtlas: (key: string) => ({
     ready: true, image: key,

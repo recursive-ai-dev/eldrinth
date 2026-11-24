@@ -1,9 +1,14 @@
 {
   "actions": {
-    "walk": {
+    "idle": {
       "fps": 8,
       "frames": 4,
       "row": 0
+    },
+    "walk": {
+      "fps": 8,
+      "frames": 4,
+      "row": 1
     }
   },
   "cellH": 32,
@@ -16,23 +21,41 @@
   ],
   "kind": "human",
   "pixelHashes": {
+    "idle": [
+      "9d95676ff29277c2634bea7807ba8f7b",
+      "00b03f5c33bac1da8d818c18aa574d0a",
+      "9d95676ff29277c2634bea7807ba8f7b",
+      "6e3d2c93af63d1d585efbe96296770dc",
+      "754c229c2a15a070a72d0199de97aa4d",
+      "89149de52d0f83bcf77c01773295f164",
+      "754c229c2a15a070a72d0199de97aa4d",
+      "b653e4e406962360074db1126e9c9b0a",
+      "772888cd3dd81b26c61afbb5f4293972",
+      "eaa63b66aed073e01d76cf6b19cb3603",
+      "772888cd3dd81b26c61afbb5f4293972",
+      "1f7b9f18370200d6233de3d187504883",
+      "ea28ff343565897358649b24a59d5fb8",
+      "67826b806ab09dd46e5f35af222dc874",
+      "ea28ff343565897358649b24a59d5fb8",
+      "a3694f67714639f47abaaaca1be806da"
+    ],
     "walk": [
-      "3f35ed146b826711acc885e0eed8c8ff",
-      "af7dbac4c9a262a10edbddb72a960147",
-      "3f35ed146b826711acc885e0eed8c8ff",
-      "ce0b1ed941257cd931720aa46590922e",
-      "981aeddd243dcb687a5f63fc64343dc9",
-      "9b5212c19da4d9f61a0b3d1619de489d",
-      "981aeddd243dcb687a5f63fc64343dc9",
-      "f788eb7848b677da17cd43a924618294",
-      "ce41db65471a44b64e2a389cb8d58c54",
-      "f5dfa1b42e19316c7e839823a0d2a046",
-      "ce41db65471a44b64e2a389cb8d58c54",
-      "8bf287a347b71230b0ce271b9a039cc5",
-      "590f83d4ea031660debe0389e6398f1f",
-      "0a804dac86783f7dbe3b5955dd679a31",
-      "590f83d4ea031660debe0389e6398f1f",
-      "086d243141cc2693905b832428555e96"
+      "9d95676ff29277c2634bea7807ba8f7b",
+      "d94801962270ec5026099be961d5e660",
+      "9d95676ff29277c2634bea7807ba8f7b",
+      "d16748fc6e84d0b319b75f922d153c4d",
+      "754c229c2a15a070a72d0199de97aa4d",
+      "3b820295f2df7f5e3c87f1c33b7cf2a2",
+      "754c229c2a15a070a72d0199de97aa4d",
+      "e9b960533ed6dcfd2a53019337daa834",
+      "772888cd3dd81b26c61afbb5f4293972",
+      "c133cd239d6cc38dc0e5bdd8cd643b2f",
+      "772888cd3dd81b26c61afbb5f4293972",
+      "895f56d045860fd8102972c3ed262587",
+      "ea28ff343565897358649b24a59d5fb8",
+      "b76fa59ffb8b087b0bae528e3a82f324",
+      "ea28ff343565897358649b24a59d5fb8",
+      "f5c49268bdb3da37e6fc516c76894bbb"
     ]
   },
   "static": false

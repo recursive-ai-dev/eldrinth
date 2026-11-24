@@ -129,13 +129,32 @@ def op_onion(d: float, t: float) -> float:
     return abs(d) - t
 
 
-def _shade(base: RGB, highlight: RGB, shadow: RGB, nx: float, ny: float) -> RGB:
-    """3-band Lambert from a fake surface normal (guide §4.1, n·l)."""
+def _shade(
+    base: RGB,
+    highlight: RGB,
+    shadow: RGB,
+    nx: float,
+    ny: float,
+    x: int = 0,
+    y: int = 0,
+    dither: bool = False,
+    specular: Optional[RGB] = None,
+) -> RGB:
+    """3-band (or 4-band metallic + 2x2 dithered) Lambert from surface normal."""
     # light from top-left
     lambert = nx * -0.45 + ny * -0.70
-    if lambert > 0.28:
+    if specular is not None and lambert > 0.68:
+        return specular
+    if dither:
+        bayer2 = 0.0 if ((x ^ y) & 1) == 0 else 1.0
+        # subtle 2x2 Bayer checkerboard near band thresholds
+        bayer_shift = (((x & 1) + 2 * (y & 1)) * 0.25 - 0.375) * 0.14
+        lam = lambert + bayer_shift
+    else:
+        lam = lambert
+    if lam > 0.26:
         return highlight
-    if lambert < -0.18:
+    if lam < -0.18:
         return shadow
     return base
 
@@ -150,30 +169,128 @@ def rasterize_sdf(
     ink: Optional[RGB] = None,
     ink_width: float = 0.85,
     light: bool = True,
+    bounds: Optional[Tuple[int, int, int, int]] = None,
+    dither: bool = False,
+    specular: Optional[RGB] = None,
 ) -> None:
     """Hard-threshold ``sdf < 0`` into ``canvas``, with optional 3-band lighting."""
     hi = highlight or fill
     sh = shadow or fill
-    for y in range(canvas.h):
-        py = y + 0.5
-        for x in range(canvas.w):
-            px = x + 0.5
+    target = getattr(canvas, "_real", canvas)
+    s = float(getattr(canvas, "_scale", 1.0))
+    if bounds is not None:
+        x0 = max(0, math.floor(bounds[0] * s))
+        y0 = max(0, math.floor(bounds[1] * s))
+        x1 = min(target.w, math.ceil(bounds[2] * s))
+        y1 = min(target.h, math.ceil(bounds[3] * s))
+    else:
+        x0, y0, x1, y1 = 0, 0, target.w, target.h
+    e = 0.6
+    ink_t = ink_width / s
+    for y in range(y0, y1):
+        py = (y + 0.5) / s
+        for x in range(x0, x1):
+            px = (x + 0.5) / s
             d = sdf(px, py)
             if d >= 0.0:
                 continue
-            if ink is not None and d > -ink_width:
-                canvas.set(x, y, ink, tag=tag)
+            if ink is not None and d > -ink_t:
+                target.set(x, y, ink, tag=tag)
                 continue
             if light:
-                # finite-difference normal of the SDF
-                e = 0.6
                 nx = sdf(px + e, py) - sdf(px - e, py)
                 ny = sdf(px, py + e) - sdf(px, py - e)
                 nlen = math.hypot(nx, ny) or 1.0
-                col = _shade(fill, hi, sh, nx / nlen, ny / nlen)
+                col = _shade(fill, hi, sh, nx / nlen, ny / nlen, x, y, dither=dither, specular=specular)
             else:
                 col = fill
-            canvas.set(x, y, col, tag=tag)
+            target.set(x, y, col, tag=tag)
+
+
+def rasterize_capsule(
+    canvas: Canvas,
+    ax: float, ay: float, bx: float, by: float, r: float,
+    fill: RGB,
+    highlight: Optional[RGB] = None,
+    shadow: Optional[RGB] = None,
+    tag: int = TAG_BODY,
+    ink: Optional[RGB] = None,
+    ink_width: float = 0.85,
+    light: bool = True,
+    dither: bool = False,
+    specular: Optional[RGB] = None,
+) -> None:
+    """Tight-bounds fast capsule rasterizer."""
+    pad = math.ceil(r + 2.0)
+    bounds = (
+        math.floor(min(ax, bx) - pad),
+        math.floor(min(ay, by) - pad),
+        math.ceil(max(ax, bx) + pad) + 1,
+        math.ceil(max(ay, by) + pad) + 1,
+    )
+    rasterize_sdf(
+        canvas,
+        lambda px, py: sd_capsule(px, py, ax, ay, bx, by, r),
+        fill, highlight, shadow, tag, ink=ink, ink_width=ink_width,
+        light=light, bounds=bounds, dither=dither, specular=specular,
+    )
+
+
+def rasterize_ellipse(
+    canvas: Canvas,
+    cx: float, cy: float, rx: float, ry: float,
+    fill: RGB,
+    highlight: Optional[RGB] = None,
+    shadow: Optional[RGB] = None,
+    tag: int = TAG_BODY,
+    ink: Optional[RGB] = None,
+    ink_width: float = 0.85,
+    light: bool = True,
+    dither: bool = False,
+    specular: Optional[RGB] = None,
+) -> None:
+    """Tight-bounds fast ellipse rasterizer."""
+    m = min(rx, ry)
+    bounds = (
+        math.floor(cx - rx - 2.0),
+        math.floor(cy - ry - 2.0),
+        math.ceil(cx + rx + 2.0) + 1,
+        math.ceil(cy + ry + 2.0) + 1,
+    )
+    rasterize_sdf(
+        canvas,
+        lambda px, py: sd_ellipse(px, py, cx, cy, rx, ry) * m,
+        fill, highlight, shadow, tag, ink=ink, ink_width=ink_width,
+        light=light, bounds=bounds, dither=dither, specular=specular,
+    )
+
+
+def rasterize_round_box(
+    canvas: Canvas,
+    cx: float, cy: float, hx: float, hy: float, r: float,
+    fill: RGB,
+    highlight: Optional[RGB] = None,
+    shadow: Optional[RGB] = None,
+    tag: int = TAG_BODY,
+    ink: Optional[RGB] = None,
+    ink_width: float = 0.85,
+    light: bool = True,
+    dither: bool = False,
+    specular: Optional[RGB] = None,
+) -> None:
+    """Tight-bounds fast rounded-box rasterizer."""
+    bounds = (
+        math.floor(cx - hx - 2.0),
+        math.floor(cy - hy - 2.0),
+        math.ceil(cx + hx + 2.0) + 1,
+        math.ceil(cy + hy + 2.0) + 1,
+    )
+    rasterize_sdf(
+        canvas,
+        lambda px, py: sd_round_box(px, py, cx, cy, hx, hy, r),
+        fill, highlight, shadow, tag, ink=ink, ink_width=ink_width,
+        light=light, bounds=bounds, dither=dither, specular=specular,
+    )
 
 
 def sdf_band_material(d: float) -> str:

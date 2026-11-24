@@ -34,6 +34,7 @@ TAG_FLOOR = 10
 TAG_WALL = 11
 TAG_HIGHLIGHT = 12
 TAG_SHADOW = 13
+TAG_FLOW = 14
 
 
 def _rgba(c) -> RGBA:
@@ -190,3 +191,41 @@ class Canvas:
 
     def tobytes(self) -> bytes:
         return self.to_pil().tobytes()
+
+
+class ScaledCanvas:
+    """Virtual coordinate proxy mapping 32×32 logical units to high-res ``Canvas``."""
+
+    def __init__(self, real: Canvas, virtual_size: int = 32):
+        self._real = real
+        self._scale = min(real.w, real.h) / float(virtual_size)
+        self.w = int(round(real.w / self._scale))
+        self.h = int(round(real.h / self._scale))
+
+    def _span(self, v: int) -> Tuple[int, int]:
+        s = self._scale
+        a = int(round(v * s))
+        b = max(a + 1, int(round((v + 1) * s)))
+        return a, b
+
+    def set(self, x: int, y: int, color, tag: Optional[int] = None) -> None:
+        x0, x1 = self._span(int(x))
+        y0, y1 = self._span(int(y))
+        for yy in range(y0, y1):
+            for xx in range(x0, x1):
+                self._real.set(xx, yy, color, tag)
+
+    def fill_rect(self, x0: int, y0: int, x1: int, y1: int, color, tag: Optional[int] = None) -> None:
+        if x1 < x0:
+            x0, x1 = x1, x0
+        if y1 < y0:
+            y0, y1 = y1, y0
+        rx0, _ = self._span(int(x0))
+        _, rx1 = self._span(int(x1))
+        ry0, _ = self._span(int(y0))
+        _, ry1 = self._span(int(y1))
+        self._real.fill_rect(rx0, ry0, rx1 - 1, ry1 - 1, color, tag)
+
+    def opaque(self, x: int, y: int) -> bool:
+        s = self._scale
+        return self._real.opaque(int(round((int(x) + 0.5) * s)), int(round((int(y) + 0.5) * s)))

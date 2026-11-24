@@ -2,12 +2,14 @@
   "autotile": false,
   "cellH": 96,
   "cellW": 96,
+  "columns": 1,
   "frames": 1,
   "kind": "settlement",
   "masks": 1,
   "pixelHashes": [
-    "bde3b92e88e6439b054faeeb07b4f7b9"
+    "7a0bd2c8669b76b3a598d35cbb9e2084"
   ],
+  "regionPalette": "oldlands",
   "static": true,
   "variants": 1
 }

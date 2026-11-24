@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -11,13 +12,35 @@ from PIL import Image, ImageDraw, ImageEnhance
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE))
 
-from catalog import CATALOG  # noqa: E402
+from catalog import CATALOG, REGIONAL_MASTER_PALETTES  # noqa: E402
+from generator.math.palette import snap_pil_to_palette  # noqa: E402
+from generator.math.wang import (  # noqa: E402
+    BLOB_47_MASKS, NBIT, EBIT, SBIT, WBIT, NEBIT, SEBIT, SWBIT, NWBIT,
+)
 from generator.registry import get_generator  # noqa: E402
 
-OUT_ROOT = HERE.parent.parent / "src" / "assets" / "sprites"
+PROJECT_ROOT = HERE.parent.parent
+OUT_ROOT = PROJECT_ROOT / "src" / "assets" / "sprites"
+PUBLIC_NOTICES = PROJECT_ROOT / "public" / "third-party" / "sprites"
 DIRECTIONS = ["front", "right", "back", "left"]
 FRAMES = 4
 TILE_VARIANTS = 4
+
+NOTICE = """Eldrinth world sprite atlases
+
+Generated from Shed Dev Sprites (Apache License 2.0).
+Source: https://github.com/recursive-ai-dev/shed-dev-sprites
+The full upstream license is included in LICENSE.apache-2.0.
+
+World characters, NPCs, creatures, regional wardens, 47-tile Blob Wang terrain
+atlases, settlement cottages, civic structures, and shard fortress landmarks
+are generated offline by tools/spritegen/gen_sprites.py from catalog.py.
+Every frame hash is recorded in src/assets/sprites/*/manifest.json and verified
+by tools/spritegen/asset_integrity_test.py and npm test without runtime Python.
+
+Rebuild: npm run gen:sprites
+Verify:  python3 tools/spritegen/asset_integrity_test.py
+"""
 
 
 def _pixel_hash(image: Image.Image) -> str:
@@ -32,14 +55,71 @@ def _write(out_dir: Path, image: Image.Image, manifest: dict) -> None:
     )
 
 
-import math
+def _paint_blob_border(
+    d: ImageDraw.ImageDraw,
+    mask: int,
+    outer_col: tuple[int, int, int, int],
+    inner_col: tuple[int, int, int, int],
+    width_px: int = 3,
+    variant: int = 0,
+) -> None:
+    """Paint deterministic cardinal & inner-corner borders for 47-tile Blob masks."""
+    n = bool(mask & NBIT)
+    e = bool(mask & EBIT)
+    s = bool(mask & SBIT)
+    w = bool(mask & WBIT)
+    jitter = (variant * 5) & 3
+
+    if not n:
+        d.rectangle((0, 0, 31, width_px - 1), fill=outer_col)
+        d.line((0, width_px, 31, width_px), fill=inner_col)
+        d.point(((7 + jitter) % 32, width_px + 1), fill=inner_col)
+        d.point(((21 + jitter) % 32, width_px + 1), fill=inner_col)
+    if not s:
+        d.rectangle((0, 32 - width_px, 31, 31), fill=outer_col)
+        d.line((0, 31 - width_px, 31, 31 - width_px), fill=inner_col)
+        d.point(((11 + jitter) % 32, 30 - width_px), fill=inner_col)
+        d.point(((25 + jitter) % 32, 30 - width_px), fill=inner_col)
+    if not w:
+        d.rectangle((0, 0, width_px - 1, 31), fill=outer_col)
+        d.line((width_px, 0, width_px, 31), fill=inner_col)
+        d.point((width_px + 1, (9 + jitter) % 32), fill=inner_col)
+        d.point((width_px + 1, (23 + jitter) % 32), fill=inner_col)
+    if not e:
+        d.rectangle((32 - width_px, 0, 31, 31), fill=outer_col)
+        d.line((31 - width_px, 0, 31 - width_px, 31), fill=inner_col)
+        d.point((30 - width_px, (5 + jitter) % 32), fill=inner_col)
+        d.point((30 - width_px, (19 + jitter) % 32), fill=inner_col)
+
+    # Inner diagonal corners (when both adjacent cardinals are present)
+    c_sz = width_px + 1
+    if n and e and not (mask & NEBIT):
+        d.rectangle((32 - c_sz, 0, 31, c_sz - 1), fill=outer_col)
+        d.line((31 - c_sz, 0, 31 - c_sz, c_sz), fill=inner_col)
+        d.line((31 - c_sz, c_sz, 31, c_sz), fill=inner_col)
+    if e and s and not (mask & SEBIT):
+        d.rectangle((32 - c_sz, 32 - c_sz, 31, 31), fill=outer_col)
+        d.line((31 - c_sz, 31 - c_sz, 31 - c_sz, 31), fill=inner_col)
+        d.line((31 - c_sz, 31 - c_sz, 31, 31 - c_sz), fill=inner_col)
+    if s and w and not (mask & SWBIT):
+        d.rectangle((0, 32 - c_sz, c_sz - 1, 31), fill=outer_col)
+        d.line((c_sz, 31 - c_sz, c_sz, 31), fill=inner_col)
+        d.line((0, 31 - c_sz, c_sz, 31 - c_sz), fill=inner_col)
+    if w and n and not (mask & NWBIT):
+        d.rectangle((0, 0, c_sz - 1, c_sz - 1), fill=outer_col)
+        d.line((c_sz, 0, c_sz, c_sz), fill=inner_col)
+        d.line((0, c_sz, c_sz, c_sz), fill=inner_col)
 
 
-def _decorate_tile(image: Image.Image, feature: str | None, variant: int = 0) -> Image.Image:
-    """Layer authored silhouettes over deterministic generator textures.
+def _decorate_tile(
+    image: Image.Image,
+    feature: str | None,
+    variant: int = 0,
+    mask: int = 255,
+    biome: str = "oldlands",
+) -> Image.Image:
+    """Layer authored silhouettes & Blob-47 transitions over generator textures.
 
-    The generator is excellent at materials; these overlays give gameplay
-    tiles a strong semantic read (tree, grave, bridge, crystal, embers, and so on).
     Every operation is integer-coordinate and deterministic.
     """
     if not feature:
@@ -58,17 +138,80 @@ def _decorate_tile(image: Image.Image, feature: str | None, variant: int = 0) ->
     rust_hi = (132, 78, 48, 255)
     bone = (196, 185, 150, 255)
     bone_hi = (235, 224, 186, 255)
-    green = (26, 48, 22, 255)
-    green_mid = (42, 74, 32, 255)
-    green_hi = (68, 114, 46, 255)
-    green_spec = (104, 156, 62, 255)
     cyan = (55, 195, 190, 255)
     cyan_hi = (185, 245, 235, 255)
     cyan_core = (240, 255, 250, 255)
     blood = (142, 24, 36, 255)
     blood_hi = (215, 52, 68, 255)
 
-    if feature == "tree":
+    # Biome-adapted foliage & stone hues
+    if biome == "cinderwild":
+        green = (48, 34, 28, 255)
+        green_mid = (78, 46, 32, 255)
+        green_hi = (128, 66, 38, 255)
+        green_spec = (218, 112, 42, 255)
+        rust = (58, 36, 28, 255)
+        rust_hi = (92, 56, 40, 255)
+        steel = (74, 66, 68, 255)
+        steel_hi = (124, 112, 108, 255)
+        moss_accent = (176, 84, 36, 255)
+    elif biome == "moonlit":
+        green = (20, 44, 42, 255)
+        green_mid = (34, 68, 62, 255)
+        green_hi = (54, 98, 86, 255)
+        green_spec = (94, 152, 136, 255)
+        rust = (62, 52, 42, 255)
+        rust_hi = (96, 82, 66, 255)
+        steel = (72, 90, 102, 255)
+        steel_hi = (132, 158, 166, 255)
+        moss_accent = (54, 102, 92, 255)
+    elif biome == "starfall":
+        green = (32, 26, 48, 255)
+        green_mid = (54, 44, 78, 255)
+        green_hi = (84, 68, 118, 255)
+        green_spec = (158, 128, 212, 255)
+        rust = (68, 56, 74, 255)
+        rust_hi = (112, 96, 126, 255)
+        steel = (78, 80, 102, 255)
+        steel_hi = (142, 144, 174, 255)
+        moss_accent = (108, 82, 154, 255)
+    else:
+        green = (26, 48, 22, 255)
+        green_mid = (42, 74, 32, 255)
+        green_hi = (68, 114, 46, 255)
+        green_spec = (104, 156, 62, 255)
+        moss_accent = (48, 76, 36, 255)
+
+    if feature == "water_edge":
+        _paint_blob_border(
+            d, mask,
+            outer_col=(36, 64, 82, 255),
+            inner_col=(118, 196, 206, 255),
+            width_px=2,
+            variant=variant,
+        )
+    elif feature == "grass_edge":
+        if biome == "cinderwild":
+            _paint_blob_border(d, mask, (36, 26, 22, 255), (96, 74, 52, 255), width_px=2, variant=variant)
+        elif biome == "moonlit":
+            _paint_blob_border(d, mask, (18, 34, 38, 255), (68, 112, 98, 255), width_px=2, variant=variant)
+        elif biome == "starfall":
+            _paint_blob_border(d, mask, (24, 18, 36, 255), (92, 78, 122, 255), width_px=2, variant=variant)
+        else:
+            _paint_blob_border(d, mask, (22, 34, 18, 255), (76, 112, 52, 255), width_px=2, variant=variant)
+    elif feature == "path_edge":
+        if biome == "cinderwild":
+            _paint_blob_border(d, mask, (34, 26, 24, 255), (124, 96, 72, 255), width_px=2, variant=variant)
+        elif biome == "moonlit":
+            _paint_blob_border(d, mask, (58, 56, 48, 255), (186, 178, 152, 255), width_px=2, variant=variant)
+        elif biome == "starfall":
+            _paint_blob_border(d, mask, (36, 32, 48, 255), (138, 132, 162, 255), width_px=2, variant=variant)
+        else:
+            _paint_blob_border(d, mask, (44, 32, 22, 255), (128, 98, 66, 255), width_px=2, variant=variant)
+    elif feature == "sand_edge":
+        _paint_blob_border(d, mask, (96, 82, 58, 255), (218, 204, 168, 255), width_px=2, variant=variant)
+
+    elif feature == "tree":
         tx_off = (0, -2, 1, 0)[variant % 4]
         ty_off = (0, 0, -2, 1)[variant % 4]
         d.polygon([(11 + tx_off, 31), (13 + tx_off, 25), (13 + tx_off, 16 + ty_off),
@@ -106,7 +249,7 @@ def _decorate_tile(image: Image.Image, feature: str | None, variant: int = 0) ->
             d.polygon([(14, 10), (19, 11), (26, 18), (20, 24), (17, 18)], fill=steel)
             d.line((13, 14, 10, 20, 11, 26), fill=ink)
             d.line((14, 10, 19, 11), fill=(185, 190, 198, 255))
-            d.polygon([(5, 28), (11, 28), (9, 25)], fill=(48, 76, 36, 255))
+            d.polygon([(5, 28), (11, 28), (9, 25)], fill=moss_accent)
         elif variant % 4 == 1:
             d.polygon([(7, 30), (5, 18), (10, 9), (17, 6), (22, 11), (25, 23), (22, 30)], fill=ink)
             d.polygon([(8, 29), (6, 19), (11, 10), (16, 7), (21, 12), (24, 23), (21, 29)], fill=shade)
@@ -124,24 +267,74 @@ def _decorate_tile(image: Image.Image, feature: str | None, variant: int = 0) ->
             d.polygon([(3, 28), (5, 18), (12, 14), (21, 14), (28, 19), (29, 28)], fill=shade)
             d.polygon([(5, 18), (12, 14), (21, 14), (26, 20), (7, 21)], fill=steel_hi)
             d.polygon([(7, 21), (26, 20), (28, 27), (4, 27)], fill=steel)
-            d.polygon([(4, 28), (9, 28), (7, 25)], fill=(48, 76, 36, 255))
+            d.polygon([(4, 28), (9, 28), (7, 25)], fill=moss_accent)
 
     elif feature == "wall":
-        d.rectangle((0, 8, 31, 31), fill=ink)
-        d.rectangle((1, 9, 30, 13), fill=steel)
-        d.line((1, 9, 30, 9), fill=steel_hi)
-        d.line((1, 13, 30, 13), fill=shade)
-        d.rectangle((1, 14, 14, 21), fill=steel)
-        d.rectangle((16, 14, 30, 21), fill=steel)
-        d.line((1, 14, 14, 14), fill=steel_hi)
-        d.line((16, 14, 30, 14), fill=steel_hi)
-        d.line((1, 21, 30, 21), fill=shade)
-        d.line((15, 14, 15, 21), fill=shade)
-        d.rectangle((1, 22, 21, 30), fill=steel)
-        d.rectangle((23, 22, 30, 30), fill=steel)
-        d.line((1, 22, 21, 22), fill=steel_hi)
-        d.line((23, 22, 30, 22), fill=steel_hi)
-        d.line((22, 22, 22, 30), fill=shade)
+        # 47-tile Blob Wang masonry: connected north-south wall tops merge into a
+        # continuous dark parapet, while exposed south faces show 3D stone courses.
+        n = bool(mask & NBIT)
+        e = bool(mask & EBIT)
+        s = bool(mask & SBIT)
+        w = bool(mask & WBIT)
+        cap_dark = (48, 46, 56, 255)
+        cap_mid = (66, 64, 76, 255)
+        cap_rim = (122, 124, 136, 255)
+        x0 = 0 if w else 1
+        x1 = 31 if e else 30
+        top_y = 0 if n else 4
+
+        # Parapet top fill
+        d.rectangle((0, top_y, 31, 31), fill=ink)
+        parapet_bot = 31 if s else 11
+        d.rectangle((x0, top_y + (0 if n else 1), x1, parapet_bot), fill=cap_dark)
+        # Subtle stone slab joints on the parapet roof
+        slab_off = (variant % 4) * 4
+        for sy in range(top_y + 4, parapet_bot, 8):
+            d.line((x0, sy, x1, sy), fill=shade)
+            sx = (x0 + slab_off + (sy & 4)) % 28 + 2
+            if x0 < sx < x1:
+                d.line((sx, max(top_y, sy - 4), sx, sy), fill=shade)
+        if not n:
+            d.rectangle((x0, 4, x1, 6), fill=cap_mid)
+            d.line((x0, 4, x1, 4), fill=cap_rim)
+        if not w:
+            d.rectangle((1, top_y, 3, parapet_bot), fill=cap_mid)
+            d.line((1, top_y, 1, parapet_bot), fill=cap_rim)
+        if not e:
+            d.rectangle((28, top_y, 30, parapet_bot), fill=cap_mid)
+            d.line((30, top_y, 30, parapet_bot), fill=shade)
+
+        # Exposed south facade: 3-course dressed stone front
+        if not s:
+            d.rectangle((0, 11, 31, 31), fill=ink)
+            d.rectangle((x0, 12, x1, 16), fill=steel)
+            d.line((x0, 12, x1, 12), fill=steel_hi)
+            d.line((x0, 16, x1, 16), fill=shade)
+            split1 = 14 + (variant % 2) * 2
+            d.rectangle((x0, 17, split1, 23), fill=steel)
+            d.rectangle((split1 + 2, 17, x1, 23), fill=steel)
+            d.line((x0, 17, split1, 17), fill=steel_hi)
+            d.line((split1 + 2, 17, x1, 17), fill=steel_hi)
+            d.line((x0, 23, x1, 23), fill=shade)
+            split2 = 21 - (variant % 2) * 3
+            d.rectangle((x0, 24, split2, 30), fill=steel)
+            d.rectangle((split2 + 2, 24, x1, 30), fill=steel)
+            d.line((x0, 24, split2, 24), fill=steel_hi)
+            d.line((split2 + 2, 24, x1, 30 if split2 + 2 > x1 else 24), fill=steel_hi)
+
+        # Inner corner quoins for L-junctions and T-junctions
+        if n and e and not (mask & NEBIT):
+            d.rectangle((28, 0, 31, 4), fill=ink)
+            d.rectangle((28, 1, 30, 3), fill=cap_rim)
+        if w and n and not (mask & NWBIT):
+            d.rectangle((0, 0, 3, 4), fill=ink)
+            d.rectangle((1, 1, 3, 3), fill=cap_rim)
+        if e and s and not (mask & SEBIT):
+            d.rectangle((28, 27, 31, 31), fill=ink)
+            d.line((28, 27, 31, 27), fill=steel_hi)
+        if s and w and not (mask & SWBIT):
+            d.rectangle((0, 27, 3, 31), fill=ink)
+            d.line((0, 27, 3, 27), fill=steel_hi)
 
     elif feature == "crystal":
         if variant % 4 == 0:
@@ -360,13 +553,20 @@ def _decorate_tile(image: Image.Image, feature: str | None, variant: int = 0) ->
     return out
 
 
+def _apply_region_palette(image: Image.Image, region_palette: str | None) -> Image.Image:
+    if not region_palette:
+        return image
+    ramp = REGIONAL_MASTER_PALETTES[region_palette]
+    return snap_pil_to_palette(image, ramp)
+
+
 def gen_animated(key: str, entry: dict) -> None:
     size = entry.get("size")
     gen_kwargs = {"size": size} if size else {}
     gen = get_generator(entry["kind"], **gen_kwargs)
     generator_options = {
         name: entry[name]
-        for name in ("archetype", "palette", "role", "prop_type")
+        for name in ("archetype", "palette", "role", "prop_type", "color_seed")
         if name in entry
     }
     actions = entry.get("anims", ["walk"])
@@ -375,6 +575,7 @@ def gen_animated(key: str, entry: dict) -> None:
     cell_w, cell_h = gen.size
     sheet = Image.new("RGBA", (cell_w * frames_count, cell_h * len(actions) * len(directions)), (0, 0, 0, 0))
     hashes: dict[str, list[str]] = {}
+    region_palette = entry.get("region_palette")
 
     for action_index, action in enumerate(actions):
         action_hashes = []
@@ -394,7 +595,7 @@ def gen_animated(key: str, entry: dict) -> None:
                 ]
             for frame_index, sprite in enumerate(sprites):
                 row = action_index * len(directions) + direction_index
-                img = sprite.image
+                img = _apply_region_palette(sprite.image, region_palette)
                 sheet.alpha_composite(img, (frame_index * cell_w, row * cell_h))
                 action_hashes.append(_pixel_hash(img))
         hashes[action] = action_hashes
@@ -417,45 +618,80 @@ def gen_static(key: str, entry: dict) -> None:
     gen_kwargs = {"size": size} if size else {}
     gen = get_generator(entry["kind"], **gen_kwargs)
     options = {}
+    autotile_mode = entry.get("autotile")
+    is_blob = autotile_mode == "blob"
     if entry["kind"] == "tile":
         options["kind"] = entry["tile_kind"]
         options["use_scale2x"] = True
+        if is_blob:
+            options["blob"] = True
     elif entry["kind"] == "prop":
         options["prop_type"] = entry.get("prop_type", "sign")
-    for name in ("palette", "category", "theme", "part"):
+    elif entry["kind"] == "structure":
+        options["faction"] = entry.get("faction", "human")
+        options["kind"] = entry.get("structure_kind", "hall")
+        options["tiles"] = entry.get("tiles", 3)
+        options["tile_px"] = entry.get("tile_px", 32)
+    for name in ("palette", "category", "theme", "part", "trim_seed"):
         if name in entry:
             options[name] = entry[name]
 
     is_tile = entry["kind"] == "tile"
-    # Static materials are interior tiles (mask 15). Mask 0 would emboss a
+    # Static materials are interior tiles (mask 255 / 15). Mask 0 would emboss a
     # dark border around every cell and expose the grid at runtime.
-    masks = range(16) if entry.get("autotile") else (15,)
+    if is_blob:
+        masks: tuple[int, ...] | range = BLOB_47_MASKS
+    elif autotile_mode:
+        masks = range(16)
+    else:
+        masks = (255 if is_blob else 15,)
     variants = range(entry.get("variants", TILE_VARIANTS if is_tile else 1))
+    biome = entry.get("biome", "oldlands")
+    region_palette = entry.get("region_palette")
     images = []
     for mask in masks:
         for variant in variants:
-            sprite = gen.generate(f"{entry['seed']}-v{variant}", mask=mask, variant=variant, **options)
-            images.append(_decorate_tile(sprite.image, entry.get("feature"), variant=variant))
+            seed = f"{entry['seed']}-v{variant}" if is_tile else entry["seed"]
+            sprite = gen.generate(seed, mask=mask, variant=variant, **options)
+            decorated = _decorate_tile(
+                sprite.image, entry.get("feature"), variant=variant, mask=mask, biome=biome
+            )
+            images.append(_apply_region_palette(decorated, region_palette))
     count = len(images)
     cell_w, cell_h = images[0].size
-    sheet = Image.new("RGBA", (cell_w * count, cell_h), (0, 0, 0, 0))
+    cols = min(count, 16)
+    rows = (count + cols - 1) // cols
+    sheet = Image.new("RGBA", (cell_w * cols, cell_h * rows), (0, 0, 0, 0))
     for i, image in enumerate(images):
-        sheet.alpha_composite(image.convert("RGBA"), (i * cell_w, 0))
+        sheet.alpha_composite(image.convert("RGBA"), ((i % cols) * cell_w, (i // cols) * cell_h))
 
+    mask_count = 47 if is_blob else (16 if autotile_mode else 1)
     manifest = {
         "kind": entry["kind"],
         "cellW": cell_w,
         "cellH": cell_h,
+        "columns": cols,
         "static": True,
-        "autotile": bool(entry.get("autotile")),
+        "autotile": bool(autotile_mode),
+        **({"autotileMode": "blob47"} if is_blob else {}),
+        **({"regionPalette": region_palette} if region_palette else {}),
         "frames": count,
-        "masks": 16 if entry.get("autotile") else 1,
+        "masks": mask_count,
         "variants": TILE_VARIANTS if is_tile else 1,
         "pixelHashes": [_pixel_hash(image) for image in images],
     }
     _write(OUT_ROOT / key, sheet, manifest)
-    suffix = "16 masks × 4 variants" if entry.get("autotile") else f"{count} variant(s)"
+    suffix = f"{mask_count} masks × {TILE_VARIANTS} variants" if autotile_mode else f"{count} variant(s)"
     print(f"  {key}: {sheet.width}x{sheet.height} ({suffix})")
+
+
+def _write_attribution() -> None:
+    license_bytes = (HERE / "LICENSE").read_bytes()
+    notice_bytes = NOTICE.encode("utf-8")
+    for target in (OUT_ROOT, PUBLIC_NOTICES):
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "LICENSE.apache-2.0").write_bytes(license_bytes)
+        (target / "NOTICE.txt").write_bytes(notice_bytes)
 
 
 def main() -> None:
@@ -465,6 +701,7 @@ def main() -> None:
             gen_animated(key, entry)
         else:
             gen_static(key, entry)
+    _write_attribution()
     print("Done.")
 
 

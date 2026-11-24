@@ -3,7 +3,7 @@
     "adept": {
       "background": "transparent",
       "file": "adept.png",
-      "fileSha256": "4660335d0935dbfa31e67c03df87b513d98f650796b7bdc93e9251dede665735",
+      "fileSha256": "1fc6a8c5c796dcdc853cb1051e254bb3e5f809afa49e4e0103cc3b63d758ff90",
       "height": 32,
       "kind": "human",
       "options": {
@@ -12,7 +12,7 @@
         "palette": "cult_blood",
         "role": "adept"
       },
-      "pixelSha256": "b76dc02b5061b9eacae9425ba8cc1de98f59484d04cb88cff9ef60291fae837f",
+      "pixelSha256": "06f0bd8c4e2df8e7e0ce0d0a5dd94903fbc1b41730b80e255593bd7a3b94b259",
       "renderSize": 32,
       "resampling": "none",
       "seed": "eldrinth-adept-01",
@@ -51,6 +51,13 @@
         "height_inches": 69.97,
         "muscle": 0.294,
         "palette": "cult_blood",
+        "part_seeds": {
+          "body": 11165445526334090600,
+          "face": 11165445526334090600,
+          "hair": 11165445526334090600,
+          "outfit": 11165445526334090600,
+          "weapon": 11165445526334090600
+        },
         "pipeline": {
           "align": "center-of-gravity",
           "fill": "sdf-capsule",
@@ -59,7 +66,7 @@
           "pose": "3d-rig-projection"
         },
         "role": "adept",
-        "skin": "#462f25",
+        "skin": "#cea08c",
         "social_class": "poor",
         "weight_lbs": 139
       },
@@ -68,14 +75,14 @@
     "blade": {
       "background": "transparent",
       "file": "blade.png",
-      "fileSha256": "de4181ca82ad7045f61f01a3356ca68aa329d07d9ed3d6b7c5d6a98acc39e75b",
+      "fileSha256": "145c415163950691d3d51c13bbccf61e63cbfcf767764fa2e00f3ea97eab8edd",
       "height": 32,
       "kind": "item",
       "options": {
         "category": "sword",
         "palette": "bone_relic"
       },
-      "pixelSha256": "857b13bd2c715ac80962f963678b99cebda16f013c7354f9ff61cb95d880437f",
+      "pixelSha256": "b17a3f4ea8d92355bcacfd6d357eed0a539924a0b7a584204fdba14049ee5694",
       "renderSize": 32,
       "resampling": "none",
       "seed": "eldrinth-field-kit-blade-01",
@@ -99,36 +106,42 @@
     "boss": {
       "background": "transparent",
       "file": "boss.png",
-      "fileSha256": "34bc64fcfc398c1cb073c9ba608a885a18531baf1e56abaaaeb6092ab88339a7",
+      "fileSha256": "d78f54059742f5e8a22fcac39906af75fcca99c20c18539a7f3602dfa7fbb11e",
       "height": 32,
       "kind": "creature",
       "options": {
         "archetype": "biped",
+        "color_seed": 2,
         "direction": "front",
         "frame": 0,
         "palette": "corrupted_flesh"
       },
-      "pixelSha256": "7b13cfcde4ce11039db584ed5e8847b748cc46845f0baad5b678ea827ba3be97",
+      "pixelSha256": "d543fe29cab3c14a487d0f52addb6114eb742a891ee0d43dc2dfdfad6a76af07",
       "renderSize": 64,
       "resampling": "nearest",
       "seed": "eldrinth-boss-01",
       "spec": {
-        "accent": "#6c632e",
+        "accent": "#253777",
         "action": "walk",
         "archetype": "biped",
-        "base": "#405157",
-        "belly": "#758186",
+        "base": "#58204f",
+        "belly": "#865e80",
         "ca": {
           "T": 4,
           "density": 0.46,
           "rounds": 4
         },
         "direction": "front",
-        "eye_color": "#6c632e",
+        "eye_color": "#253777",
         "eyes": 2,
         "frame": 0,
         "horned": true,
         "palette": "corrupted_flesh",
+        "part_seeds": {
+          "body": 8892377242219780055,
+          "color": 2,
+          "limb": 8892377242219780055
+        },
         "pipeline": {
           "material": "chamfer-sdf",
           "outline": "inward-1px",
@@ -136,7 +149,7 @@
           "silhouette": "cellular-automata",
           "symmetry": "bilateral-mirror"
         },
-        "spots": 7,
+        "spots": 3,
         "wings": false
       },
       "width": 32
@@ -170,11 +183,11 @@
     "chart": {
       "background": "opaque",
       "file": "chart.png",
-      "fileSha256": "52462473cb2ae8375d87965e3eaff51f9f6474c9cff3601898cd1543a8453d45",
+      "fileSha256": "ff1e563403bf625b0b51d2ba85ea6fdf12f9a2b0b8d2bdb21bdaadd32e83cf56",
       "height": 32,
       "kind": "dungeon",
       "options": {},
-      "pixelSha256": "08bc29e5a8339048fe11488d72d44c86cbdf53d1e02bdf242b6ed3a3fa2a467b",
+      "pixelSha256": "e270e528475058a9744cfc8657931c4f7e180cd5001b377bfd7135584ed88cc9",
       "renderSize": 32,
       "resampling": "none",
       "seed": "eldrinth-field-kit-chart-01",
@@ -196,7 +209,7 @@
     "coast": {
       "background": "opaque",
       "file": "coast.png",
-      "fileSha256": "8df8f79e2dd3ec0001bdb3a5145cc7942d5c23dd44633d3d1741273b6c17eb66",
+      "fileSha256": "bfbaadff7b972fa924e2761922cfad50ff4d66a232f7b3c630c1d30489432ae9",
       "height": 32,
       "kind": "tile",
       "options": {
@@ -204,7 +217,7 @@
         "mask": 15,
         "palette": "black_water"
       },
-      "pixelSha256": "58a772bf68408fb50e6fbb21069109335f44b6af91ec85d6f64e0570a344fea1",
+      "pixelSha256": "219dad85f8512c9cd1e52637e3aac1cc105653e07dfbbb7c5ed5370a8e2f0970",
       "renderSize": 32,
       "resampling": "none",
       "seed": "eldrinth-field-kit-coast-01",
@@ -232,11 +245,11 @@
     "fortress": {
       "background": "opaque",
       "file": "fortress.png",
-      "fileSha256": "3919a9ec478ce58ec652b07883dcb31be3db2ead20430bb803edd5896309070c",
+      "fileSha256": "cd95e2654e6fd46ee6ef17ebd2e9f82a4e938d94def8249e87a26ce1d7a41339",
       "height": 32,
       "kind": "dungeon",
       "options": {},
-      "pixelSha256": "ce1e5900ca9328528ca5c3766b87e534a8d0f6bd618b9c9820f1b3b1e39c56f3",
+      "pixelSha256": "f9cfa8ba582133c6325aaf72e0b2b02ef37be94c585026d19ef4b7ce460d7c55",
       "renderSize": 32,
       "resampling": "none",
       "seed": "eldrinth-field-kit-fortress-01",
@@ -271,6 +284,11 @@
       "seed": "eldrinth-field-kit-gate-01",
       "spec": {
         "part": "door",
+        "part_seeds": {
+          "roof": 5151133798078633129,
+          "trim": 5151133798078633129,
+          "wall": 5151133798078633129
+        },
         "pipeline": {
           "composition": "modular-or-complete-cottage",
           "grammar": "roof-facade-door-room-furnishing",
@@ -288,7 +306,7 @@
     "grassland": {
       "background": "opaque",
       "file": "grassland.png",
-      "fileSha256": "834bdfbfae4975f2b69f68fed0d8663168e69d00cd9db3eefd5de3f282434e5f",
+      "fileSha256": "2d3db3839c68206fdb88f38c015a4e850a2f028af6aaa73f0032f4cdbd8052b5",
       "height": 32,
       "kind": "tile",
       "options": {
@@ -296,7 +314,7 @@
         "mask": 15,
         "palette": "sickly_green"
       },
-      "pixelSha256": "e53ff536eb1ebc56bb58025350e3fbd791fc132c32f70930be988ff7d831f438",
+      "pixelSha256": "d6d4ff995cbb1e550cf61a36a2436cfe2951278b5d73ea9de06963965800b636",
       "renderSize": 32,
       "resampling": "none",
       "seed": "eldrinth-field-kit-grassland-01",
@@ -324,14 +342,14 @@
     "guard": {
       "background": "transparent",
       "file": "guard.png",
-      "fileSha256": "09d096fb20306571ec4c895a6f2cd3c230a7fb503dffb879a07a3851d259a386",
+      "fileSha256": "1b80e4e0cb57ea699b59f42d3e43e393f687fbd1007d2d69aa17c3c3274bfc6a",
       "height": 32,
       "kind": "item",
       "options": {
         "category": "shield",
         "palette": "grim_steel"
       },
-      "pixelSha256": "15c2155e1e7bb9174d8d7f18576ba21803b73745f6c056ce6a8662ae6a5b6ec5",
+      "pixelSha256": "b7a6aaef20534b0bab69cd35301168cf1662840d1ef978bc51a3db8cddaab8e6",
       "renderSize": 32,
       "resampling": "none",
       "seed": "eldrinth-field-kit-guard-01",
@@ -355,14 +373,14 @@
     "journal": {
       "background": "transparent",
       "file": "journal.png",
-      "fileSha256": "b46969893bda0ea4b8d72f204409201435f1a925e5e2bb3819f76937ce0474f9",
+      "fileSha256": "64bf06c280022aa08955876dd3a5c6dc9c0c213388d4cda5c05529f81d62f334",
       "height": 32,
       "kind": "item",
       "options": {
         "category": "book",
         "palette": "bone_relic"
       },
-      "pixelSha256": "84090ddf7bef2e6ad165bffcfd78a2c32db08cefe0c4dbc37e1cdf403cfb01c3",
+      "pixelSha256": "c6ba3505b923b4c68208f92ada0345f40436ad810ffa8a694d09d8f76ff0b026",
       "renderSize": 32,
       "resampling": "none",
       "seed": "eldrinth-field-kit-journal-01",
@@ -412,7 +430,7 @@
     "marsh": {
       "background": "opaque",
       "file": "marsh.png",
-      "fileSha256": "95be5645ee2a407d10c9d2a4cfe7ae90a4ff5913d39a077efdf4e924baa2db3c",
+      "fileSha256": "d1d50a4251fbbaf8d61f71b8a68779578c04dd991d9f31eea80b2381ae173416",
       "height": 32,
       "kind": "tile",
       "options": {
@@ -420,7 +438,7 @@
         "mask": 15,
         "palette": "wraith_ash"
       },
-      "pixelSha256": "4465ed3dd7865c3254c627f2b7659b203c3dd3d524d96a3105dbef0cc2d54208",
+      "pixelSha256": "5313f95a35016e5926eb88bea3ce82d60fb55b5ae78289c20cbbfba9c98bf7e2",
       "renderSize": 32,
       "resampling": "none",
       "seed": "eldrinth-field-kit-marsh-01",
@@ -448,7 +466,7 @@
     "mountain": {
       "background": "opaque",
       "file": "mountain.png",
-      "fileSha256": "63f2c83a435e4148558b3b5c174815751865836f41aeb41097019402c7b36951",
+      "fileSha256": "c90af05a38cf020f82e77d973631a4ed6b04c665abeddd31276133bf1fa79409",
       "height": 32,
       "kind": "tile",
       "options": {
@@ -456,7 +474,7 @@
         "mask": 15,
         "palette": "grim_steel"
       },
-      "pixelSha256": "57443d89e2e9072b4b1498b21de8ecf56eda34aa0e46e2d02d118f316f890d81",
+      "pixelSha256": "c38fe39ae8c3c1309e209ee896002408c24dbf37c0b8aead40ba517e63822bf0",
       "renderSize": 32,
       "resampling": "none",
       "seed": "eldrinth-field-kit-mountain-01",
@@ -484,14 +502,14 @@
     "potion": {
       "background": "transparent",
       "file": "potion.png",
-      "fileSha256": "995353ac0db4d34771555ac8655ad5a8dcd443756b63a2421bd914684f4f8ecd",
+      "fileSha256": "c40450a5fa635dc21ebd1d824d50cfca121f99bfba543bf7dbcb036bd8db2020",
       "height": 32,
       "kind": "item",
       "options": {
         "category": "potion",
         "palette": "cult_blood"
       },
-      "pixelSha256": "4ecd5b7dc867a57b88c77a5a9787c6d4cb442e1c06b8076436a14bccd4c6a236",
+      "pixelSha256": "9f64c1b0560fc2ff6a936810b298deb2a4fe01d64fda4b91019067f8a9475b7e",
       "renderSize": 32,
       "resampling": "none",
       "seed": "eldrinth-item-potion-01",
@@ -515,14 +533,14 @@
     "quest": {
       "background": "transparent",
       "file": "quest.png",
-      "fileSha256": "dead663583f1b0d1dbf45980d0fa78e98b02be33acd9256e23a48a1bf4837658",
+      "fileSha256": "4dac2f4cc4b25356d16af6f902172fc41a7f5cf00273e41f7ff7d2c82e936bc4",
       "height": 32,
       "kind": "item",
       "options": {
         "category": "scroll",
         "palette": "sacred_gold"
       },
-      "pixelSha256": "bbff043880f242b716a79ddb0e48546299f32c260d0fe54f673e4ac28a41a26a",
+      "pixelSha256": "63f58a1678f84a0a0bb7b6140131208b1809c63d737198bee8927a33f7c02fbb",
       "renderSize": 32,
       "resampling": "none",
       "seed": "eldrinth-field-kit-quest-01",
@@ -546,7 +564,7 @@
     "sentinel": {
       "background": "transparent",
       "file": "sentinel.png",
-      "fileSha256": "d52beb5e0506cf98022c5ef4485ef6bbc944530bebf4ed71ccabcd1a4f9bdf7e",
+      "fileSha256": "5c583960c178434177bbbebd705d43a6f0e59c36043dd8c5e13e1fb5154a799a",
       "height": 32,
       "kind": "creature",
       "options": {
@@ -555,27 +573,32 @@
         "frame": 0,
         "palette": "rusted_stone"
       },
-      "pixelSha256": "3d4e6653c5f04d76a4aa87505b600ee99ef2b89d5a2c2b094994ee4efff48822",
+      "pixelSha256": "5b82ac4a08a0172f75490aad5a6d3b396620590df03d93483bead99570c7a3c8",
       "renderSize": 32,
       "resampling": "none",
       "seed": "eldrinth-sentinel-01",
       "spec": {
-        "accent": "#6d503d",
+        "accent": "#332920",
         "action": "walk",
         "archetype": "golem",
-        "base": "#5e4737",
-        "belly": "#8b7a6f",
+        "base": "#332a22",
+        "belly": "#6c655f",
         "ca": {
           "T": 3,
           "density": 0.7,
           "rounds": 2
         },
         "direction": "front",
-        "eye_color": "#6d503d",
+        "eye_color": "#332920",
         "eyes": 2,
         "frame": 0,
         "horned": false,
         "palette": "rusted_stone",
+        "part_seeds": {
+          "body": 1108999539315172892,
+          "color": 1108999539315172892,
+          "limb": 1108999539315172892
+        },
         "pipeline": {
           "material": "chamfer-sdf",
           "outline": "inward-1px",
@@ -583,7 +606,7 @@
           "silhouette": "cellular-automata",
           "symmetry": "bilateral-mirror"
         },
-        "spots": 6,
+        "spots": 3,
         "wings": false
       },
       "width": 32
@@ -591,14 +614,14 @@
     "shard": {
       "background": "transparent",
       "file": "shard.png",
-      "fileSha256": "887a281307d8592057679f538ffd9de79ab5918c3e01549eb966883525e15125",
+      "fileSha256": "7459e8508663443d11c1f157c65a4291fbc3127a869c686302b6c3c6a5dfb0e5",
       "height": 32,
       "kind": "item",
       "options": {
         "category": "shard",
         "palette": "spire_anima"
       },
-      "pixelSha256": "2fe67cd83100754229b5be8edc362068415f185de3611fa034901ffb3e97f510",
+      "pixelSha256": "0e6f677965a28349592c232ca4e1169f7e48e50238c525c793f93224c1513f87",
       "renderSize": 32,
       "resampling": "none",
       "seed": "eldrinth-item-shard-01",
@@ -648,14 +671,14 @@
     "spire": {
       "background": "transparent",
       "file": "spire.png",
-      "fileSha256": "687c5ee83a4979ef2e25cccced07fd69a60bdaecd153d93f00d2ccec914efb2a",
+      "fileSha256": "c8cdb109480e6affc032100960535923cb579ceeded3898ab99c1db4f1e0b31a",
       "height": 32,
       "kind": "item",
       "options": {
         "category": "staff",
         "palette": "spire_anima"
       },
-      "pixelSha256": "de2720616fd4620ad81bc8d2b7f51c29d94370a7d9fb539e2f2d099020327962",
+      "pixelSha256": "0b8bcae6b4cacf4f3b48fd65c4f7bc38c2441b7e354723888a9e7c8fbdc199d7",
       "renderSize": 32,
       "resampling": "none",
       "seed": "eldrinth-field-kit-spire-01",
@@ -679,19 +702,24 @@
     "town": {
       "background": "transparent",
       "file": "town.png",
-      "fileSha256": "fd3994cf39e938599302e3f84053ee6209d3b6004c223b7615d950034b1b7fba",
+      "fileSha256": "34afd0986e5d8e71d236bef841817349a33d0e9b93deb35e1f6a6a9cc452bf47",
       "height": 32,
       "kind": "settlement",
       "options": {
         "part": "cottage",
         "theme": "oldstone"
       },
-      "pixelSha256": "774df415ce624008d209fa8218d40b1289197fc775317a1b776b66cfdad570cb",
+      "pixelSha256": "7f7a36492e1e2ee121f3246aff178fc5638139de7d98fce3ffa7ecc80d3e5e0e",
       "renderSize": 32,
       "resampling": "none",
       "seed": "eldrinth-field-kit-town-01",
       "spec": {
         "part": "cottage",
+        "part_seeds": {
+          "roof": 12128920684006165248,
+          "trim": 12128920684006165248,
+          "wall": 12128920684006165248
+        },
         "pipeline": {
           "composition": "modular-or-complete-cottage",
           "grammar": "roof-facade-door-room-furnishing",
@@ -709,14 +737,14 @@
     "treasure": {
       "background": "transparent",
       "file": "treasure.png",
-      "fileSha256": "20d95273d2df47045c369b6489f5ed9141354f553cb3d336e3fcb272c65b558a",
+      "fileSha256": "a1942aa4189eae80c9262ee1ba8116bef0321ddb182e20461a921d3051ac5d98",
       "height": 32,
       "kind": "item",
       "options": {
         "category": "coin",
         "palette": "sacred_gold"
       },
-      "pixelSha256": "cb33a06f66cb5f0574fb842b03ff53b118bc4b12ec9436218df8c41c10b412a0",
+      "pixelSha256": "75ae61672a5e10de39a141375a15d2e7017ddf0c14e5b1742bd31a7dc8f4ace0",
       "renderSize": 32,
       "resampling": "none",
       "seed": "eldrinth-field-kit-treasure-01",
@@ -764,7 +792,7 @@
     "wraith": {
       "background": "transparent",
       "file": "wraith.png",
-      "fileSha256": "983b776b0573f692b54d8c5a81a030458443433b815027720be49be7a0be668a",
+      "fileSha256": "49e7c77cc2caa77f26d4c1c0678cece466529ee3ffa885d4b52473d58071cb98",
       "height": 32,
       "kind": "creature",
       "options": {
@@ -773,7 +801,7 @@
         "frame": 0,
         "palette": "wraith_ash"
       },
-      "pixelSha256": "9e3ff3b66c2ae6d867a54643cedf962bcab373ce58fb9645517cf0ad582c65b5",
+      "pixelSha256": "e0be24a78d593524f8ae67058e9471d0a76dc0cd4f5419c1f11db63ebed96ac4",
       "renderSize": 32,
       "resampling": "none",
       "seed": "eldrinth-wraith-01",
@@ -781,8 +809,8 @@
         "accent": "#6e857d",
         "action": "walk",
         "archetype": "tentacle",
-        "base": "#273b3c",
-        "belly": "#637172",
+        "base": "#426461",
+        "belly": "#768f8d",
         "ca": {
           "T": 4,
           "density": 0.48,
@@ -794,6 +822,11 @@
         "frame": 0,
         "horned": false,
         "palette": "wraith_ash",
+        "part_seeds": {
+          "body": 9195075229595713989,
+          "color": 9195075229595713989,
+          "limb": 9195075229595713989
+        },
         "pipeline": {
           "material": "chamfer-sdf",
           "outline": "inward-1px",
@@ -801,17 +834,17 @@
           "silhouette": "cellular-automata",
           "symmetry": "bilateral-mirror"
         },
-        "spots": 3,
+        "spots": 7,
         "wings": false
       },
       "width": 32
     }
   },
   "source": {
-    "generatorSha256": "678984d81436bd54fa1602213a85bda185e1b86885a72e10bed7a0a26bc58256",
+    "generatorSha256": "0ea7710819f359a3d86fef4e97b5410ea09d95be16f0f3eaeb3b330ee73bcc81",
     "license": "Apache-2.0",
     "project": "shed-dev-sprites",
-    "revision": "be0cb4b63806cd649391935a5290244d7400bc7e"
+    "revision": "22040eaad02aacccdd648628f2ef9828cb52f0e9"
   },
   "version": 1
 }

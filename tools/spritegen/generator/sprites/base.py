@@ -31,6 +31,7 @@ from .. import color
 DEFAULT_SIZE = 32
 DIRECTIONS = ("front", "right", "back", "left")
 WALK_FRAMES = 4
+CLIP_ACTIONS = ("idle", "walk", "attack", "cast", "hurt", "death")
 
 # ---------------------------------------------------------------------------
 # Sprite container
@@ -105,6 +106,9 @@ class SpriteGenerator:
     #: `frame` entirely — the web UI uses this to disable playback for them.
     animated: bool = False
 
+    #: Subclasses running ``finalize()`` or snapping before Scale2x set True.
+    handles_master_palette: bool = False
+
     def __init__(self, size: Optional[Any] = None, size_xy: Optional[Tuple[int, int]] = None):
         if size_xy is not None:
             self.size = (int(size_xy[0]), int(size_xy[1]))
@@ -128,6 +132,11 @@ class SpriteGenerator:
         """
         raw_seed = self._normalize_seed(seed)
         spec, image = self._build(raw_seed, **options)
+        mp = (options.get("master_palette") or "").lower().strip()
+        if mp and not self.handles_master_palette:
+            from ..math.palette import MASTER_PALETTES, snap_pil_to_palette
+            if mp in MASTER_PALETTES:
+                image = snap_pil_to_palette(image, mp)
         return Sprite(image=image, seed=raw_seed, type=self.type_name, spec=spec)
 
     def _normalize_seed(self, seed) -> int:
@@ -157,6 +166,31 @@ class SpriteGenerator:
             sprites.extend(self.generate_walk(seed, direction=d, frames=frames, **options))
         img, meta = sheetmod.make_sheet(sprites, cols=frames, margin=1, transparent=True)
         meta["layout"] = "direction-rows x frame-cols"
+        meta["directions"] = list(DIRECTIONS)
+        meta["frames"] = frames
+        meta["action"] = str(options.get("action") or "walk")
+        return img, meta
+
+    def generate_multi_anim_sheet(
+        self,
+        seed=0,
+        actions: Tuple[str, ...] = CLIP_ACTIONS,
+        frames: int = WALK_FRAMES,
+        **options,
+    ) -> Tuple[Image.Image, Dict[str, Any]]:
+        """Multi-clip atlas stacking ``actions × directions × frames`` rows."""
+        from .. import sheet as sheetmod
+        sprites = []
+        opts = dict(options)
+        opts.pop("action", None)
+        opts.pop("direction", None)
+        opts.pop("frame", None)
+        for act in actions:
+            for d in DIRECTIONS:
+                sprites.extend(self.generate_walk(seed, direction=d, frames=frames, action=act, **opts))
+        img, meta = sheetmod.make_sheet(sprites, cols=frames, margin=1, transparent=True)
+        meta["layout"] = "action-blocks x direction-rows x frame-cols"
+        meta["actions"] = list(actions)
         meta["directions"] = list(DIRECTIONS)
         meta["frames"] = frames
         return img, meta

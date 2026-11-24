@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import List, Optional, Tuple
 
 from .canvas import Canvas, TAG_OUTLINE, TRANSPARENT
+from .palette import material_outline_color
 
 RGB = Tuple[int, int, int]
 
@@ -139,6 +140,96 @@ def inward_outline(canvas: Canvas, color: RGB, tag: int = TAG_OUTLINE) -> Canvas
     out = canvas.clone()
     for x, y in edges:
         out.set(x, y, color, tag=tag)
+    return out
+
+
+def sel_out_outline(
+    canvas: Canvas,
+    ink_bias: RGB = (16, 13, 24),
+    darken_amt: float = 0.56,
+    tag: int = TAG_OUTLINE,
+) -> Canvas:
+    """Material-aware selective outline ("sel-out"): darkened & hue-shifted per pixel.
+
+    Unlike flat uniform-color outlines (which paint brown skin ink onto green
+    shirts or bright steel), each backed boundary pixel derives its outline
+    hue from its own underlying pixel color, shaded lighter on top-left lit
+    edges and deeper on bottom-right shadow edges.
+    """
+    def n_orth(x, y) -> int:
+        return (
+            int(canvas.opaque(x - 1, y))
+            + int(canvas.opaque(x + 1, y))
+            + int(canvas.opaque(x, y - 1))
+            + int(canvas.opaque(x, y + 1))
+        )
+
+    interior = set()
+    for y in range(canvas.h):
+        for x in range(canvas.w):
+            if canvas.opaque(x, y) and n_orth(x, y) >= 3:
+                interior.add((x, y))
+
+    out = canvas.clone()
+    cache = {}
+    for y in range(canvas.h):
+        for x in range(canvas.w):
+            if not canvas.opaque(x, y):
+                continue
+            if n_orth(x, y) == 4:
+                continue
+            backed = (
+                (x - 1, y) in interior or (x + 1, y) in interior
+                or (x, y - 1) in interior or (x, y + 1) in interior
+                or (x, y) in interior
+            )
+            if not backed:
+                continue
+            # Top-left lit edge if transparent pixel is above or to the left
+            lit = (not canvas.opaque(x, y - 1)) or (not canvas.opaque(x - 1, y))
+            # Prefer bottom/right shadow bias when exposed on bottom or right
+            if (not canvas.opaque(x, y + 1)) or (not canvas.opaque(x + 1, y)):
+                lit = False
+            px = canvas.get(x, y)
+            key = (px[0], px[1], px[2], lit)
+            col = cache.get(key)
+            if col is None:
+                col = material_outline_color((px[0], px[1], px[2]), ink_bias=ink_bias,
+                                             darken_amt=darken_amt, lit=lit)
+                cache[key] = col
+            out.set(x, y, col, tag=tag)
+    return out
+
+
+def internal_crease(
+    canvas: Canvas,
+    pairs: Tuple[Tuple[int, int], ...],
+    ink_bias: RGB = (16, 13, 24),
+    darken_amt: float = 0.20,
+) -> Canvas:
+    """Add subtle 1px occlusion creases where foreground tags meet background tags.
+
+    For each ``(fg_tag, bg_tag)`` pair, pixels with ``bg_tag`` directly below or
+    to the right of ``fg_tag`` (cast shadow from top-left light) are subtly
+    shaded so overlapping parts like head/neck, hair/face, or arm/torso read cleanly.
+    """
+    out = canvas.clone()
+    pair_set = set(pairs)
+    for y in range(canvas.h):
+        for x in range(canvas.w):
+            if not canvas.opaque(x, y):
+                continue
+            bg = canvas.get_tag(x, y)
+            has_fg = False
+            for nx, ny in ((x, y - 1), (x - 1, y)):
+                if canvas.opaque(nx, ny) and (canvas.get_tag(nx, ny), bg) in pair_set:
+                    has_fg = True
+                    break
+            if has_fg:
+                px = canvas.get(x, y)
+                col = material_outline_color((px[0], px[1], px[2]), ink_bias=ink_bias,
+                                             darken_amt=darken_amt, lit=True)
+                out.set(x, y, col, tag=bg)
     return out
 
 

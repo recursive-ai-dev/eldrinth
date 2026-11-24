@@ -14,6 +14,7 @@ to a crisp pixel-art palette.
 
 from __future__ import annotations
 
+import colorsys
 import math
 from typing import Dict, List, Sequence, Tuple
 
@@ -45,12 +46,13 @@ def cosine_palette(t: float, a: Vec3, b: Vec3, c: Vec3, d: Vec3) -> RGB:
 
 # Named cosine palettes (a, b, c, d).  Tuned for 32×32 game sprites.
 PALETTES: Dict[str, Tuple[Vec3, Vec3, Vec3, Vec3]] = {
-    # pale → deep human skin (warm)
+    # pale → deep human skin (warm). Monotonic in t: t=0 is the palest tone,
+    # t=1 the deepest. (The old ramp looped and never got lighter than a tan.)
     "skin": (
-        (0.48, 0.32, 0.24),
-        (0.32, 0.22, 0.16),
-        (1.00, 0.85, 0.70),
-        (0.00, 0.05, 0.10),
+        (0.508, 0.470, 0.410),
+        (0.462, 0.370, 0.330),
+        (0.38, 0.50, 0.50),
+        (0.00, 0.00, 0.00),
     ),
     "hair": (
         (0.28, 0.20, 0.14),
@@ -191,19 +193,105 @@ def named_palette(name: str, t: float) -> RGB:
     return cosine_palette(t, a, b, c, d)
 
 
-def shade_triplet(base: RGB, hi: float = 0.28, sh: float = 0.32) -> Tuple[RGB, RGB, RGB]:
-    """Highlight / base / shadow from one cosine colour."""
-    highlight = (
-        _clamp8(base[0] + (255 - base[0]) * hi),
-        _clamp8(base[1] + (255 - base[1]) * hi),
-        _clamp8(base[2] + (255 - base[2]) * hi),
-    )
-    shadow = (
-        _clamp8(base[0] * (1.0 - sh)),
-        _clamp8(base[1] * (1.0 - sh)),
-        _clamp8(base[2] * (1.0 - sh)),
-    )
+def _lerp_hue(h1: float, h2: float, amt: float) -> float:
+    """Shortest-arc circular hue interpolation in [0, 1)."""
+    diff = (h2 - h1 + 0.5) % 1.0 - 0.5
+    return (h1 + diff * amt) % 1.0
+
+
+def _hls_to_rgb8(h: float, l: float, s: float) -> RGB:
+    r, g, b = colorsys.hls_to_rgb(h % 1.0, max(0.0, min(1.0, l)), max(0.0, min(1.0, s)))
+    return (_clamp8(r * 255.0), _clamp8(g * 255.0), _clamp8(b * 255.0))
+
+
+def shade_triplet(
+    base: RGB,
+    hi: float = 0.28,
+    sh: float = 0.32,
+    hue_shift: bool = True,
+) -> Tuple[RGB, RGB, RGB]:
+    """Highlight / base / shadow from one colour with pixel-art hue shifting.
+
+    Highlights shift subtly toward sunlit warm gold; shadows shift cooler
+    toward deep slate/indigo with slightly richer saturation so surfaces read
+    like hand-pixeled palettes instead of flat linear brightness ramps.
+    """
+    if not hue_shift:
+        highlight = (
+            _clamp8(base[0] + (255 - base[0]) * hi),
+            _clamp8(base[1] + (255 - base[1]) * hi),
+            _clamp8(base[2] + (255 - base[2]) * hi),
+        )
+        shadow = (
+            _clamp8(base[0] * (1.0 - sh)),
+            _clamp8(base[1] * (1.0 - sh)),
+            _clamp8(base[2] * (1.0 - sh)),
+        )
+        return highlight, base, shadow
+
+    h, l, s = colorsys.rgb_to_hls(base[0] / 255.0, base[1] / 255.0, base[2] / 255.0)
+    # Warm highlight: nudge hue subtly toward golden yellow (0.13)
+    if s < 0.08:
+        hi_h = 0.12
+        hi_s = min(0.18, s + 0.06)
+    else:
+        hi_h = _lerp_hue(h, 0.13, 0.14)
+        hi_s = max(0.0, min(1.0, s * 0.90))
+    hi_l = min(0.97, l + (1.0 - l) * (hi * 0.88))
+    highlight = _hls_to_rgb8(hi_h, hi_l, hi_s)
+
+    # Cool shadow: keep warm skin/amber hues natural (shift toward warm umber/terracotta
+    # instead of wrapping through hot magenta); cool/neutral hues shift toward indigo.
+    if s < 0.08:
+        sh_h = 0.63
+        sh_s = min(0.22, s + 0.10)
+    elif h < 0.15 or h > 0.90:
+        sh_h = _lerp_hue(h, 0.98, 0.12)
+        sh_s = min(0.90, s * 1.04 + 0.02)
+    else:
+        sh_h = _lerp_hue(h, 0.68, 0.14)
+        sh_s = min(1.0, s * 1.08 + 0.03)
+    sh_l = max(0.04, l * (1.0 - sh * 1.02))
+    shadow = _hls_to_rgb8(sh_h, sh_l, sh_s)
+
     return highlight, base, shadow
+
+
+def shade_metal_ramp(base: RGB) -> Tuple[RGB, RGB, RGB, RGB]:
+    """High-contrast 4-step metallic ramp: (specular, highlight, base, shadow)."""
+    hi, mid, sh = shade_triplet(base, hi=0.38, sh=0.45, hue_shift=True)
+    spec = (
+        _clamp8(hi[0] + (255 - hi[0]) * 0.65),
+        _clamp8(hi[1] + (255 - hi[1]) * 0.65),
+        _clamp8(hi[2] + (248 - hi[2]) * 0.60),
+    )
+    return spec, hi, mid, sh
+
+
+def material_outline_color(
+    rgb: RGB,
+    ink_bias: RGB = (16, 13, 24),
+    darken_amt: float = 0.56,
+    lit: bool = False,
+) -> RGB:
+    """Compute a hue-shifted selective-outline (sel-out) color for a pixel."""
+    h, l, s = colorsys.rgb_to_hls(rgb[0] / 255.0, rgb[1] / 255.0, rgb[2] / 255.0)
+    if s < 0.06:
+        sh_h = 0.66
+    elif h < 0.15 or h > 0.90:
+        sh_h = _lerp_hue(h, 0.98, 0.14)
+    else:
+        sh_h = _lerp_hue(h, 0.70, 0.16)
+    amt = darken_amt * (0.72 if lit else 1.0)
+    sh_l = max(0.05, l * (1.0 - amt))
+    sh_s = min(0.80, s * 1.06 + 0.06)
+    dark = _hls_to_rgb8(sh_h, sh_l, sh_s)
+    mix_t = 0.28 if lit else 0.48
+    return (
+        _clamp8(dark[0] * (1.0 - mix_t) + ink_bias[0] * mix_t),
+        _clamp8(dark[1] * (1.0 - mix_t) + ink_bias[1] * mix_t),
+        _clamp8(dark[2] * (1.0 - mix_t) + ink_bias[2] * mix_t),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -328,14 +416,105 @@ def quantize_canvas(canvas: Canvas, n: int = 16) -> Canvas:
     """Map every opaque pixel to an n-colour CIELAB palette (guide §6.1)."""
     colors = [(p[0], p[1], p[2]) for p in canvas.px if p[3] > 0]
     pal = median_cut(colors, n=max(2, n))
+    return snap_canvas_to_palette(canvas, pal)
+
+
+# ---------------------------------------------------------------------------
+# Curated Studio Master Palettes (CIELAB-snappable for cohesive game worlds)
+# ---------------------------------------------------------------------------
+
+MASTER_PALETTES: Dict[str, Tuple[RGB, ...]] = {
+    "pico8": (
+        (0, 0, 0), (29, 43, 83), (126, 37, 83), (0, 135, 81),
+        (171, 82, 54), (95, 87, 79), (194, 195, 199), (255, 241, 232),
+        (255, 0, 77), (255, 163, 0), (255, 236, 39), (0, 228, 54),
+        (41, 173, 255), (131, 118, 156), (255, 119, 168), (255, 204, 170),
+    ),
+    "sweetie16": (
+        (26, 28, 44), (93, 39, 93), (177, 62, 83), (239, 125, 87),
+        (255, 205, 117), (167, 240, 112), (56, 183, 100), (37, 113, 121),
+        (41, 54, 111), (59, 93, 201), (65, 166, 246), (115, 239, 247),
+        (244, 244, 244), (148, 176, 194), (86, 108, 134), (51, 60, 87),
+    ),
+    "endesga32": (
+        (190, 74, 47), (215, 118, 67), (234, 212, 170), (228, 166, 114),
+        (184, 111, 80), (115, 62, 57), (62, 39, 49), (162, 38, 51),
+        (228, 59, 68), (247, 118, 34), (254, 174, 52), (254, 231, 97),
+        (99, 199, 77), (62, 137, 72), (38, 92, 66), (25, 60, 62),
+        (18, 78, 137), (0, 149, 233), (44, 232, 245), (255, 255, 255),
+        (192, 203, 220), (139, 155, 180), (90, 105, 136), (58, 68, 102),
+        (38, 43, 68), (24, 20, 37), (255, 0, 68), (104, 56, 108),
+        (181, 80, 136), (246, 117, 122), (232, 183, 150), (194, 133, 105),
+    ),
+    "gameboy": (
+        (15, 56, 15), (48, 98, 48), (139, 172, 15), (155, 188, 15),
+    ),
+    "slso8": (
+        (13, 43, 69), (32, 60, 86), (84, 78, 104), (141, 105, 122),
+        (208, 129, 89), (255, 170, 94), (255, 212, 163), (255, 236, 214),
+    ),
+}
+
+
+def _resolve_palette(palette: Sequence[RGB] | str) -> Tuple[RGB, ...]:
+    if isinstance(palette, str):
+        key = palette.lower().strip()
+        if key not in MASTER_PALETTES:
+            raise KeyError(f"Unknown master palette {palette!r}. Known: {sorted(MASTER_PALETTES)}")
+        return MASTER_PALETTES[key]
+    return tuple(palette)
+
+
+def _make_lab_mapper(pal: Tuple[RGB, ...]):
+    pal_lab = [rgb_to_lab(c) for c in pal]
+    cache: Dict[RGB, RGB] = {}
+
+    def map_rgb(rgb: RGB) -> RGB:
+        mapped = cache.get(rgb)
+        if mapped is None:
+            L1, a1, b1 = rgb_to_lab(rgb)
+            best_idx = 0
+            best_d = 1e18
+            for idx, (L2, a2, b2) in enumerate(pal_lab):
+                d = (L2 - L1) ** 2 + (a2 - a1) ** 2 + (b2 - b1) ** 2
+                if d < best_d:
+                    best_d = d
+                    best_idx = idx
+            mapped = pal[best_idx]
+            cache[rgb] = mapped
+        return mapped
+
+    return map_rgb
+
+
+def snap_canvas_to_palette(canvas: Canvas, palette: Sequence[RGB] | str) -> Canvas:
+    """Snap every opaque pixel on ``canvas`` to the nearest CIELAB colour in ``palette``."""
+    pal = _resolve_palette(palette)
+    if not pal:
+        return canvas.clone()
+    map_rgb = _make_lab_mapper(pal)
     out = canvas.clone()
-    cache = {}
     for i, p in enumerate(out.px):
-        if p[3] <= 0:
-            continue
-        key = (p[0], p[1], p[2])
-        if key not in cache:
-            cache[key] = nearest_lab(key, pal)
-        r, g, b = cache[key]
-        out.px[i] = (r, g, b, 255)
+        if p[3] > 0:
+            r, g, b = map_rgb((p[0], p[1], p[2]))
+            out.px[i] = (r, g, b, 255)
     return out
+
+
+def snap_pil_to_palette(image, palette: Sequence[RGB] | str):
+    """Snap non-transparent pixels on an RGBA PIL image to ``palette`` (preserving alpha)."""
+    pal = _resolve_palette(palette)
+    if not pal:
+        return image.copy()
+    map_rgb = _make_lab_mapper(pal)
+    rgba = image.convert("RGBA")
+    data = list(rgba.getdata())
+    out = []
+    for r, g, b, a in data:
+        if a > 0:
+            nr, ng, nb = map_rgb((r, g, b))
+            out.append((nr, ng, nb, a))
+        else:
+            out.append((0, 0, 0, 0))
+    rgba.putdata(out)
+    return rgba

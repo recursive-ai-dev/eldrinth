@@ -29,6 +29,29 @@ NBIT, EBIT, SBIT, WBIT = 1, 2, 4, 8
 NEBIT, SEBIT, SWBIT, NWBIT = 16, 32, 64, 128
 
 
+def canonical_blob_mask(mask: int) -> int:
+    """Normalise an 8-bit neighbour bitmask to one of the 47 canonical Blob masks.
+
+    A diagonal bit (NE/SE/SW/NW) is kept only when both adjacent cardinal
+    neighbours (N/E/S/W) are also present.
+    """
+    m = int(mask) & (NBIT | EBIT | SBIT | WBIT)
+    if (mask & NBIT) and (mask & EBIT) and (mask & NEBIT):
+        m |= NEBIT
+    if (mask & EBIT) and (mask & SBIT) and (mask & SEBIT):
+        m |= SEBIT
+    if (mask & SBIT) and (mask & WBIT) and (mask & SWBIT):
+        m |= SWBIT
+    if (mask & WBIT) and (mask & NBIT) and (mask & NWBIT):
+        m |= NWBIT
+    return m
+
+
+BLOB_47_MASKS: Tuple[int, ...] = tuple(
+    m for m in range(256) if canonical_blob_mask(m) == m
+)
+
+
 def neighbor_mask(grid: List[List[int]], x: int, y: int, eight: bool = False) -> int:
     """Return the Wang bitmask of cell ``(x, y)``.  ``grid`` is 1=terrain, 0=other."""
     h = len(grid)

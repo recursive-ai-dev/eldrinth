@@ -2,15 +2,17 @@
   "autotile": false,
   "cellH": 32,
   "cellW": 32,
+  "columns": 4,
   "frames": 4,
   "kind": "tile",
   "masks": 1,
   "pixelHashes": [
-    "904d49fe57972dd45e4bd90f954568bc",
-    "0c3c6400e642e23db8ff1cffb8aee751",
-    "a253ec66a700774378b967de5a204397",
-    "3baf4325fd3082ddeef308ab4263d692"
+    "e85eb81a0aab6c658bfc8427e12c454c",
+    "65b80ed41d00e77093d800f1fbc38599",
+    "3dcb8fcaa51511c9125a3d36ec0b5390",
+    "1c9f8bb8165103f025712bfd57a38599"
   ],
+  "regionPalette": "oldlands",
   "static": true,
   "variants": 4
 }

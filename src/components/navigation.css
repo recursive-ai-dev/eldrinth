@@ -2,6 +2,12 @@
 .atlas-panel { width: min(1040px, 100%); max-height: 92dvh; display: flex; flex-direction: column; overflow: hidden; padding: 24px; border: 1px solid #ae9c6554; border-radius: 14px; color: #e8dfca; background: radial-gradient(ellipse at 0 0, #293a3233, transparent 65%), #121815fa; box-shadow: 0 25px 100px #000b; }
 .atlas-header { display: flex; gap: 12px; align-items: center; }
 .atlas-header h2 { font-size: clamp(22px, 3vw, 31px); line-height: 1.25; color: #f3e6c9; }
+.atlas-scene-thumb { margin-left: auto; border: 1px solid #ae9c6548; border-radius: 6px; overflow: hidden; flex-shrink: 0; box-shadow: 0 4px 16px #0008; }
+.atlas-scene-thumb img { display: block; width: 112px; height: 63px; image-rendering: pixelated; }
+.atlas-header .atlas-scene-thumb + .atlas-close { margin-left: 8px; }
+@media (max-width: 700px) { .atlas-scene-thumb { display: none; } }
+@media (max-height: 500px) { .atlas-scene-thumb { display: none; } }
+@media (max-width: 639px) { .region-arrival-banner { display: none; } }
 .atlas-eyebrow { font-family: var(--font-title); font-size: 9px; letter-spacing: .2em; color: #b3c4ad; }
 .atlas-close { margin-left: auto; flex-shrink: 0; }
 .atlas-panel button, .atlas-panel select { cursor: pointer; }

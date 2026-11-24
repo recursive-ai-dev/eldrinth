@@ -21,7 +21,7 @@ in flat clerical language. A content warning gates first launch. See
 Install the standalone Debian desktop release on amd64 Linux:
 
 ```bash
-sudo apt install ./eldrinth_1.3.0_amd64.deb
+sudo apt install ./eldrinth_1.4.0_amd64.deb
 eldrinth
 ```
 
@@ -53,6 +53,37 @@ subdirectory, or an itch.io zip without reconfiguration.
 
 Touch controls appear automatically on coarse-pointer devices. Landscape is
 recommended on phones.
+
+### The Living Frontier · 1.4
+
+Version 1.4 overhauls Eldrinth's world pixel art, animations, terrain connectivity,
+and regional architecture using the upgraded **shed-dev-sprites** v3.0 generator:
+
+- **Multi-clip character & creature animations:** The wayfarer, guards, refugees,
+  all 13 canonical lore NPCs, wraiths, sentinels, adepts, regional wardens, and
+  The Unbound now animate across dedicated `idle`, `walk`, `attack`, `cast`,
+  `hurt`, and `death` clips, with monotonic skin ramps and gentler face shading.
+- **Distinct regional wardens:** Elite sentinels and fortress wardens in the Old
+  Lands, Cinderwild, Moonlit Coast, and Starfall Moors each have their own 40px
+  armoured/elemental silhouette and palette rather than sharing a base sheet.
+- **47-tile Blob Wang autotiling & regional master palettes:** Core terrain sets
+  (`grass`, `path`, `water`, `rwall`, and `sand`) use 8-neighbor 47-tile Blob
+  Wang masks for clean inner/outer corners, shorelines, and joined masonry
+  parapets. Each frontier locks its ground, foliage, roads, and buildings to a
+  curated CIELAB master palette ramp so Cinderwild ash-basalt, Moonlit Coast
+  brine-kelp, and Starfall Moors heather read at a glance.
+- **Civic structures & bespoke shard fortresses:** Settlements pair regional
+  cottages with distinct halls, smithies, shrines, and watchtowers, while all
+  nine shard fortress approaches feature bespoke 4×4-tile exterior facades.
+- **Illustrated regional banners:** Crossing into a frontier region greets you
+  with a deterministic `192×108` pixel-art landscape banner (suppressed in Quiet
+  Interface mode), and the same illustrations appear in the **M** Atlas header:
+
+```bash
+npm run gen:sprites
+npm run gen:scenes
+npm run verify:scenes
+```
 
 ### The Wayfarer’s Kit · 1.3
 

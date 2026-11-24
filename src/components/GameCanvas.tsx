@@ -105,7 +105,7 @@ export default function GameCanvas({
       }
     };
     
-    const interval = window.setInterval(backgroundCheckpoint, 10_000);
+    const interval = window.setInterval(() => { void backgroundCheckpoint(); }, 10_000);
     window.addEventListener("visibilitychange", onVisibilityChange);
     
     // Set up beforeunload warning for unsaved progress
@@ -117,8 +117,7 @@ export default function GameCanvas({
                                  now - lastSuccessfulCheckpoint > 0;
       if (hasUnsavedProgress && game.initialized && !game.ended) {
         e.preventDefault();
-        e.returnValue = "You have unsaved progress. Are you sure you want to leave?";
-        return e.returnValue;
+        e.returnValue = "";
       }
     };
     window.addEventListener("beforeunload", beforeUnloadHandler);
@@ -151,6 +150,7 @@ export default function GameCanvas({
       if (window.eldrinthCheckpoint === checkpoint) delete window.eldrinthCheckpoint;
       window.clearInterval(interval);
       window.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("beforeunload", beforeUnloadHandler);
       if (willCheckpoint) {
         void (onCheckpoint?.(game.saveWorld()));
       }

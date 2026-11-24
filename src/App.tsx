@@ -19,6 +19,7 @@ import { mapKeyboardKey } from "@/game/controlBindings";
 import { type Difficulty, normalizeDifficulty } from "@/game/types";
 import { readDisplayPreferences, saveDisplayPreferences, type DisplayPreferences } from "@/components/displayPreferences";
 import WorldAtmosphere from "@/components/WorldAtmosphere";
+import { RegionTransitionBanner, sceneIdForRegionName, type RegionArrivalState } from "@/components/RegionScene";
 import { useSoundscape } from "@/audio/useSoundscape";
 import SoundSettings from "@/audio/SoundSettings";
 import Atlas from "@/components/Atlas";
@@ -55,6 +56,9 @@ export default function App() {
   const [travelPreferences, setTravelPreferences] = useState(readTravelPreferences);
   const [travelPreferencesSaved, setTravelPreferencesSaved] = useState(true);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  const [regionArrival, setRegionArrival] = useState<RegionArrivalState | null>(null);
+  const lastRegionRef = useRef<string | null>(null);
+  const arrivalSeqRef = useRef(0);
 
   const refreshSlots = useCallback(() => {
     return slotStore.list().then((records) => { setSlots(records); setSlotsReady(true); }).catch((error: unknown) => {
@@ -265,7 +269,23 @@ export default function App() {
     return () => window.removeEventListener("keydown", toggleJournal);
   }, [screen, dialogue, journalOpen, atlasOpen, setJournalVisibility, setAtlasVisibility]);
   const callbacks: GameCallbacks = {
-    onHud: (hudData) => setHud(hudData),
+    onHud: (hudData) => {
+      if (hudData.regionName) {
+        if (lastRegionRef.current === null) {
+          lastRegionRef.current = hudData.regionName;
+        } else if (lastRegionRef.current !== hudData.regionName) {
+          lastRegionRef.current = hudData.regionName;
+          const sceneId = sceneIdForRegionName(hudData.regionName);
+          if (sceneId) {
+            arrivalSeqRef.current += 1;
+            setRegionArrival({ id: arrivalSeqRef.current, sceneId, title: hudData.regionName });
+          } else {
+            setRegionArrival(null);
+          }
+        }
+      }
+      setHud(hudData);
+    },
     onDialogue: (dialogueData) => setDialogue(dialogueData),
     onPause: (paused) => setPaused(paused),
     onEnd: (result, runEpilogue) => { setCheckpoint(null); endGame(result, runEpilogue); },
@@ -287,12 +307,13 @@ export default function App() {
           difficulty={difficulty}
           // A fresh engine starts with its journal closed; match it, or a journal
           // left open when the previous engine crashed covers a live world.
-          onReady={(g) => { gameRef.current = g; g.setCameraZoom(preferences.cameraZoom); g.autoPause = travelPreferences.autoPause; g.screenShake = travelPreferences.screenShake; g.quietInterface = preferences.quietInterface; setJournalOpen(false); setAtlasOpen(false); setPinnedId(null); setLastSavedAt(null); }}
+          onReady={(g) => { gameRef.current = g; lastRegionRef.current = null; setRegionArrival(null); g.setCameraZoom(preferences.cameraZoom); g.autoPause = travelPreferences.autoPause; g.screenShake = travelPreferences.screenShake; g.quietInterface = preferences.quietInterface; setJournalOpen(false); setAtlasOpen(false); setPinnedId(null); setLastSavedAt(null); }}
           onDispose={(g) => { if (gameRef.current === g) gameRef.current = null; }}
         />
       )}
 
       {showGame && travelPreferences.atmosphere && <WorldAtmosphere region={hud.regionName} still={paused || journalOpen || atlasOpen || !!dialogue} />}
+      {showGame && !paused && !dialogue && !journalOpen && !atlasOpen && <RegionTransitionBanner arrival={regionArrival} quiet={preferences.quietInterface || !travelPreferences.atmosphere} />}
       {showGame && <HUD hud={hud} pinnedId={pinnedId} onAtlas={!paused && !dialogue && !journalOpen && !atlasOpen ? () => setAtlasVisibility(true) : undefined} onLantern={!paused && !dialogue && !journalOpen && !atlasOpen ? () => { gameRef.current?.toggleLantern(); } : undefined} onEquipment={!paused && !dialogue && !journalOpen && !atlasOpen ? () => gameRef.current?.setPaused(true) : undefined} />}
 
       {showGame && !paused && !dialogue && !journalOpen && !atlasOpen && (

@@ -135,3 +135,155 @@ def tile_atlas(
     vertical gaps so adjacent tiles read as a terrain strip.
     """
     return make_sheet(sprites, cols=cols, cell=None, margin=margin, background=(42, 44, 52), transparent=False)
+
+
+def _clip_tags(meta: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Build animation frame-tag ranges from ``meta`` (e.g. walk_front 0..3)."""
+    dirs = meta.get("directions")
+    actions = meta.get("actions")
+    nframes = int(meta.get("frames") or 0)
+    cells = meta.get("cells") or []
+    if actions and dirs and nframes > 0 and len(cells) >= len(actions) * len(dirs) * nframes:
+        tags: List[Dict[str, Any]] = []
+        idx = 0
+        for act in actions:
+            loop = act not in ("death", "hurt")
+            for d in dirs:
+                tags.append({
+                    "name": f"{act}_{d}",
+                    "from": idx * nframes,
+                    "to": (idx + 1) * nframes - 1,
+                    "direction": "forward",
+                    "loop": loop,
+                })
+                idx += 1
+        return tags
+    if dirs and nframes > 0 and len(cells) >= len(dirs) * nframes:
+        act = str(meta.get("action") or "walk")
+        loop = act not in ("death", "hurt")
+        return [
+            {
+                "name": f"{act}_{d}",
+                "from": idx * nframes,
+                "to": (idx + 1) * nframes - 1,
+                "direction": "forward",
+                "loop": loop,
+            }
+            for idx, d in enumerate(dirs)
+        ]
+    return [{
+        "name": "default",
+        "from": 0,
+        "to": max(0, len(cells) - 1),
+        "direction": "forward",
+        "loop": True,
+    }]
+
+
+def format_aseprite_json(
+    meta: Dict[str, Any],
+    image_name: str = "sheet.png",
+    duration_ms: int = 125,
+) -> Dict[str, Any]:
+    """Convert compositor ``meta`` into an Aseprite-compatible JSON atlas."""
+    cells = meta.get("cells") or []
+    stype = meta.get("type", "sprite")
+    frames: Dict[str, Any] = {}
+    for idx, c in enumerate(cells):
+        w, h = int(c["w"]), int(c["h"])
+        frames[f"{stype}_{idx}.png"] = {
+            "frame": {"x": int(c["x"]), "y": int(c["y"]), "w": w, "h": h},
+            "rotated": False,
+            "trimmed": False,
+            "spriteSourceSize": {"x": 0, "y": 0, "w": w, "h": h},
+            "sourceSize": {"w": w, "h": h},
+            "duration": int(duration_ms),
+        }
+    return {
+        "frames": frames,
+        "meta": {
+            "app": "Shed Dev Sprites",
+            "version": "1.0",
+            "image": image_name,
+            "format": "RGBA8888",
+            "size": {
+                "w": int(meta.get("sheet_width", 0)),
+                "h": int(meta.get("sheet_height", 0)),
+            },
+            "scale": "1",
+            "frameTags": _clip_tags(meta),
+        },
+    }
+
+
+def format_unity_atlas_json(
+    meta: Dict[str, Any],
+    image_name: str = "sheet.png",
+    pivot: Tuple[float, float] = (0.5, 0.0),
+    pixels_per_unit: int = 16,
+) -> Dict[str, Any]:
+    """Convert compositor ``meta`` into a Unity/generic engine slice descriptor."""
+    cells = meta.get("cells") or []
+    stype = meta.get("type", "sprite")
+    return {
+        "image": image_name,
+        "type": stype,
+        "sheet_size": {
+            "w": int(meta.get("sheet_width", 0)),
+            "h": int(meta.get("sheet_height", 0)),
+        },
+        "pixels_per_unit": int(pixels_per_unit),
+        "clips": _clip_tags(meta),
+        "sprites": [
+            {
+                "name": f"{stype}_{c['index']}",
+                "rect": {"x": int(c["x"]), "y": int(c["y"]), "w": int(c["w"]), "h": int(c["h"])},
+                "pivot": {"x": float(pivot[0]), "y": float(pivot[1])},
+            }
+            for c in cells
+        ],
+    }
+
+
+def format_godot_tres(
+    meta: Dict[str, Any],
+    image_path: str = "res://sheet.png",
+    fps: float = 8.0,
+) -> str:
+    """Export compositor ``meta`` as a Godot 4 ``SpriteFrames`` ``.tres`` file."""
+    cells = meta.get("cells") or []
+    load_steps = len(cells) + 2
+    lines = [
+        f'[gd_resource type="SpriteFrames" load_steps={load_steps} format=3]',
+        "",
+        f'[ext_resource type="Texture2D" path="{image_path}" id="1_atlas"]',
+        "",
+    ]
+    for c in cells:
+        i = int(c["index"])
+        lines.extend([
+            f'[sub_resource type="AtlasTexture" id="AtlasTexture_{i}"]',
+            'atlas = ExtResource("1_atlas")',
+            f'region = Rect2({int(c["x"])}, {int(c["y"])}, {int(c["w"])}, {int(c["h"])})',
+            "",
+        ])
+
+    anim_blocks = []
+    for tag in _clip_tags(meta):
+        f_idx, t_idx = int(tag["from"]), int(tag["to"])
+        frames_entries = [
+            f'{{\n"duration": 1.0,\n"texture": SubResource("AtlasTexture_{k}")\n}}'
+            for k in range(f_idx, t_idx + 1)
+        ]
+        loop_str = "true" if tag.get("loop", True) else "false"
+        anim_blocks.append(
+            f'{{\n"frames": [{", ".join(frames_entries)}],\n'
+            f'"loop": {loop_str},\n"name": &"{tag["name"]}",\n"speed": {float(fps):.1f}\n}}'
+        )
+
+    lines.extend([
+        "[resource]",
+        f"animations = [{', '.join(anim_blocks)}]",
+        "",
+    ])
+    return "\n".join(lines)

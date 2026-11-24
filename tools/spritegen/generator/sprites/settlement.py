@@ -57,15 +57,25 @@ class SettlementSpriteGenerator(SpriteGenerator):
         if part not in _PARTS:
             part = "cottage"
         variant = int(options.get("variant", 0))
+        locks = dict(options.get("locks") or {})
+        part_seeds = {
+            p: int(locks.get(p) if locks.get(p) is not None else options.get(f"{p}_seed", seed))
+            for p in ("roof", "wall", "trim")
+        }
         palette = _THEMES[theme_name]
         image = Image.new("RGBA", self.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(image)
         rng = self.rng(seed, theme_name, part, variant)
+        part_rngs = {
+            p: (rng if part_seeds[p] == seed else self.rng(part_seeds[p], theme_name, part, variant, p))
+            for p in ("roof", "wall", "trim")
+        }
         spec = {
             "theme": theme_name,
             "part": part,
             "variant": variant,
             "size": list(self.size),
+            "part_seeds": part_seeds,
             "pipeline": {
                 "grammar": "roof-facade-door-room-furnishing",
                 "materials": "theme-ramp+integer-pixel-joinery",
@@ -74,7 +84,7 @@ class SettlementSpriteGenerator(SpriteGenerator):
         }
 
         if part == "cottage":
-            self._cottage(draw, palette, rng)
+            self._cottage(draw, palette, rng, part_rngs=part_rngs)
         elif part.startswith("roof_"):
             self._roof_module(draw, palette, part.rsplit("_", 1)[1], rng)
         elif part.startswith("wall_"):
@@ -97,61 +107,137 @@ class SettlementSpriteGenerator(SpriteGenerator):
     def _rgba(c):
         return (c[0], c[1], c[2], 255)
 
-    def _cottage(self, d: ImageDraw.ImageDraw, p: Dict[str, tuple], rng) -> None:
-        """Draw a complete 3×3-tile frontage into any square sprite size."""
+    @staticmethod
+    def _seed_theme(base_p: Dict[str, tuple], rng) -> Dict[str, tuple]:
+        """Subtly shift a named settlement theme per seed without losing its biome."""
+        warmth = rng.choice([(215, 200, 175), (170, 190, 210), (195, 175, 165), (175, 205, 180)])
+        amt = rng.uniform(0.02, 0.14)
+        roof_adj = rng.uniform(-0.08, 0.10)
+        roof = color.mix(base_p["roof"], warmth, amt)
+        roof = color.lighten(roof, roof_adj) if roof_adj >= 0 else color.darken(roof, -roof_adj)
+        return {
+            "roof": roof,
+            "wall": color.mix(base_p["wall"], warmth, amt * 0.8),
+            "trim": color.mix(base_p["trim"], warmth, amt * 0.5),
+            "wood": color.mix(base_p["wood"], warmth, amt * 0.6),
+            "floor": color.mix(base_p["floor"], warmth, amt * 0.6),
+            "accent": base_p["accent"],
+        }
+
+    def _cottage(self, d: ImageDraw.ImageDraw, base_p: Dict[str, tuple], rng, part_rngs=None) -> None:
+        """Draw a seeded 3×3-style cottage frontage scaled cleanly to any square size."""
         w, h = self.size
-        u = max(1, min(w, h) // 32)
-        # One logical unit becomes three physical pixels for a 96px cottage,
-        # preserving the same deliberate chunky language as a 32px module.
-        def q(v): return int(v * u)
+        s = min(w, h) / 32.0
+        u = max(1, int(round(s)))
+
+        def q(v):
+            return int(round(v * s))
+
+        pr = part_rngs or {"roof": rng, "wall": rng, "trim": rng}
+        p = self._seed_theme(base_p, rng)
+        if pr["roof"] is not rng:
+            p["roof"] = self._seed_theme(base_p, pr["roof"])["roof"]
+        if pr["wall"] is not rng:
+            w_p = self._seed_theme(base_p, pr["wall"])
+            p["wall"], p["wood"] = w_p["wall"], w_p["wood"]
+        if pr["trim"] is not rng:
+            t_p = self._seed_theme(base_p, pr["trim"])
+            p["trim"], p["accent"] = t_p["trim"], t_p["accent"]
         ink = self._ink()
         roof, wall, trim, wood, accent = (self._rgba(p[n]) for n in ("roof", "wall", "trim", "wood", "accent"))
-        roof_hi = self._rgba(color.lighten(p["roof"], 0.25))
+        roof_hi = self._rgba(color.lighten(p["roof"], 0.26))
         roof_sh = self._rgba(color.darken(p["roof"], 0.36))
         wall_sh = self._rgba(color.darken(p["wall"], 0.28))
+        wall_hi = self._rgba(color.lighten(p["wall"], 0.14))
         wood_hi = self._rgba(color.lighten(p["wood"], 0.24))
-        # Foundation shadow makes the cottage feel planted, not pasted on.
+
+        # Architectural grammar parameters sampled per seed (respecting sub-seed locks)
+        rr, wr, tr = pr["roof"], pr["wall"], pr["trim"]
+        roof_peak_y = rr.choice([2, 3, 4])
+        has_chimney = rr.random() < 0.72
+        chim_side = rr.choice([-1, 1])
+        has_dormer = rr.random() < 0.35
+        door_cx = tr.choice([12, 16, 16, 20])
+        brace_style = wr.choice(["posts", "half_timber", "cross"])
+        has_planter = tr.random() < 0.55
+        has_lantern = tr.random() < 0.50
+
+        # Foundation shadow
         d.rectangle((q(3), q(29), q(28), q(31)), fill=ink)
-        # Gabled roof and its under-eave shadow.
-        d.polygon([(q(2), q(15)), (q(16), q(2)), (q(30), q(15)), (q(28), q(18)), (q(4), q(18))], fill=ink)
-        d.polygon([(q(3), q(15)), (q(16), q(3)), (q(29), q(15)), (q(27), q(17)), (q(5), q(17))], fill=roof)
-        d.line((q(5), q(14), q(16), q(4), q(27), q(14)), fill=roof_hi, width=u)
+
+        # Chimney behind roof
+        if has_chimney:
+            chx = 8 if chim_side < 0 else 21
+            d.rectangle((q(chx), q(2), q(chx + 3), q(11)), fill=ink)
+            d.rectangle((q(chx + 0.6), q(2.6), q(chx + 2.4), q(10)), fill=wall_sh)
+            d.rectangle((q(chx - 0.5), q(2), q(chx + 3.5), q(3.2)), fill=trim)
+            if s >= 1.0:
+                d.point((q(chx + 1.5), q(1)), fill=(210, 210, 220, 180))
+
+        # Gabled roof + under-eave shadow
+        d.polygon([(q(2), q(15)), (q(16), q(roof_peak_y)), (q(30), q(15)), (q(28), q(18)), (q(4), q(18))], fill=ink)
+        d.polygon([(q(3), q(15)), (q(16), q(roof_peak_y + 1)), (q(29), q(15)), (q(27), q(17)), (q(5), q(17))], fill=roof)
+        d.line((q(5), q(14), q(16), q(roof_peak_y + 2), q(27), q(14)), fill=roof_hi, width=u)
         for y in range(8, 17, 3):
             shift = (y - 8) // 3
-            d.line((q(6 + shift), q(y), q(26 - shift), q(y)), fill=roof_sh, width=max(1, u))
-        # Slate mottling doubles as a high-entropy, but still natural, roof
-        # pattern. It preserves the generator's seed-to-pixels uniqueness
-        # guarantee even when two cottages happen to share wall weathering.
-        slate_marks = rng.next_u64()
+            d.line((q(6 + shift), q(y), q(26 - shift), q(y)), fill=roof_sh, width=u)
+
+        # High-entropy seeded slate/shingle mottling
+        slate_marks = rr.next_u64()
         for mark in range(16):
             row, col = divmod(mark, 4)
             x, y = 9 + col * 4 + row, 7 + row * 2
             shade = (slate_marks >> (mark * 4)) & 0xF
-            tone = color.mix(p["roof"], p["trim"], shade / 48.0)
+            tone = color.mix(p["roof"], p["trim"], shade / 42.0)
             d.point((q(x), q(y)), fill=self._rgba(tone))
+
+        if has_dormer:
+            d.rectangle((q(13), q(8), q(19), q(14)), fill=ink)
+            d.rectangle((q(14), q(9), q(18), q(13)), fill=wall)
+            d.rectangle((q(15), q(10), q(17), q(12)), fill=accent)
+
         d.rectangle((q(4), q(17), q(28), q(19)), fill=ink)
         d.rectangle((q(5), q(17), q(27), q(18)), fill=roof_sh)
-        # Frontage with timber braces, lit window, and a readable doorway.
+
+        # Frontage facade + timber joinery
         d.rectangle((q(5), q(19), q(27), q(29)), fill=ink)
         d.rectangle((q(6), q(19), q(26), q(28)), fill=wall)
         d.line((q(6), q(20), q(26), q(20)), fill=trim, width=u)
-        for x in (8, 24):
+        d.line((q(6), q(21), q(26), q(21)), fill=wall_hi, width=1)
+        for x in (7, 23):
             d.rectangle((q(x), q(20), q(x + 1), q(28)), fill=wood)
-            d.line((q(x), q(20), q(x), q(28)), fill=wood_hi, width=max(1, u))
-        # A pair of asymmetric window panes keeps repeated cottages from reading as a wall.
-        for x, y in ((11, 22), (19, 23)):
-            d.rectangle((q(x - 2), q(y - 2), q(x + 2), q(y + 2)), fill=ink)
-            d.rectangle((q(x - 1), q(y - 1), q(x + 1), q(y + 1)), fill=accent)
-            d.point((q(x - 1), q(y - 1)), fill=(255, 244, 192, 255))
-        d.rectangle((q(14), q(22), q(18), q(29)), fill=ink)
-        d.rectangle((q(15), q(23), q(17), q(28)), fill=wood)
-        d.line((q(15), q(23), q(15), q(28)), fill=wood_hi, width=max(1, u))
-        d.point((q(17), q(26)), fill=accent)
-        # Seed-derived weathering is local and never changes the silhouette.
-        for _ in range(4):
+            d.line((q(x), q(20), q(x), q(28)), fill=wood_hi, width=u)
+        if brace_style == "half_timber":
+            d.line((q(6), q(24), q(26), q(24)), fill=wood, width=u)
+        elif brace_style == "cross":
+            d.line((q(8), q(20), q(11), q(24)), fill=wood, width=u)
+            d.line((q(24), q(20), q(21), q(24)), fill=wood, width=u)
+
+        # Windows opposite the doorway
+        win_xs = [x for x in (11, 16, 21) if abs(x - door_cx) >= 4]
+        for idx, wx in enumerate(win_xs[:2]):
+            wy = 22 + (idx % 2)
+            d.rectangle((q(wx - 2), q(wy - 2), q(wx + 2), q(wy + 2)), fill=ink)
+            d.rectangle((q(wx - 1), q(wy - 1), q(wx + 1), q(wy + 1)), fill=accent)
+            d.point((q(wx - 1), q(wy - 1)), fill=(255, 244, 192, 255))
+            if has_planter and idx == 0:
+                d.rectangle((q(wx - 2), q(wy + 2), q(wx + 2), q(wy + 3)), fill=wood)
+                d.point((q(wx), q(wy + 1)), fill=(96, 178, 86, 255))
+
+        # Doorway + latch + optional lantern
+        d.rectangle((q(door_cx - 2), q(22), q(door_cx + 2), q(29)), fill=ink)
+        d.rectangle((q(door_cx - 1), q(23), q(door_cx + 1), q(28)), fill=wood)
+        d.line((q(door_cx - 1), q(23), q(door_cx - 1), q(28)), fill=wood_hi, width=u)
+        d.point((q(door_cx + 1), q(26)), fill=accent)
+        if has_lantern:
+            lx = door_cx - 3 if door_cx >= 16 else door_cx + 3
+            d.point((q(lx), q(23)), fill=(255, 224, 128, 255))
+
+        # Seed-derived stone/moss weathering marks
+        for _ in range(5):
             x = rng.randint(6, 26)
             y = rng.randint(20, 28)
-            if 14 <= x <= 18 and y >= 22:
+            if door_cx - 2 <= x <= door_cx + 2 and y >= 22:
                 continue
             d.point((q(x), q(y)), fill=wall_sh)
 
@@ -227,27 +313,46 @@ class SettlementSpriteGenerator(SpriteGenerator):
         w, h = self.size
         ink, wood, accent = self._ink(), self._rgba(p["wood"]), self._rgba(p["accent"])
         hi, sh = self._rgba(color.lighten(p["wood"], .24)), self._rgba(color.darken(p["wood"], .36))
+        trim = self._rgba(p["trim"])
         if part == "bed":
             d.rectangle((3, 8, w - 4, h - 4), fill=ink); d.rectangle((4, 9, w - 5, h - 5), fill=wood)
-            d.rectangle((6, 11, w - 6, h // 2 + 1), fill=accent); d.line((6, h // 2 + 3, w - 6, h // 2 + 3), fill=hi)
+            d.rectangle((6, 11, w - 6, h // 2 + 2), fill=accent); d.line((6, h // 2 + 4, w - 6, h // 2 + 4), fill=hi)
+            # Pillow + folded blanket stripe
+            d.rectangle((7, 10, w // 2, 13), fill=trim)
+            if rng.random() < 0.6:
+                d.line((6, h // 2, w - 6, h // 2), fill=trim)
         elif part in ("table", "workbench"):
             top = 8 if part == "table" else 6
             d.rectangle((3, top, w - 4, top + 7), fill=ink); d.rectangle((4, top + 1, w - 5, top + 5), fill=wood)
             d.line((5, top + 1, w - 6, top + 1), fill=hi)
             for x in (6, w - 7): d.rectangle((x, top + 7, x + 2, h - 4), fill=sh)
-            if part == "workbench": d.rectangle((w // 2 - 3, top - 3, w // 2 + 3, top), fill=accent)
+            if part == "workbench":
+                d.rectangle((w // 2 - 3, top - 3, w // 2 + 3, top), fill=accent)
+            elif rng.random() < 0.65:
+                mx = rng.randint(6, w - 10)
+                d.rectangle((mx, top - 2, mx + 2, top), fill=trim)
         elif part == "shelf":
             d.rectangle((4, 3, w - 5, h - 3), fill=ink); d.rectangle((5, 4, w - 6, h - 4), fill=wood)
-            for y in range(8, h - 4, 7): d.line((5, y, w - 6, y), fill=sh)
-            for x in range(8, w - 7, 6): d.rectangle((x, 5, x + 2, 7), fill=accent)
+            for y in range(8, h - 4, 7):
+                d.line((5, y, w - 6, y), fill=sh)
+                for x in range(7, w - 8, 5):
+                    if rng.random() < 0.7:
+                        d.rectangle((x, y - 3, x + 2, y - 1), fill=accent if rng.random() < 0.6 else trim)
         elif part == "hearth":
             d.rectangle((4, 5, w - 5, h - 3), fill=ink); d.rectangle((5, 6, w - 6, h - 4), fill=self._rgba(p["wall"]))
-            d.rectangle((8, 13, w - 9, h - 5), fill=sh); d.polygon([(w // 2, 10), (w - 10, h - 6), (10, h - 6)], fill=accent)
+            d.rectangle((8, 13, w - 9, h - 5), fill=sh)
+            fh = rng.randint(9, 12)
+            d.polygon([(w // 2, fh), (w - 10, h - 6), (10, h - 6)], fill=accent)
+            d.point((w // 2, fh + 3), fill=(255, 245, 195, 255))
         elif part == "lamp":
             d.line((w // 2, 3, w // 2, h - 6), fill=ink, width=2); d.line((w // 2 - 1, 4, w // 2 - 1, h - 7), fill=wood)
-            d.ellipse((w // 2 - 5, 8, w // 2 + 5, 18), fill=ink); d.ellipse((w // 2 - 3, 10, w // 2 + 3, 16), fill=accent)
+            r = rng.choice([4, 5])
+            d.ellipse((w // 2 - r, 8, w // 2 + r, 8 + r * 2), fill=ink)
+            d.ellipse((w // 2 - r + 2, 10, w // 2 + r - 2, 6 + r * 2), fill=accent)
         elif part == "rug":
             d.rectangle((3, 8, w - 4, h - 5), fill=ink); d.rectangle((4, 9, w - 5, h - 6), fill=accent)
-            for x in range(7, w - 6, 6): d.line((x, 10, x, h - 7), fill=hi)
+            d.rectangle((6, 11, w - 7, h - 8), fill=sh)
+            for x in range(8, w - 7, 5):
+                d.line((x, 12, x, h - 9), fill=trim)
         for _ in range(2):
             d.point((rng.randint(2, w - 3), rng.randint(2, h - 3)), fill=hi)

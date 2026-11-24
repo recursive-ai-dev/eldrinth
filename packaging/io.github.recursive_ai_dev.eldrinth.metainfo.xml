@@ -16,6 +16,9 @@
   <provides><binary>eldrinth</binary></provides>
   <categories><category>Game</category><category>RolePlaying</category></categories>
   <releases>
+    <release version="1.4.0" date="2026-11-24">
+      <description><p>Graphical overhaul with multi-clip animations, distinct regional wardens, 47-tile Blob Wang autotiling, regional master palettes, civic halls, bespoke shard fortresses, and regional landscape banners.</p></description>
+    </release>
     <release version="1.3.0" date="2026-10-27">
       <description><p>Regional warden tactics, remappable controls, gamepad support, portable save backups, and improved Linux desktop reliability.</p></description>
     </release>

@@ -38,16 +38,19 @@ def check_static(key: str, sheet: Image.Image, manifest: dict) -> int:
     cell_w = manifest["cellW"]
     cell_h = manifest["cellH"]
     frames = manifest["frames"]
+    cols = manifest.get("columns", frames)
+    rows = (frames + cols - 1) // cols
     hashes = manifest["pixelHashes"]
     assert len(hashes) == frames, f"{key}: static hash count does not match frames"
-    assert sheet.size == (cell_w * frames, cell_h), (
-        f"{key}: expected {(cell_w * frames, cell_h)}, got {sheet.size}"
+    assert sheet.size == (cell_w * cols, cell_h * rows), (
+        f"{key}: expected {(cell_w * cols, cell_h * rows)}, got {sheet.size}"
     )
     for frame_index, expected_hash in enumerate(hashes):
-        left = frame_index * cell_w
+        left = (frame_index % cols) * cell_w
+        top = (frame_index // cols) * cell_h
         assert_frame(
             sheet,
-            (left, 0, left + cell_w, cell_h),
+            (left, top, left + cell_w, top + cell_h),
             expected_hash,
             f"{key}/frame-{frame_index}",
         )

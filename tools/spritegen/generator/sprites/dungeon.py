@@ -28,6 +28,7 @@ class DungeonSpriteGenerator(SpriteGenerator):
 
     type_name = "dungeon"
     default_size = (32, 32)
+    handles_master_palette = True
 
     def _build(self, seed: int, **options) -> Tuple[Dict[str, Any], "Image.Image"]:
         opt = options_from(options)
@@ -88,7 +89,12 @@ class DungeonSpriteGenerator(SpriteGenerator):
                 "walkable": True,
             },
         }
-        if opt["quantize"]:
+        if opt.get("master_palette"):
+            from ..math.palette import MASTER_PALETTES, snap_canvas_to_palette
+            mp = str(opt["master_palette"]).lower()
+            if mp in MASTER_PALETTES:
+                canvas = snap_canvas_to_palette(canvas, MASTER_PALETTES[mp])
+        elif opt["quantize"]:
             from ..math.palette import quantize_canvas
             canvas = quantize_canvas(canvas, n=int(opt["quantize"]))
         if opt["use_scale2x"]:

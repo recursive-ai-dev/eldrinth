@@ -1,0 +1,15 @@
+{
+  "autotile": false,
+  "cellH": 128,
+  "cellW": 128,
+  "columns": 1,
+  "frames": 1,
+  "kind": "structure",
+  "masks": 1,
+  "pixelHashes": [
+    "79967f6223511c58ce6ff0316c88f20e"
+  ],
+  "regionPalette": "oldlands",
+  "static": true,
+  "variants": 1
+}

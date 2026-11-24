@@ -2,14 +2,14 @@
   "icons": {
     "ashstep": {
       "file": "ashstep.png",
-      "fileSha256": "913eb8b17db76f2ba981f7cf3994007a2db3af559f0accde3c1edcc37d746c24",
+      "fileSha256": "49614c9375a425581ab6aa59051d094aa277f385a3eba5dccc10e50db4998f79",
       "height": 32,
       "kind": "item",
       "options": {
         "category": "ring",
         "palette": "volcanic_ember"
       },
-      "pixelSha256": "0fd1f2f59befaca6d70b799b3c53fce5c73eae5f3bf33af898ed1303016bce3b",
+      "pixelSha256": "7325177cb4240d685ab5f697efa4bc18706251b3dc7af435d6c47786cb89e7d5",
       "seed": "eldrinth-equipment-ashstep-13",
       "spec": {
         "accent": "#a48baf",
@@ -30,14 +30,14 @@
     },
     "emberheart": {
       "file": "emberheart.png",
-      "fileSha256": "247a94febc0e3277e87556042ff4fc0f1472a09f47e077c782ea6d32c7cce334",
+      "fileSha256": "53d37dd5f8ca3d61501616c1455976f76821fdf5a78ec08aa19d738955a11d56",
       "height": 32,
       "kind": "item",
       "options": {
         "category": "gem",
         "palette": "volcanic_ember"
       },
-      "pixelSha256": "3537e6e7228cc625845c4363c232d83d02275b681212c69db822b35d76946665",
+      "pixelSha256": "6d73beda92b7a537750c4ed0ea4806c2807d919fe15aadef6513424d75435c50",
       "seed": "eldrinth-equipment-emberheart-01",
       "spec": {
         "accent": "#a910ae",
@@ -58,14 +58,14 @@
     },
     "gravehammer": {
       "file": "gravehammer.png",
-      "fileSha256": "61a0e33776da8de20cc77d2368538085c17f776911fea3658e0ae58aadc8b1dd",
+      "fileSha256": "d10f3e23dbd3b8f5259a7e1e78392dbba496d38f1478ec554c2ab777294d077e",
       "height": 32,
       "kind": "item",
       "options": {
         "category": "hammer",
         "palette": "rusted_stone"
       },
-      "pixelSha256": "15ab1964ef33cce39876ec51f45f4bc877418f83a62f5e613d90a3b5d56a04d8",
+      "pixelSha256": "83a5c96f3606ef60fe3e24d624d5946a9474795710a354be2a0cf95295fe2c59",
       "seed": "eldrinth-equipment-gravehammer-35",
       "spec": {
         "accent": "#b04462",
@@ -109,14 +109,14 @@
     },
     "starblade": {
       "file": "starblade.png",
-      "fileSha256": "ab92dbd1749141ce18222b16625aea75c31de5f871d8ab7e75789e308b09df25",
+      "fileSha256": "6796a694ba85044158a83fbeaeaff4edcf6bd5dbcb20144101725d4c2f83d222",
       "height": 32,
       "kind": "item",
       "options": {
         "category": "dagger",
         "palette": "spire_anima"
       },
-      "pixelSha256": "230231f4f13470f37702b55d2c3c8499a84bc9eb407debaed611bf59ea3d22fe",
+      "pixelSha256": "0c016b2a54331259796fddfd020b9232b47c92b578a554d730a6413b1c0aed05",
       "seed": "eldrinth-equipment-starblade-01",
       "spec": {
         "accent": "#970dba",
@@ -137,14 +137,14 @@
     },
     "tidewell": {
       "file": "tidewell.png",
-      "fileSha256": "ad256bbcd0233a95151f765cd1f1e02a05bbe8592578c8d9379236e22843b85f",
+      "fileSha256": "a2bc97cb0fd03bed776d8e699c387b6e7d828fe29fc63f646625d259da3d7b07",
       "height": 32,
       "kind": "item",
       "options": {
         "category": "potion",
         "palette": "black_water"
       },
-      "pixelSha256": "658ff37cb547c2e2572785e916aff94ab6f136dcc6e5c4051ce9aa42ae91bb51",
+      "pixelSha256": "bb6b8c7047695123d7343fc6b6200c489dfb65126a52507a7a2bfd4508649237",
       "seed": "eldrinth-equipment-tidewell-01",
       "spec": {
         "accent": "#5d13d8",
@@ -165,14 +165,14 @@
     },
     "wayblade": {
       "file": "wayblade.png",
-      "fileSha256": "3a67211fc12a2098840d8d72b654bd07578c335e7246e2ba3898869e21f7fc51",
+      "fileSha256": "3499b06169b1b33a008e19792104376a54033945dbac0dc871e4a801dcc0bb36",
       "height": 32,
       "kind": "item",
       "options": {
         "category": "sword",
         "palette": "grim_steel"
       },
-      "pixelSha256": "6bce749261bcc1c7f685492263c83093440ae8da939d7af9a1ae5c66be32ade7",
+      "pixelSha256": "75964b53d6498fad429268bf7113e2b4dd162f94d7706561df65e9b89c0dac1b",
       "seed": "eldrinth-equipment-wayblade-33",
       "spec": {
         "accent": "#ae4361",
@@ -193,10 +193,10 @@
     }
   },
   "source": {
-    "generatorSha256": "678984d81436bd54fa1602213a85bda185e1b86885a72e10bed7a0a26bc58256",
+    "generatorSha256": "0ea7710819f359a3d86fef4e97b5410ea09d95be16f0f3eaeb3b330ee73bcc81",
     "license": "Apache-2.0",
     "project": "shed-dev-sprites",
-    "revision": "be0cb4b63806cd649391935a5290244d7400bc7e"
+    "revision": "22040eaad02aacccdd648628f2ef9828cb52f0e9"
   },
   "version": 1
 }

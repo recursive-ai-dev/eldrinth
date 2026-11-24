@@ -1,0 +1,14 @@
+Eldrinth world sprite atlases
+
+Generated from Shed Dev Sprites (Apache License 2.0).
+Source: https://github.com/recursive-ai-dev/shed-dev-sprites
+The full upstream license is included in LICENSE.apache-2.0.
+
+World characters, NPCs, creatures, regional wardens, 47-tile Blob Wang terrain
+atlases, settlement cottages, civic structures, and shard fortress landmarks
+are generated offline by tools/spritegen/gen_sprites.py from catalog.py.
+Every frame hash is recorded in src/assets/sprites/*/manifest.json and verified
+by tools/spritegen/asset_integrity_test.py and npm test without runtime Python.
+
+Rebuild: npm run gen:sprites
+Verify:  python3 tools/spritegen/asset_integrity_test.py

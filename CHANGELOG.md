@@ -5,6 +5,49 @@ All notable changes to ELDRINTH: The Unbound Spire.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 semantic versioning.
 
+## [1.4.0] — 2026-11-24 — The Living Frontier
+
+### Added — Visual overhaul and sprite pipeline
+
+- Synced the offline world sprite generator (`tools/spritegen/generator/`) with
+  `shed-dev-sprites` 3.0 (88 committed atlases and 3,524 verified frame hashes),
+  preserving zero runtime Python dependencies in browser and desktop builds.
+- Expanded character, NPC, enemy, regional warden, and boss sprite sheets with
+  `idle`, `walk`, `attack`, `cast`, `hurt`, and `death` clips, wired into
+  `spriteAtlas.ts` and `renderer.ts`.
+- Added four distinct 40px regional warden atlases (`enemy.warden.old-lands`,
+  `enemy.warden.cinderwild`, `enemy.warden.moonlit-coast`, and
+  `enemy.warden.starfall-moors`) and regenerated all 13 canonical lore NPCs with
+  monotonic skin ramps, gentler face shading, and stationary `idle` stances.
+- Upgraded `tile.grass`, `tile.path`, `tile.water`, `tile.rwall`, and `tile.sand`
+  from 16-tile Wang to 47-tile Blob Wang autotiling (`BLOB_47_MASKS`) for clean
+  inner/outer corners, shorelines, and joined masonry parapets.
+- Locked all four regions (The Old Lands, The Cinderwild, Moonlit Coast, and The
+  Starfall Moors) to curated CIELAB master palette ramps with dedicated regional
+  ground, path, rock, tree, and tallgrass atlases.
+- Added distinct civic structures (`hall`, `smithy`, `shrine`, `watchtower`) across
+  settlements, centered cottage doorways, and nine bespoke 4×4-tile shard
+  fortress exterior facades in `expeditionLandmarks.ts`.
+- Added four deterministic `192×108` regional landscape banners (`gen_scenes.py`)
+  for frontier transitions and the Wayfarer's Atlas, refreshed equipment and
+  field-kit icons against `shed-dev-sprites` 3.0, and kept Apache-2.0 notices in
+  sync across `src/assets/` and `public/third-party/`.
+
+### Performance
+
+- Wrapped 188-frame Blob-47 terrain sheets into compact `512×384` 2D grids,
+  skipped empty tall-tile chunk overlays, added viewport culling across world
+  objects, pre-baked lighting vignette/torch LUT canvases, and replaced
+  full-canvas combat `ctx.filter` passes with `64×64` offscreen compositing.
+
+## [1.3.1] — 2026-11-01
+
+### Fixed
+
+- Allow spaces and arrow keys when typing personal notes in the Field Journal.
+- Respect `prefers-reduced-motion` for canvas screen shake and warn before
+  unloading unsaved progress.
+
 ## [1.3.0] — 2026-10-27 — The Wayfarer’s Kit
 
 ### Added — Mastery and portability

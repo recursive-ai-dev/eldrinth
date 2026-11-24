@@ -2,11 +2,12 @@
   "autotile": false,
   "cellH": 32,
   "cellW": 32,
+  "columns": 1,
   "frames": 1,
   "kind": "prop",
   "masks": 1,
   "pixelHashes": [
-    "e6f26080336a847672d351c6f0fc4faf"
+    "4627406d90d94a1cae1cf1d7b57294d5"
   ],
   "static": true,
   "variants": 1

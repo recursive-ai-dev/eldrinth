@@ -91,30 +91,43 @@ class CreatureSpriteGenerator(SpriteGenerator):
 
     type_name = "creature"
     animated = True
+    handles_master_palette = True
 
     def _build(self, seed: int, **options) -> Tuple[Dict[str, Any], "Image.Image"]:
         opt = options_from(options)
         direction = opt["direction"] if opt["direction"] in DIRECTIONS else "front"
         frame = opt["frame"] % max(1, opt["frames"])
         action = opt["action"]
-        rng = self.rng(seed)
+        locks = dict(options.get("locks") or {})
+        part_seeds = {
+            p: int(locks.get(p) if locks.get(p) is not None else options.get(f"{p}_seed", seed))
+            for p in ("body", "color", "limb")
+        }
+        rng = self.rng(part_seeds["body"])
+        col_rng = self.rng(part_seeds["color"])
+        limb_rng = self.rng(part_seeds["limb"])
 
         requested = options.get("archetype")
         archetype = requested if requested in _ARCHETYPES else rng.choice(_ARCHETYPES)
         geom = _ARCHETYPE[archetype]
         requested_palette = options.get("palette")
         pal_name = requested_palette if requested_palette in PALETTES else _PALETTE_FOR[archetype]
-        t_base = rng.random()
-        t_acc = rng.random()
+        # Consume same first draws on col_rng as seed rng used to draw archetype before colors
+        if part_seeds["color"] != part_seeds["body"] or requested:
+            _ = col_rng.choice(_ARCHETYPES)
+        else:
+            col_rng = rng
+        t_base = col_rng.random()
+        t_acc = col_rng.random()
         base = named_palette(pal_name, t_base)
         # occasional wild hue
-        if rng.random() < 0.18:
-            base = named_palette(rng.choice(["magic", "lava", "blood", "water", "slime"]), t_base)
+        if col_rng.random() < 0.18:
+            base = named_palette(col_rng.choice(["magic", "lava", "blood", "water", "slime"]), t_base)
         accent = named_palette(pal_name, min(1.0, t_acc + 0.28))
         belly = color.lighten(base, 0.28)
         outline = color.darken(base, 0.55)
-        horned = geom["horns"] and rng.random() < 0.72
-        spots = rng.randint(3, 7)
+        horned = geom["horns"] and (limb_rng.random() if part_seeds["limb"] != part_seeds["body"] else col_rng.random()) < 0.72
+        spots = (limb_rng if part_seeds["limb"] != part_seeds["body"] else col_rng).randint(3, 7)
 
         spec = {
             "archetype": archetype,
@@ -131,6 +144,7 @@ class CreatureSpriteGenerator(SpriteGenerator):
             "frame": frame,
             "action": action,
             "palette": pal_name,
+            "part_seeds": part_seeds,
             "pipeline": {
                 "silhouette": "cellular-automata",
                 "symmetry": "bilateral-mirror",
@@ -141,24 +155,29 @@ class CreatureSpriteGenerator(SpriteGenerator):
         }
 
         canvas = self._render(
-            seed, rng, archetype, geom, base, belly, outline, accent,
-            horned, spots, direction, frame, action,
+            part_seeds["body"], rng, archetype, geom, base, belly, outline, accent,
+            horned, spots, direction, frame, action, nframes=opt["frames"],
+            limb_seed=part_seeds["limb"],
         )
         canvas = finalize(
             canvas,
             outline=outline,
+            sel_out=True,
+            ink_bias=(16, 13, 24),
             quantize=opt["quantize"],
+            master_palette=opt["master_palette"],
             use_scale2x=opt["use_scale2x"],
             align=opt["align"],
             prune=opt["prune"],
             ffd_frame=frame if frame else None,
             ffd_frames=opt["frames"],
-            ffd_amp=0.8 if frame else 0.0,
+            ffd_amp=((0.85 if action == "idle" else 0.8) * max(1.0, min(self.size) / 32.0)) if frame else 0.0,
+            ffd_tags=({TAG_BODY, TAG_BELLY, TAG_HAIR, TAG_ACCENT, TAG_METAL} if action == "idle" else None),
         )
         return spec, canvas.to_pil()
 
     def _render(self, seed, rng, archetype, geom, base, belly, outline, accent,
-                horned, spots, direction, frame, action="walk") -> Canvas:
+                horned, spots, direction, frame, action="walk", nframes=4, limb_seed=None) -> Canvas:
         w, h = self.size
         canvas = Canvas(w, h)
         nb = VON_NEUMANN if geom["nb"] == "von" else MOORE
@@ -172,6 +191,9 @@ class CreatureSpriteGenerator(SpriteGenerator):
             symmetric=symmetric,
             neighborhood=nb,
         )
+        if direction == "back":
+            # already symmetric; flipping does nothing visible on CA, that's ok
+            pass
         if direction in ("left", "right"):
             # compress x toward a profile by skipping every other empty col on far side
             sil = self._profile(sil, direction)
@@ -180,7 +202,7 @@ class CreatureSpriteGenerator(SpriteGenerator):
         hi, b, sh = shade_triplet(base, 0.30, 0.34)
         bhi, bb, bsh = shade_triplet(belly, 0.22, 0.28)
 
-        # paint body from CA + chamfer bands (guide §4.2 analog at pixel scale)
+        # paint body from CA + local Chamfer gradient normal (organic 3D volume)
         cx = w / 2.0
         cy = h / 2.0
         for y in range(h):
@@ -188,28 +210,36 @@ class CreatureSpriteGenerator(SpriteGenerator):
                 if not sil[y][x]:
                     continue
                 d = din[y][x]
-                # belly: lower-centre interior
                 nx = (x - cx) / (w * 0.5)
                 ny = (y - cy) / (h * 0.5)
+                # Local silhouette normal from Chamfer distance differences
+                gx = (din[y][x - 1] if x > 0 else 0) - (din[y][x + 1] if x + 1 < w else 0)
+                gy = (din[y - 1][x] if y > 0 else 0) - (din[y + 1][x] if y + 1 < h else 0)
+                glen = (gx * gx + gy * gy) ** 0.5 or 1.0
+                surf_lit = (gx / glen) * -0.45 + (gy / glen) * -0.70
+                top_lit = 0.65 * surf_lit + 0.35 * (-0.30 * nx - 0.85 * ny)
                 is_belly = (nx * nx * 1.6 + (ny - 0.25) * (ny - 0.25) * 0.8) < 0.35 and d >= 2
-                if d <= 1:
+                if d <= 1 and top_lit < 0.10:
                     col, tag = sh, TAG_BODY
                 elif is_belly:
-                    col, tag = (bb if d >= 3 else bhi), TAG_BELLY
-                elif d >= 3 and (x + y) % 7 == 0:
+                    col, tag = (bhi if top_lit > 0.15 else (bsh if top_lit < -0.25 else bb)), TAG_BELLY
+                elif (d >= 2 and top_lit > 0.28) or (d >= 3 and top_lit > 0.10 and ((x ^ y) & 1) == 0):
                     col, tag = hi, TAG_BODY
+                elif top_lit < -0.24:
+                    col, tag = sh, TAG_BODY
                 else:
                     col, tag = b, TAG_BODY
                 canvas.set(x, y, col, tag)
 
         # legs (SDF capsules hanging off the silhouette bottom)
+        scale = max(1.0, min(w, h) / 32.0)
         legs = geom["legs"]
         xs = [x for y in range(h) for x in range(w) if sil[y][x]]
         ys = [y for y in range(h) for x in range(w) if sil[y][x]]
         if xs and legs:
             minx, maxx = min(xs), max(xs)
             miny, maxy = min(ys), max(ys)
-            foot_y = min(h - 2, maxy + 4)
+            foot_y = min(h - 2, maxy + int(round(4 * scale)))
             if legs == 4:
                 positions = [0.18, 0.38, 0.62, 0.82]
             else:
@@ -220,15 +250,15 @@ class CreatureSpriteGenerator(SpriteGenerator):
                     def sdf(px, py):
                         return sd_capsule(px, py, ax, ay, bx, by, r)
                     return sdf
-                # walk-cycle: alternate lift
+                # walk-cycle: alternate lift (planted during idle)
                 lift = 0
                 if action == "attack" and frame:
-                    lift = -1
-                elif frame:
+                    lift = -int(round(scale))
+                elif action != "idle" and frame:
                     phase = (frame + i) % 2
-                    lift = -1 if phase == 0 else 1
+                    lift = -int(round(scale)) if phase == 0 else int(round(scale))
                 rasterize_sdf(
-                    canvas, _mk(lx, maxy - 1, lx + (1 if i % 2 else -1), foot_y + lift, 1.15),
+                    canvas, _mk(lx, maxy - scale, lx + (scale if i % 2 else -scale), foot_y + lift, 1.15 * scale),
                     b, hi, sh, TAG_BODY, ink=None, ink_width=0.4,
                 )
 
@@ -236,13 +266,13 @@ class CreatureSpriteGenerator(SpriteGenerator):
         if archetype == "winged" and xs:
             minx, maxx = min(xs), max(xs)
             miny, maxy = min(ys), max(ys)
-            wy = miny + 2
+            wy = miny + 2 * scale
             wing = color.darken(base, 0.25)
             whi, wb, wsh = shade_triplet(wing, 0.25, 0.3)
             for sign in (-1, 1):
                 ax = (minx if sign < 0 else maxx)
                 def sdf(px, py, ax=ax, sign=sign, wy=wy):
-                    return sd_ellipse(px, py, ax + sign * 5, wy + 2, 5.5, 3.2) * 3.2
+                    return sd_ellipse(px, py, ax + sign * 5 * scale, wy + 2 * scale, 5.5 * scale, 3.2 * scale) * (3.2 * scale)
                 rasterize_sdf(canvas, sdf, wb, whi, wsh, TAG_HAIR)
 
         # horns (for general archetypes, not biped boss)
@@ -253,7 +283,7 @@ class CreatureSpriteGenerator(SpriteGenerator):
             for sign in (-1, 1):
                 hx = (minx + maxx) * 0.5 + sign * (maxx - minx) * 0.28
                 def sdf(px, py, hx=hx, miny=miny, sign=sign):
-                    return sd_capsule(px, py, hx, miny, hx + sign * 1.4, miny - 4.2, 0.85)
+                    return sd_capsule(px, py, hx, miny, hx + sign * 1.4 * scale, miny - 4.2 * scale, 0.85 * scale)
                 rasterize_sdf(canvas, sdf, hb, hhi, hsh, TAG_METAL)
 
         # Boss antler-crown (sovereign crown)
@@ -348,8 +378,9 @@ class CreatureSpriteGenerator(SpriteGenerator):
         # spots
         if xs:
             minx, maxx, miny, maxy = min(xs), max(xs), min(ys), max(ys)
+            spot_seed = limb_seed if limb_seed is not None else seed
             for i in range(spots):
-                r = self.rng(seed, "spot", i)
+                r = self.rng(spot_seed, "spot", i)
                 sx = r.randint(minx + 1, max(minx + 1, maxx - 1))
                 sy = r.randint(miny + 1, max(miny + 1, maxy - 1))
                 if canvas.opaque(sx, sy) and canvas.get_tag(sx, sy) == TAG_BODY:
@@ -400,8 +431,8 @@ class CreatureSpriteGenerator(SpriteGenerator):
         # mouth (wider, pale-toothed snarl through the attack impact)
         if xs:
             mx = (min(xs) + max(xs)) // 2
-            my = min(h - 3, max(ys) - 2)
-            mouth_half = 3 if action == "attack" and frame else 2
+            my = min(h - 3, max(ys) - int(round(2 * scale)))
+            mouth_half = int(round((3 if action == "attack" and frame else 2) * scale))
             for dx in range(-mouth_half, mouth_half + 1):
                 if canvas.opaque(mx + dx, my):
                     canvas.set(mx + dx, my, color.darken(base, 0.5), TAG_BODY)
@@ -412,8 +443,52 @@ class CreatureSpriteGenerator(SpriteGenerator):
         if archetype == "slime" and xs:
             mx = (min(xs) + max(xs)) // 2
             my = max(ys)
-            for k in range(3):
+            for k in range(int(round(3 * scale))):
                 canvas.set(mx + (k % 3) - 1, my + 1 + k // 2, base, TAG_BODY)
+
+        # Action VFX & death/hurt kinematics
+        if xs and action in ("attack", "cast", "hurt", "death"):
+            minx, maxx, miny, maxy = min(xs), max(xs), min(ys), max(ys)
+            cx_m = (minx + maxx) // 2
+            cy_m = (miny + maxy) // 2
+            if action == "attack" and frame in (1, 2):
+                glint = (245, 250, 255)
+                gx = maxx + 1 if direction == "right" else (minx - 1 if direction == "left" else cx_m)
+                gy = cy_m
+                for k in range(-2, 3):
+                    canvas.set(gx + k, gy - k, glint, TAG_ACCENT)
+                    canvas.set(gx + k + (1 if direction != "left" else -1), gy - k, color.mix(accent, glint, 0.5), TAG_ACCENT)
+            elif action == "cast" and frame in (1, 2, 3):
+                halo = color.lighten(accent, 0.4)
+                for dx, dy in ((-4, -2), (4, -2), (0, -4), (-3, 1), (3, 1)):
+                    px = cx_m + int(round((dx + (frame % 2)) * scale))
+                    py = miny - int(round(2 * scale)) + int(round(dy * scale))
+                    canvas.set(px, py, halo, TAG_ACCENT)
+            elif action == "hurt" and frame in (1,):
+                out = Canvas(w, h)
+                shift = -1 if direction == "right" else 1
+                for yy in range(h):
+                    for xx in range(w):
+                        if canvas.opaque(xx, yy):
+                            col = color.mix(canvas.get(xx, yy), (255, 110, 110), 0.45)
+                            out.set(xx + shift, yy, col, canvas.get_tag(xx, yy))
+                for dx, dy in ((0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)):
+                    out.set(cx_m + dx, cy_m + dy, (255, 242, 230), TAG_ACCENT)
+                canvas = out
+            elif action == "death" and frame > 0:
+                u = min(1.0, frame / float(max(1, nframes - 1)))
+                squash = max(0.32, 1.0 - 0.68 * u)
+                bot_y = min(h - 2, maxy + int(round(2 * scale)))
+                out = Canvas(w, h)
+                for yy in range(h):
+                    for xx in range(w):
+                        if canvas.opaque(xx, yy):
+                            ny = int(round(bot_y - (bot_y - yy) * squash))
+                            col = canvas.get(xx, yy)
+                            if u > 0.65:
+                                col = color.darken(col, 0.25)
+                            out.set(xx, ny, col, canvas.get_tag(xx, yy))
+                canvas = out
 
         return canvas
 

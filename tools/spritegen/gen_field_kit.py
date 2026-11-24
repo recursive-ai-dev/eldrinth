@@ -35,7 +35,7 @@ RECIPES = {
     "town": {"kind": "settlement", "options": {"part": "cottage", "theme": "oldstone"}},
     "fortress": {"kind": "dungeon", "opaque": True, "options": {}},
     "shrine": {"kind": "prop", "seed": "eldrinth-prop-brazier-01", "options": {"prop_type": "brazier", "frame": 0, "frames": 4}},
-    "boss": {"kind": "creature", "seed": "eldrinth-boss-01", "renderSize": 64, "options": {"archetype": "biped", "palette": "corrupted_flesh", "direction": "front", "frame": 0}},
+    "boss": {"kind": "creature", "seed": "eldrinth-boss-01", "renderSize": 64, "options": {"archetype": "biped", "palette": "corrupted_flesh", "color_seed": 2, "direction": "front", "frame": 0}},
     "wraith": {"kind": "creature", "seed": "eldrinth-wraith-01", "options": {"archetype": "tentacle", "palette": "wraith_ash", "direction": "front", "frame": 0}},
     "sentinel": {"kind": "creature", "seed": "eldrinth-sentinel-01", "options": {"archetype": "golem", "palette": "rusted_stone", "direction": "front", "frame": 0}},
     "adept": {"kind": "human", "seed": "eldrinth-adept-01", "options": {"role": "adept", "palette": "cult_blood", "direction": "front", "frame": 0}},

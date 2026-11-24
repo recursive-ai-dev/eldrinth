@@ -1,0 +1,341 @@
+{
+  "scenes": {
+    "cinderwild": {
+      "file": "cinderwild.png",
+      "fileSha256": "bf51440fbf53407ad9cf0c3de2f90a4d2880256d17916d918c43b79285eb4d62",
+      "height": 108,
+      "kind": "scene",
+      "options": {
+        "mood": "warm",
+        "title": ""
+      },
+      "pixelSha256": "d01a1d1c950fd74e43652487aa927b2156f0ba9f432be12c81df9bdbb1c994f0",
+      "regionPalette": "cinderwild",
+      "seed": "eldrinth-scene-cinderwild-02",
+      "spec": {
+        "mood": "warm",
+        "orb": {
+          "kind": "sunset",
+          "r": 18,
+          "x": 154,
+          "y": 56
+        },
+        "placed": [
+          {
+            "part": "cottage",
+            "row": "back",
+            "scale": 1,
+            "seed": 202317866,
+            "theme": "cinder",
+            "type": "settlement",
+            "x": 1,
+            "y": 42
+          },
+          {
+            "part": "cottage",
+            "row": "back",
+            "scale": 1,
+            "seed": 2084746113,
+            "theme": "cinder",
+            "type": "settlement",
+            "x": 153,
+            "y": 40
+          },
+          {
+            "prop_type": "brazier",
+            "row": "mid",
+            "scale": 1,
+            "seed": 1016379234,
+            "type": "prop",
+            "x": 136,
+            "y": 63
+          },
+          {
+            "row": "front",
+            "scale": 1,
+            "seed": 928742465,
+            "type": "creature",
+            "x": 101,
+            "y": 72
+          },
+          {
+            "row": "front",
+            "scale": 1,
+            "seed": 760420079,
+            "type": "creature",
+            "x": 55,
+            "y": 70
+          },
+          {
+            "row": "front",
+            "scale": 1,
+            "seed": 367465706,
+            "type": "creature",
+            "x": 11,
+            "y": 63
+          }
+        ],
+        "tile_kind": "sand",
+        "tile_palette": "sand",
+        "tile_seed": 1324104411,
+        "title": "",
+        "title_lines": [],
+        "title_scale": 2
+      },
+      "width": 192
+    },
+    "moonlit-coast": {
+      "file": "moonlit-coast.png",
+      "fileSha256": "44d5fb166186b00fcda16b8aed364042109d79007930b0672f80db549f377b01",
+      "height": 108,
+      "kind": "scene",
+      "options": {
+        "mood": "cold",
+        "title": ""
+      },
+      "pixelSha256": "0926244472bf8f04a05ab0d5a433a99c0f6d7ba3c66e0ca124619ccc66e9edf9",
+      "regionPalette": "moonlit",
+      "seed": "eldrinth-scene-moonlit-coast-07",
+      "spec": {
+        "mood": "cold",
+        "orb": {
+          "kind": "moon",
+          "r": 8,
+          "x": 135,
+          "y": 24
+        },
+        "placed": [
+          {
+            "part": "cottage",
+            "row": "back",
+            "scale": 1,
+            "seed": 1991944211,
+            "theme": "coastal",
+            "type": "settlement",
+            "x": 9,
+            "y": 42
+          },
+          {
+            "part": "cottage",
+            "row": "back",
+            "scale": 1,
+            "seed": 416787295,
+            "theme": "coastal",
+            "type": "settlement",
+            "x": 31,
+            "y": 42
+          },
+          {
+            "part": "cottage",
+            "row": "back",
+            "scale": 1,
+            "seed": 56057862,
+            "theme": "coastal",
+            "type": "settlement",
+            "x": 72,
+            "y": 41
+          },
+          {
+            "prop_type": "lantern",
+            "row": "mid",
+            "scale": 1,
+            "seed": 915136064,
+            "type": "prop",
+            "x": 143,
+            "y": 57
+          },
+          {
+            "row": "front",
+            "scale": 1,
+            "seed": 1094119889,
+            "type": "creature",
+            "x": 140,
+            "y": 72
+          },
+          {
+            "row": "front",
+            "scale": 1,
+            "seed": 573773006,
+            "type": "creature",
+            "x": 92,
+            "y": 75
+          },
+          {
+            "row": "front",
+            "scale": 1,
+            "seed": 1207160021,
+            "type": "human",
+            "x": 21,
+            "y": 61
+          }
+        ],
+        "tile_kind": "snow",
+        "tile_palette": "snow",
+        "tile_seed": 1026906761,
+        "title": "",
+        "title_lines": [],
+        "title_scale": 2
+      },
+      "width": 192
+    },
+    "old-lands": {
+      "file": "old-lands.png",
+      "fileSha256": "234c4952814d8d41967bf3433336378c8781257c82dc30defe83f7a4039b571f",
+      "height": 108,
+      "kind": "scene",
+      "options": {
+        "mood": "dark",
+        "title": ""
+      },
+      "pixelSha256": "10537ae40c4e0bce86149bbd3a17a72db95d68401ee7a4bf006a18085b6ff1c0",
+      "regionPalette": "oldlands",
+      "seed": "eldrinth-scene-old-lands-03",
+      "spec": {
+        "mood": "dark",
+        "orb": {
+          "kind": "moon",
+          "r": 10,
+          "x": 140,
+          "y": 19
+        },
+        "placed": [
+          {
+            "part": "cottage",
+            "row": "back",
+            "scale": 1,
+            "seed": 2012650984,
+            "theme": "oldstone",
+            "type": "settlement",
+            "x": 64,
+            "y": 39
+          },
+          {
+            "prop_type": "brazier",
+            "row": "mid",
+            "scale": 1,
+            "seed": 1871520098,
+            "type": "prop",
+            "x": 13,
+            "y": 61
+          },
+          {
+            "prop_type": "lantern",
+            "row": "mid",
+            "scale": 1,
+            "seed": 479747410,
+            "type": "prop",
+            "x": 70,
+            "y": 58
+          },
+          {
+            "row": "front",
+            "scale": 1,
+            "seed": 632763113,
+            "type": "creature",
+            "x": 98,
+            "y": 72
+          }
+        ],
+        "tile_kind": "stone",
+        "tile_palette": "grim_steel",
+        "tile_seed": 1604863851,
+        "title": "",
+        "title_lines": [],
+        "title_scale": 2
+      },
+      "width": 192
+    },
+    "starfall-moors": {
+      "file": "starfall-moors.png",
+      "fileSha256": "c44339f165ab6aabdbf26d6e79431888140ca6550a6cc3abe51c35ba07e973dd",
+      "height": 108,
+      "kind": "scene",
+      "options": {
+        "mood": "eerie",
+        "title": ""
+      },
+      "pixelSha256": "9a1827357f8cd6b8374be95dbfce9518b2a1c2df8f33d74ac4523e0be92d3f5c",
+      "regionPalette": "starfall",
+      "seed": "eldrinth-scene-starfall-moors-02",
+      "spec": {
+        "mood": "eerie",
+        "orb": {
+          "kind": "moon",
+          "r": 9,
+          "x": 125,
+          "y": 29
+        },
+        "placed": [
+          {
+            "part": "cottage",
+            "row": "back",
+            "scale": 1,
+            "seed": 417418562,
+            "theme": "moor",
+            "type": "settlement",
+            "x": 39,
+            "y": 42
+          },
+          {
+            "part": "cottage",
+            "row": "back",
+            "scale": 1,
+            "seed": 367577309,
+            "theme": "moor",
+            "type": "settlement",
+            "x": 71,
+            "y": 41
+          },
+          {
+            "prop_type": "brazier",
+            "row": "mid",
+            "scale": 1,
+            "seed": 1891294430,
+            "type": "prop",
+            "x": 75,
+            "y": 62
+          },
+          {
+            "prop_type": "brazier",
+            "row": "mid",
+            "scale": 1,
+            "seed": 866661328,
+            "type": "prop",
+            "x": 136,
+            "y": 64
+          },
+          {
+            "row": "front",
+            "scale": 1,
+            "seed": 432734448,
+            "type": "creature",
+            "x": 58,
+            "y": 74
+          },
+          {
+            "row": "front",
+            "scale": 1,
+            "seed": 263774276,
+            "type": "creature",
+            "x": 88,
+            "y": 70
+          }
+        ],
+        "tile_kind": "moss",
+        "tile_palette": "sickly_green",
+        "tile_seed": 1781225383,
+        "title": "",
+        "title_lines": [],
+        "title_scale": 2
+      },
+      "width": 192
+    }
+  },
+  "source": {
+    "generatorSha256": "0ea7710819f359a3d86fef4e97b5410ea09d95be16f0f3eaeb3b330ee73bcc81",
+    "license": "Apache-2.0",
+    "project": "shed-dev-sprites",
+    "revision": "22040eaad02aacccdd648628f2ef9828cb52f0e9"
+  },
+  "version": 1
+}

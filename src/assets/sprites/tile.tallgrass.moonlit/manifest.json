@@ -1,0 +1,18 @@
+{
+  "autotile": false,
+  "cellH": 32,
+  "cellW": 32,
+  "columns": 4,
+  "frames": 4,
+  "kind": "tile",
+  "masks": 1,
+  "pixelHashes": [
+    "5e39e2f16c00b75f04195a81cbaf6766",
+    "ba2fb29d487c2dcc7f3b52e16b9acebc",
+    "6ff91c30de5e76e10cc3f2468dffcfa3",
+    "853c7c7ccb8aaa3b5495b558c207d8cb"
+  ],
+  "regionPalette": "moonlit",
+  "static": true,
+  "variants": 4
+}

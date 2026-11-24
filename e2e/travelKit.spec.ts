@@ -44,6 +44,7 @@ test("atlas supports search, pinning, keyboard isolation and save round trip", a
   await expect(page.getByRole("button", { name: /SLOT 1/ })).toBeVisible();
   await page.reload();
   await page.getByRole("button", { name: /SLOT 1/ }).click();
+  await expect(page.getByTestId("hud-vitals")).toBeVisible();
   await expect(page.getByTestId("loading-screen")).toBeHidden();
   await page.keyboard.press("m");
   await expect(page.locator(".atlas-landmark").first()).toBeVisible();
@@ -63,8 +64,10 @@ test("comfort settings persist and focus loss pauses active play", async ({ page
   await expect(page.locator(".app-root")).toHaveClass(/high-contrast/);
   await expect(page.locator(".world-atmosphere")).toHaveCount(0);
   await pause.getByRole("button", { name: "SAVE & RETURN TO TITLE", exact: true }).click();
+  await expect(page.getByRole("button", { name: /SLOT 1/ })).toBeVisible();
   await page.reload();
   await page.getByRole("button", { name: /SLOT 1/ }).click();
+  await expect(page.getByTestId("hud-vitals")).toBeVisible();
   await expect(page.getByTestId("loading-screen")).toBeHidden();
   await expect(page.locator(".app-root")).toHaveClass(/high-contrast/);
   await page.keyboard.press("Escape");

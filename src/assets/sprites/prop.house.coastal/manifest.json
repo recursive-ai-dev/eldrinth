@@ -2,12 +2,14 @@
   "autotile": false,
   "cellH": 96,
   "cellW": 96,
+  "columns": 1,
   "frames": 1,
   "kind": "settlement",
   "masks": 1,
   "pixelHashes": [
-    "2f11f05e6afde5b7d446d2a300781803"
+    "e488a3f8c7b471aab447cbf71cd12e3e"
   ],
+  "regionPalette": "moonlit",
   "static": true,
   "variants": 1
 }

@@ -179,6 +179,56 @@ def walk_pose(rig: Rig, frame: int, nframes: int = 4, facing: str = "front") -> 
     return out
 
 
+GATHER_ACTIONS = ("chop", "mine", "harvest", "build")
+
+
+def gather_pose(rig: Rig, frame: int, nframes: int = 8, facing: str = "front",
+                action: str = "chop") -> Rig:
+    """Looping work cycle: raise tool, committed downward strike, recover.
+
+    ``chop``/``mine``/``build`` are two-handed overhead strikes (mining
+    crouches deeper, building taps shorter); ``harvest`` is a low sweeping
+    sickle arc that leans the torso into the crop.
+    """
+    out = rig.copy()
+    u = (frame % max(1, nframes)) / float(max(1, nframes))
+    # 0..0.55 raise (eased), 0.55..0.75 strike, 0.75..1 recover
+    if u < 0.55:
+        raise_t = math.sin((u / 0.55) * math.pi / 2.0)
+    elif u < 0.75:
+        raise_t = 1.0 - (u - 0.55) / 0.20
+    else:
+        raise_t = 0.0
+    strike = 1.0 if 0.55 <= u < 0.75 else 0.0
+    side = facing in ("left", "right")
+    reach = {"chop": 1.0, "mine": 0.9, "build": 0.6, "harvest": 1.2}.get(action, 1.0)
+    up = (1.9 if action != "harvest" else 0.4) * raise_t * (0.6 if action == "build" else 1.0)
+    back = -1.1 * raise_t
+    fwd = 1.6 * reach * strike
+
+    def _move(name, dz, dy, zsign=1.0):
+        j = out.joints.get(name)
+        if j is None:
+            return
+        if side:
+            j.z += dz * zsign
+            j.y -= dy
+        else:
+            j.x += dz * 0.5 * zsign
+            j.y -= dy * 0.8
+
+    for hand, elbow, shoulder in (("hand_r", "elbow_r", "shoulder_r"), ("hand_l", "elbow_l", "shoulder_l")):
+        _move(hand, back + fwd, up)
+        _move(elbow, (back + fwd) * 0.6, up * 0.55)
+        _move(shoulder, (back + fwd) * 0.15, 0.0)
+    dip = (0.55 if action == "mine" else 0.35) * strike + (0.3 if action == "harvest" else 0.0) * raise_t
+    for joint in out.joints.values():
+        joint.y += dip
+    for name in ("hip_r", "knee_r", "foot_r"):
+        _move(name, 0.3 * strike, 0.0)
+    return out
+
+
 def attack_pose(rig: Rig, frame: int, nframes: int = 4, facing: str = "front") -> Rig:
     """Wind-up, committed weapon strike, and recovery for a humanoid rig."""
     out = rig.copy()
@@ -213,6 +263,111 @@ def attack_pose(rig: Rig, frame: int, nframes: int = 4, facing: str = "front") -
     # The whole silhouette dips into the impact instead of hovering rigidly.
     for joint in out.joints.values():
         joint.y += 0.35 * extend
+    return out
+
+
+COMBAT_ACTIONS = ("idle", "walk", "attack", "cast", "hurt", "death")
+
+
+def cast_pose(rig: Rig, frame: int, nframes: int = 4, facing: str = "front") -> Rig:
+    """Channeling magic: both hands rise skyward and pulse with arcane recoil."""
+    out = rig.copy()
+    u = (frame % max(1, nframes)) / float(max(1, nframes))
+    surge = math.sin(u * math.pi)
+    pulse = 0.35 * math.sin(u * 2.0 * math.pi)
+    side = facing in ("left", "right")
+
+    for hand, elbow, shoulder, xsign in (
+        ("hand_r", "elbow_r", "shoulder_r", 1.0),
+        ("hand_l", "elbow_l", "shoulder_l", -1.0),
+    ):
+        if hand in out.joints:
+            j = out.joints[hand]
+            j.y -= 3.8 * (0.45 + 0.55 * surge)
+            if side:
+                j.z += (1.2 + 0.8 * surge)
+            else:
+                j.x += xsign * (0.7 + 0.5 * surge)
+        if elbow in out.joints:
+            j = out.joints[elbow]
+            j.y -= 2.1 * (0.45 + 0.55 * surge)
+            if side:
+                j.z += 0.7 * surge
+        if shoulder in out.joints:
+            out.joints[shoulder].y -= 0.45 * surge
+
+    # Slight levitating brace across head & torso
+    for j in out.joints.values():
+        j.y -= 0.25 * surge + 0.15 * pulse
+    return out
+
+
+def hurt_pose(rig: Rig, frame: int, nframes: int = 4, facing: str = "front") -> Rig:
+    """Hit-stagger: knockback recoil on impact frames, then braced recovery."""
+    out = rig.copy()
+    n = max(1, nframes - 1)
+    u = frame / float(n)
+    recoil = math.sin(min(1.0, u * 1.2) * math.pi)
+    side = facing in ("left", "right")
+    zpush = -1.6 * recoil
+    xpush = -0.9 * recoil
+
+    for name in ("head", "neck", "torso", "nose", "eye_l", "eye_r"):
+        if name in out.joints:
+            j = out.joints[name]
+            if side:
+                j.z += zpush
+            else:
+                j.x += xpush
+            j.y -= 0.4 * recoil
+
+    # Arms fly up/out defensively on stagger
+    for name, sgn in (("hand_l", -1.0), ("hand_r", 1.0), ("elbow_l", -1.0), ("elbow_r", 1.0)):
+        if name in out.joints:
+            j = out.joints[name]
+            j.y -= 1.6 * recoil
+            j.x += sgn * 0.9 * recoil
+    return out
+
+
+def death_pose(rig: Rig, frame: int, nframes: int = 4, facing: str = "front") -> Rig:
+    """Progressive collapse onto the ground plane over ``0..nframes-1``."""
+    out = rig.copy()
+    n = max(1, nframes - 1)
+    u = min(1.0, max(0.0, frame / float(n)))
+    t = u * u * (3.0 - 2.0 * u)  # smoothstep fall progression
+
+    foot_l = out.joints.get("foot_l")
+    foot_r = out.joints.get("foot_r")
+    ground_y = 29.0
+    if foot_l and foot_r:
+        ground_y = max(foot_l.y, foot_r.y)
+
+    side = facing in ("left", "right")
+    for name, j in out.joints.items():
+        if name in ("foot_l", "foot_r"):
+            if side:
+                j.z += 1.4 * t
+            j.y = min(29.5, j.y + 0.5 * t)
+            continue
+        if name in ("knee_l", "knee_r"):
+            j.y = j.y + (ground_y - 1.5 - j.y) * (t * 0.88)
+            if side:
+                j.z += 0.9 * t
+            continue
+        # Upper body drops toward ground_y while spreading slightly laterally
+        drop = (ground_y - 2.2 - j.y) * (t * 0.92)
+        j.y = min(28.5, j.y + drop)
+        if name in ("hand_l", "elbow_l"):
+            j.x -= 1.8 * t
+        elif name in ("hand_r", "elbow_r"):
+            j.x += 1.8 * t
+        elif name in ("head", "neck", "nose", "eye_l", "eye_r"):
+            # Tilt head onto one side on final collapse
+            if side:
+                j.z -= 2.2 * t
+            else:
+                j.x -= 2.0 * t
     return out
 
 

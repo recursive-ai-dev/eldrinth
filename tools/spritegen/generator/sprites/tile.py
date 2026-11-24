@@ -15,11 +15,19 @@ from __future__ import annotations
 
 from typing import Any, Dict, Tuple
 
+import numpy as np
+
 from .. import color
 from ..math.canvas import Canvas, TAG_FLOOR, TAG_WALL, TAG_ACCENT, TAG_BODY
-from ..math.noise import fbm, domain_warp, paper_noise, warp_sample, value_noise
+from ..math.noise import (
+    fbm, domain_warp, paper_noise, warp_sample, value_noise,
+    value_noise_grid, warp_sample_grid, paper_noise_grid,
+)
 from ..math.palette import named_palette, shade_triplet, PALETTES
-from ..math.wang import classify_tile, neighbor_mask, NBIT, EBIT, SBIT, WBIT
+from ..math.wang import (
+    classify_tile, neighbor_mask, canonical_blob_mask, BLOB_47_MASKS,
+    NBIT, EBIT, SBIT, WBIT, NEBIT, SEBIT, SWBIT, NWBIT,
+)
 from ..pipeline import finalize, options_from
 from .base import SpriteGenerator
 
@@ -40,6 +48,7 @@ class TileSpriteGenerator(SpriteGenerator):
 
     type_name = "tile"
     default_size = (16, 16)
+    handles_master_palette = True
 
     def _build(self, seed: int, **options) -> Tuple[Dict[str, Any], "Image.Image"]:
         opt = options_from(options)
@@ -53,7 +62,8 @@ class TileSpriteGenerator(SpriteGenerator):
         if mask is None:
             # full-neighbour (interior) tile by default, still unique via noise
             mask = 15
-        mask = int(mask) & 15
+        blob = bool(options.get("blob") or int(mask) > 15)
+        mask = canonical_blob_mask(int(mask)) if blob else (int(mask) & 15)
         t0 = rng.random() * 0.3 + 0.35
         requested_palette = options.get("palette")
         pal = requested_palette if requested_palette in PALETTES else _PAL[kind]
@@ -71,21 +81,28 @@ class TileSpriteGenerator(SpriteGenerator):
                 "E": bool(mask & EBIT),
                 "S": bool(mask & SBIT),
                 "W": bool(mask & WBIT),
+                **({"NE": bool(mask & NEBIT), "SE": bool(mask & SEBIT),
+                    "SW": bool(mask & SWBIT), "NW": bool(mask & NWBIT)} if blob else {}),
             },
             "pipeline": {
                 "noise": "wrapped-fbm+domain-warp",
                 "palette": "cosine",
-                "connectivity": "wang-4bit",
+                "connectivity": "blob-8bit-47" if blob else "wang-4bit",
             },
         }
 
         canvas = Canvas(*self.size)
-        self._render(canvas, seed, kind, pal, t0, mask)
+        self._render(canvas, seed, kind, pal, t0, mask, blob=blob)
         # tiles should NOT CoG-align (that would break seamlessness)
         # and should NOT outline (that would break tiling)
         schema = classify_tile(canvas)
         spec["schema"] = schema
-        if opt["quantize"]:
+        if opt.get("master_palette"):
+            from ..math.palette import MASTER_PALETTES, snap_canvas_to_palette
+            mp = str(opt["master_palette"]).lower()
+            if mp in MASTER_PALETTES:
+                canvas = snap_canvas_to_palette(canvas, MASTER_PALETTES[mp])
+        elif opt["quantize"]:
             from ..math.palette import quantize_canvas
             canvas = quantize_canvas(canvas, n=int(opt["quantize"]))
         if opt["use_scale2x"]:
@@ -93,23 +110,43 @@ class TileSpriteGenerator(SpriteGenerator):
             canvas = scale2x(canvas)
         return spec, canvas.to_pil()
 
-    def _render(self, canvas: Canvas, seed: int, kind: str, pal: str, t0: float, mask: int) -> None:
+    def _render(self, canvas: Canvas, seed: int, kind: str, pal: str, t0: float, mask: int, blob: bool = False) -> None:
         w, h = canvas.w, canvas.h
         hi, base, sh = shade_triplet(named_palette(pal, t0), 0.22, 0.28)
         # Normalise pixel coords onto a 4-cell torus so noise(x,y) == noise(x+w,y)
         # (adjacent copies of the same seed/kind therefore share edges).
         cells = 4
+        ys, xs = np.mgrid[0:h, 0:w]
+        ux = (xs.astype(np.float64) / float(w)) * cells
+        uy = (ys.astype(np.float64) / float(h)) * cells
 
-        def _nx(x, y):
-            return (x / float(w)) * cells, (y / float(h)) * cells
+        n_grid, jac_grid = warp_sample_grid(seed, ux, uy, amp=0.35, freq=1.0, wrap=cells, octaves=4)
+        g_grid = paper_noise_grid(seed, ux, uy, wrap=cells)
+        ripple_grid = (
+            value_noise_grid(seed, ux + 0.4 * uy, uy, freq=1.0, wrap=cells, channel="rip")
+            if kind == "water" else None
+        )
+        glow_grid = (
+            value_noise_grid(seed, ux, uy, freq=1.0, wrap=cells, channel="glow")
+            if kind == "lava" else None
+        )
+        grain_grid = (
+            value_noise_grid(seed, ux * 0.4, uy, freq=1.0, wrap=cells, channel="grain")
+            if kind == "wood" else None
+        )
+        knot_grid = (
+            value_noise_grid(seed, ux, uy, freq=1.0, wrap=cells, channel="knot")
+            if kind == "wood" else None
+        )
+        lava_hot = named_palette("lava", 0.85) if kind == "lava" else None
 
         # structured overlays
         for y in range(h):
             for x in range(w):
-                ux, uy = _nx(x, y)
-                n, jac = warp_sample(seed, ux, uy, amp=0.35, freq=1.0, wrap=cells, octaves=4)
-                g = paper_noise(seed, ux, uy, wrap=cells)
-                # edge falloff for missing wang neighbours (shore / cliff)
+                n = float(n_grid[y, x])
+                jac = float(jac_grid[y, x])
+                g = float(g_grid[y, x])
+                # edge falloff for missing wang/blob neighbours (shore / cliff / inner corner)
                 edge = 0.0
                 if not (mask & NBIT):
                     edge = max(edge, 1.0 - y / max(1.0, h * 0.40))
@@ -119,19 +156,30 @@ class TileSpriteGenerator(SpriteGenerator):
                     edge = max(edge, 1.0 - x / max(1.0, w * 0.40))
                 if not (mask & EBIT):
                     edge = max(edge, 1.0 - (w - 1 - x) / max(1.0, w * 0.40))
+                if blob:
+                    cw = max(1.0, w * 0.34)
+                    ch = max(1.0, h * 0.34)
+                    if (mask & NBIT) and (mask & EBIT) and not (mask & NEBIT):
+                        edge = max(edge, 1.0 - max((w - 1 - x) / cw, y / ch))
+                    if (mask & EBIT) and (mask & SBIT) and not (mask & SEBIT):
+                        edge = max(edge, 1.0 - max((w - 1 - x) / cw, (h - 1 - y) / ch))
+                    if (mask & SBIT) and (mask & WBIT) and not (mask & SWBIT):
+                        edge = max(edge, 1.0 - max(x / cw, (h - 1 - y) / ch))
+                    if (mask & WBIT) and (mask & NBIT) and not (mask & NWBIT):
+                        edge = max(edge, 1.0 - max(x / cw, y / ch))
 
                 t = 0.50 * n + 0.22 * g + 0.28 * edge
 
                 if kind == "water":
                     # animated-looking ripples (static per seed)
-                    ripple = value_noise(seed, ux + 0.4 * uy, uy, freq=1.0, wrap=cells, channel="rip")
+                    ripple = float(ripple_grid[y, x])
                     t = 0.45 * n + 0.55 * ripple
                     col = hi if t > 0.62 else (base if t > 0.38 else sh)
                     tag = TAG_FLOOR
                 elif kind == "lava":
-                    glow = value_noise(seed, ux, uy, freq=1.0, wrap=cells, channel="glow")
+                    glow = float(glow_grid[y, x])
                     if glow > 0.72:
-                        col = named_palette("lava", 0.85)
+                        col = lava_hot
                     elif t > 0.6:
                         col = hi
                     else:
@@ -146,8 +194,8 @@ class TileSpriteGenerator(SpriteGenerator):
                     col = sh if mortar else (hi if n > 0.6 else base)
                     tag = TAG_WALL if mortar else TAG_FLOOR
                 elif kind == "wood":
-                    grain = value_noise(seed, ux * 0.4, uy, freq=1.0, wrap=cells, channel="grain")
-                    knot = value_noise(seed, ux, uy, freq=1.0, wrap=cells, channel="knot")
+                    grain = float(grain_grid[y, x])
+                    knot = float(knot_grid[y, x])
                     if knot > 0.88:
                         col = sh
                     else:

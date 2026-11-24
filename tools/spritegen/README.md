@@ -44,5 +44,10 @@ Field-guide and atlas imagery uses the separate `gen_field_kit.py` script
 (`npm run gen:field-kit` / `npm run verify:field-kit`). Its 24 PNGs, manifest,
 license, and notice live under `src/assets/field-kit/`. The generator also writes
 and verifies identical notice and license copies in `public/third-party/field-kit/`.
-Vite includes both public attribution directories in `dist/`, and the Debian
+
+Regional `192×108` landscape banners use `gen_scenes.py` (`npm run gen:scenes` /
+`npm run verify:scenes`), writing their PNGs, manifest, and attribution under
+`src/assets/scenes/` and `public/third-party/scenes/`. World sprite atlases also
+publish their Apache-2.0 notice under `public/third-party/sprites/`.
+Vite includes all public attribution directories in `dist/`, and the Debian
 packager carries them with the game assets.

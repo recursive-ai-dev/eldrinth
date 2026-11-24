@@ -14,12 +14,12 @@ from __future__ import annotations
 from typing import Any, Dict, Tuple
 
 from .. import color
-from ..math.canvas import Canvas, TAG_METAL, TAG_ACCENT, TAG_CLOTH, TAG_BODY, TAG_EYE
+from ..math.canvas import Canvas, ScaledCanvas, TAG_METAL, TAG_ACCENT, TAG_CLOTH, TAG_BODY, TAG_EYE
 from ..math.sdf import (
     sd_capsule, sd_circle, sd_round_box, sd_ellipse, sd_rhombus, sd_triangle,
     op_union, op_sub, rasterize_sdf,
 )
-from ..math.palette import named_palette, shade_triplet, cosine_palette, PALETTES
+from ..math.palette import named_palette, shade_triplet, shade_metal_ramp, cosine_palette, PALETTES
 from ..math.noise import fbm
 from ..pipeline import finalize, options_from
 from .base import SpriteGenerator
@@ -47,6 +47,7 @@ class ItemSpriteGenerator(SpriteGenerator):
     """SDF-assembled RPG icon (deterministic)."""
 
     type_name = "item"
+    handles_master_palette = True
 
     def _build(self, seed: int, **options) -> Tuple[Dict[str, Any], "Image.Image"]:
         opt = options_from(options)
@@ -87,14 +88,18 @@ class ItemSpriteGenerator(SpriteGenerator):
         }
 
         canvas = Canvas(*self.size)
-        self._render(canvas, seed, category, mat, accent, accent2, variant, flip)
+        vc = ScaledCanvas(canvas, 32) if self.size != (32, 32) else canvas
+        self._render(vc, seed, category, mat, accent, accent2, variant, flip)
         if flip:
             canvas = self._mirror(canvas)
         outline = color.darken(mat, 0.55)
         canvas = finalize(
             canvas,
             outline=outline,
+            sel_out=True,
+            ink_bias=(16, 13, 24),
             quantize=opt["quantize"],
+            master_palette=opt["master_palette"],
             use_scale2x=opt["use_scale2x"],
             align=opt["align"],
             prune=opt["prune"],
@@ -110,8 +115,13 @@ class ItemSpriteGenerator(SpriteGenerator):
         return out
 
     def _fill(self, canvas, sdf, col, tag, light=True):
-        hi, b, sh = shade_triplet(col, 0.28, 0.32)
-        rasterize_sdf(canvas, sdf, b, hi, sh, tag, ink=None, light=light)
+        if tag == TAG_METAL:
+            spec, hi, b, sh = shade_metal_ramp(col)
+            rasterize_sdf(canvas, sdf, b, hi, sh, tag, ink=None, light=light,
+                          dither=True, specular=spec)
+        else:
+            hi, b, sh = shade_triplet(col, 0.28, 0.32)
+            rasterize_sdf(canvas, sdf, b, hi, sh, tag, ink=None, light=light, dither=True)
 
     def _render(self, canvas, seed, category, mat, accent, accent2, variant, flip):
         w, h = canvas.w, canvas.h
@@ -262,16 +272,19 @@ class ItemSpriteGenerator(SpriteGenerator):
         self._fill(canvas, lambda px, py: sd_round_box(px, py, cx + 2.0, cy + 8, 1.8, 0.8, 0.2), mat, TAG_METAL)
 
     def _scroll(self, canvas, cx, cy, mat, accent):
-        paper = color.lighten(named_palette("sand", 0.7), 0.15)
+        paper = color.mix(color.lighten(named_palette("sand", 0.7), 0.18), mat, 0.14)
         self._fill(canvas, lambda px, py: sd_round_box(px, py, cx, cy, 8.5, 6.0, 0.6), paper, TAG_CLOTH)
+        # Scroll handles reflect material tier (wood/gold/mithril/obsidian)
         self._fill(canvas, lambda px, py: sd_capsule(px, py, cx - 9, cy - 6, cx - 9, cy + 6, 1.5),
-                   color.darken(paper, 0.2), TAG_CLOTH)
+                   mat, TAG_METAL)
         self._fill(canvas, lambda px, py: sd_capsule(px, py, cx + 9, cy - 6, cx + 9, cy + 6, 1.5),
-                   color.darken(paper, 0.2), TAG_CLOTH)
+                   mat, TAG_METAL)
         ink = color.darken(paper, 0.45)
         for i, yy in enumerate((cy - 2, cy, cy + 2)):
             self._fill(canvas, lambda px, py, yy=yy: sd_capsule(px, py, cx - 4, yy, cx + 4, yy, 0.4),
                        ink, TAG_BODY, light=False)
+        # Wax seal in accent color
+        self._fill(canvas, lambda px, py: sd_circle(px, py, cx + 4, cy + 3, 1.6), accent, TAG_ACCENT)
 
     def _ring(self, canvas, cx, cy, mat, accent):
         self._fill(canvas, lambda px, py: op_sub(

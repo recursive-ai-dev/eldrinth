@@ -77,7 +77,7 @@ export default function TitleScreen({
       <div data-testid="title-scroll" className="title-scroll absolute inset-0 z-10 overflow-y-auto">
         <div className="flex min-h-full flex-col items-center px-4 py-8 text-center sm:px-6">
           <div className="my-auto flex w-full max-w-3xl shrink-0 flex-col items-center">
-            <div className="mb-5 flex items-center gap-3 font-title text-[10px] tracking-[.25em] text-amber-100/75"><span className="h-px w-8 bg-amber-100/30" />THE WAYFARER’S KIT · 1.3<span className="h-px w-8 bg-amber-100/30" /></div>
+            <div className="mb-5 flex items-center gap-3 font-title text-[10px] tracking-[.25em] text-amber-100/75"><span className="h-px w-8 bg-amber-100/30" />THE LIVING FRONTIER · 1.4<span className="h-px w-8 bg-amber-100/30" /></div>
             <div className="font-title text-xs uppercase tracking-[0.6em] text-teal-300/70 glow-pulse">
               Nine people. One body. Your decision.
             </div>

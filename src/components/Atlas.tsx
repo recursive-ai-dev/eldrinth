@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useControlKeys } from "./useControlKeys";
 import Modal from "./Modal";
 import SpriteIcon, { type SpriteIconId } from "./SpriteIcon";
+import { RegionAtlasThumb } from "./RegionScene";
 import { atlasBounds, filterLandmarks, HEADING, HEADING_ROTATION, landmarkBearing, type LandmarkKind, type NavigationData } from "@/game/navigation";
 import "./navigation.css";
 
@@ -35,6 +36,7 @@ export default function Atlas({ data, pinnedId, onPin, onClose }: {
       <header className="atlas-header">
         <SpriteIcon id="chart" size={44} />
         <div><p className="atlas-eyebrow">THE WAYFARER&apos;S ATLAS</p><h2 id="atlas-heading">{data.regionName}</h2></div>
+        <RegionAtlasThumb regionName={data.regionName} />
         <button type="button" className="atlas-close" onClick={onClose}>ESC / {key.atlas} / CLOSE</button>
       </header>
       <p className="atlas-intro">A chart of places you have seen and records you have read. Choose a landmark to carry its bearing on the road.</p>
